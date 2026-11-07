@@ -606,7 +606,7 @@ program
     const here = dirname(fileURLToPath(import.meta.url));
     const webDir = [resolve(here, "../../web"), resolve(here, "../web"), resolve(process.cwd(), "apps/web")].find((d) => existsSync(join(d, "package.json")));
     if (!webDir) {
-      process.stderr.write(red("The web interface is not installed next to this CLI.\n"));
+      process.stderr.write(red("The web interface is not part of this install.\n") + dim("It ships with the repository: git clone https://github.com/kadiri-seer/nomad, then pnpm install and pnpm nomad ui. Every feature is also available from the command line.\n"));
       process.exitCode = 1;
       return;
     }

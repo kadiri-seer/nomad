@@ -59,6 +59,16 @@ nomad ui
 
 Conflict modes: `merge` keeps existing content and reports differences, `copy` creates a separate agent, `replace` overwrites the agent's configuration and needs explicit approval for anything Nomad did not write or that you edited since.
 
+## Publishing to npm
+
+```
+pnpm release:npm              # builds release/npm with a clean package.json (name: nomad)
+cd release/npm
+npm publish --access public
+```
+
+Pass another name if needed: `node scripts/prepare-npm.mjs nomad-agent`. Bump `version` in `apps/cli/package.json` before each new release.
+
 ## Repository layout
 
 ```

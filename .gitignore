@@ -10,3 +10,4 @@ coverage/
 .DS_Store
 .nomad-test-*/
 next-env.d.ts
+release/
