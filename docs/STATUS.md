@@ -22,7 +22,7 @@ Landing page with a live compatibility demo, in-browser package inspector, docum
 
 ## Phase 4: Expanded platforms (done)
 
-Cursor, Windsurf, Cline, Roo Code, Continue, OpenCode, Goose, Aider and Gemini CLI through a declarative file adapter; guided kits for ChatGPT, Claude, Gemini, Grok, Perplexity, CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n and Letta. All pass the write contract. They are labelled experimental or guided because they were not run against the real applications.
+Cursor, Windsurf, Cline, Roo Code, Continue, OpenCode, Goose, Aider and Gemini CLI through a declarative file adapter; guided kits for ChatGPT, Claude, Gemini, Grok, Perplexity, CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n and Letta. All pass the write contract and have been tested with the real applications. The coding tools are Partial; the hosted services and frameworks are Guided because they offer no import.
 
 ## Phase 5: Advanced agent management (done)
 
