@@ -351,7 +351,7 @@ describe("guided destinations", () => {
   });
 });
 
-describe("experimental file adapters", () => {
+describe("file based adapters", () => {
   it("Cursor gets a rules file and MCP config", async () => {
     const proj = emptyDir(env.home, "cursor-proj");
     const { receipt } = await migrate({ adapter: "claude-code", root: env.roots.claude, nativeId: "main" }, { adapter: "cursor", root: proj });

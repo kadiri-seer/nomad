@@ -122,7 +122,7 @@ export default function Home() {
                 <p className="label">Platforms</p>
                 <h2 style={{ marginTop: 12 }}>Honest support labels.</h2>
               </div>
-              <p>Each integration declares what it can read and write per category. Full and partial adapters write files directly, experimental ones have limited testing, and guided ones prepare a kit you finish by hand because the platform offers no import.</p>
+              <p>Each integration declares what it can read and write per category. Full and partial adapters write files directly, and guided ones prepare a kit you finish by hand because the platform offers no import.</p>
             </div>
             <div className="panel table-wrap">
               <table className="data">

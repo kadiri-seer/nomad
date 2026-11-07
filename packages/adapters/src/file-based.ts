@@ -336,7 +336,7 @@ export function defineFileAdapter(spec: FileAdapterSpec): Adapter {
       }
       if (wants(ctx, "integrations")) for (const i of doc.integrations) manualSteps.push(`Reconnect ${i.name} in ${name}.`);
       if (wants(ctx, "knowledge") && (doc.knowledge.length || doc.files.length)) manualSteps.push(`Copy ${doc.knowledge.length + doc.files.length} knowledge file(s) into the project.`);
-      notes.push({ level: "info", message: `${name} support is experimental. Open the project in ${name} after migrating to confirm the rules load.` });
+      notes.push({ level: "info", message: `Open the project in ${name} after migrating to confirm the rules load.` });
       return { nativeId, files, notes, manualSteps, conversions, unsupported };
     },
 

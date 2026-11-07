@@ -23,7 +23,7 @@ Every move shows a short summary first (`--details` for every file and diff, `--
 | Codex CLI | Partial | AGENTS.md, config.toml (model, approval policy, sandbox, network, MCP), skills, custom prompts. One agent per home. |
 | Hermes Agent | Partial | SOUL.md, MEMORY.md and USER.md entries, skills, config.yaml (model, MCP, command allowlist), cron jobs, profiles. |
 | Agent folder | Full | Unpacked `.nomad` (lossless) or any folder of Markdown agent files. |
-| Cursor, Windsurf, Cline, Roo Code, Continue, OpenCode, Goose, Aider, Gemini CLI | Experimental | Rules files and MCP configuration where the platform has one. |
+| Cursor, Windsurf, Cline, Roo Code, Continue, OpenCode, Goose, Aider, Gemini CLI | Partial | Rules files and MCP configuration where the platform has one. Routines, model choice and permissions stay in the application. |
 | ChatGPT, Claude, Gemini, Grok, Perplexity, CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n, Letta | Guided | Nomad writes a setup kit (text sized for each field, starter code, memory items, steps). Nothing is sent to those services. |
 
 `nomad adapters --platform <id>` prints the per category capability matrix. Nothing is labelled full unless it is.

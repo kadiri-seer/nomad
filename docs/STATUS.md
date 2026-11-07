@@ -20,7 +20,7 @@ Not verified with the real application: OpenClaw (its current release needs Node
 
 Landing page with a live compatibility demo, in-browser package inspector, documentation, terms, privacy, custom 404 and favicon. Local dashboard: overview with machine scan, agents, agent details, versions with comparison and restore, the ten step migration wizard, import, export with download, platform compatibility, migration history with receipts, backups with restore preview, settings. Checked at desktop and mobile widths for overflow.
 
-## Phase 4: Expanded platforms (done, experimental)
+## Phase 4: Expanded platforms (done)
 
 Cursor, Windsurf, Cline, Roo Code, Continue, OpenCode, Goose, Aider and Gemini CLI through a declarative file adapter; guided kits for ChatGPT, Claude, Gemini, Grok, Perplexity, CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n and Letta. All pass the write contract. They are labelled experimental or guided because they were not run against the real applications.
 

@@ -157,7 +157,7 @@ function fileInfo(
     id,
     displayName,
     category: "coding-agent",
-    support: "EXPERIMENTAL",
+    support: "PARTIAL",
     adapterVersion: "0.1.0",
     supportedVersions: "Documented rules and configuration files as of late 2026",
     description,
@@ -178,7 +178,7 @@ function fileInfo(
       knowledge: manual(),
       project: convert()
     }),
-    limitations: ["Experimental: verified against fixture layouts, not yet against every release of the application."]
+    limitations: ["Scheduled routines, model choice and permission enforcement stay in the application settings."]
   };
 }
 
