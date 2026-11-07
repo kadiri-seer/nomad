@@ -34,6 +34,11 @@ metadata/migration-history.json
 README.md`}
       </pre>
 
+      <h2>Interchange archives</h2>
+      <p>
+        Nomad also reads and writes <code>.jetpack</code> archives, the flat layout used by other agent portability tools: <code>jetpack.json</code>, <code>AGENTS.md</code>, <code>SOUL.md</code>, <code>MEMORY.md</code>, <code>memory/</code>, <code>routines/</code>, <code>skills/</code> and <code>files/</code>. Import them anywhere a package is accepted, or export with <code>nomad export &lt;agent&gt; --format jetpack</code>. Parts the layout cannot hold, such as MCP tools, travel in an <code>x-nomad</code> manifest key that other readers ignore. These archives carry no integrity hashes, so Nomad says so when it reads one.
+      </p>
+
       <h2>Identity</h2>
       <p>
         Every agent has a permanent ULID. Nomad writes it into the destination as a hidden marker (for example <code>&lt;!-- nomad:begin agent=01J... --&gt;</code>) and also keeps a local mapping of every location it has written to, so reading the agent back on any platform recognises it instead of creating a duplicate. <code>nomad duplicate</code> creates a copy with a new identity on purpose.

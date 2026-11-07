@@ -1,6 +1,6 @@
 # Implementation status
 
-Report per phase of the product specification. Tests: `pnpm test` (78 tests).
+Report per phase of the product specification. Tests: `pnpm test` (84 tests).
 
 ## Phase 1: Core portability engine (done)
 
@@ -37,6 +37,13 @@ CLI with JSON, quiet and verbose output, dry runs, non interactive mode, approva
 - Agent synchronisation: one way, previewed, merge mode (`nomad sync`). Two way sync is not implemented: it needs a three way merge base to be safe.
 - Remote migration: experimental `nomad remote push` over SSH with strict host key checking. Not tested against a real remote host in this environment.
 - Team management, cloud backups, shared package registry and a public adapter marketplace: evaluated and deliberately not built. They need a server, accounts and a security review, and the specification asks for them only after the local system is proven.
+
+## Interoperability (added)
+
+- Reads and writes `.jetpack` interchange archives (CLI `--format jetpack`, web export format choice, inspector, uploads, migrations).
+- OpenClaw: supports both roster forms, `agents.list` and the keyed `agents.entries` of OpenClaw 2026.6 and later, the `agents.defaults.systemAgent.agentId` default, and workspaces placed beside a shared `agents.defaults.workspace`. When adding an agent to a keyed roster, the current default is pinned so it never changes.
+- Hermes: imported jobs also carry `paused_at`, `paused_reason` and `next_run_at: null`; a job with `paused_at` reads as paused.
+- Scans also honour `OPENCLAW_STATE_DIR`, `CODEX_HOME` and `CLAUDE_CONFIG_DIR`.
 
 ## Known limitations
 

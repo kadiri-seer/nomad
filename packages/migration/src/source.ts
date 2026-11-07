@@ -14,7 +14,7 @@ import type { Nomad, SourceSpec } from "./engine";
  */
 export async function parseSource(nomad: Nomad, spec: string, opts: { sourceDir?: string; agent?: string } = {}): Promise<SourceSpec> {
   const expanded = expandHome(spec);
-  if (/\.agentpack$/i.test(spec) && existsSync(expanded)) return { kind: "package", path: expanded };
+  if (/\.(agentpack|jetpack)$/i.test(spec) && existsSync(expanded)) return { kind: "package", path: expanded };
 
   const m = /^([a-z0-9-]+)(?::(.*?))?(?:#(.+))?$/.exec(spec);
   const adapter = m ? findAdapter(m[1]) : undefined;

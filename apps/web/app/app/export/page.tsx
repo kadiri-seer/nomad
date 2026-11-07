@@ -15,6 +15,7 @@ function ExportForm() {
   const [components, setComponents] = useState<Set<ComponentCategory>>(new Set(COMPONENT_CATEGORIES));
   const [includeFiles, setIncludeFiles] = useState(false);
   const [includeSecrets, setIncludeSecrets] = useState(false);
+  const [format, setFormat] = useState<"agentpack" | "interchange">("agentpack");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +29,7 @@ function ExportForm() {
     setError(null);
     setResult(null);
     try {
-      setResult(await api("export", { body: { source: { kind: "stored", agentId, version: version || undefined }, includeFiles, includeSecrets, components: [...components] } }));
+      setResult(await api("export", { body: { source: { kind: "stored", agentId, version: version || undefined }, includeFiles, includeSecrets, components: [...components], format } }));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -58,6 +59,13 @@ function ExportForm() {
           <input className="input" type="number" min={1} max={selected?.currentVersion} placeholder={`Latest (v${selected?.currentVersion ?? 1})`} value={version} onChange={(e) => setVersion(e.target.value ? Number(e.target.value) : "")} />
         </label>
       </div>
+      <label className="field" style={{ maxWidth: 420 }}>
+        <span>Format</span>
+        <select className="select" value={format} onChange={(e) => setFormat(e.target.value as "agentpack" | "interchange")}>
+          <option value="agentpack">.agentpack (complete, with integrity hashes)</option>
+          <option value="interchange">.jetpack (interchange archive for other tools)</option>
+        </select>
+      </label>
       <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
         <legend className="label">Include</legend>
         <div className="grid-form" style={{ gap: 0 }}>
@@ -107,6 +115,7 @@ function ExportForm() {
           {(result.size / 1024).toFixed(1)} KB. {result.redacted ? `${result.redacted} secret value(s) redacted. ` : ""}
           {result.references ? `${result.references} credential(s) kept as references. ` : ""}
           {result.removedFiles.length ? `Left out: ${result.removedFiles.join(", ")}.` : ""}
+          {result.notIncluded?.length ? ` Not representable in this format: ${result.notIncluded.join(", ")}.` : ""}
           <div className="row" style={{ marginTop: 12 }}>
             <a className="btn btn-sm" href={`/api/local/download?file=${encodeURIComponent(result.file)}`} download>
               Download

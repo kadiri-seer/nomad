@@ -188,7 +188,7 @@ program
 
 program
   .command("validate <package>")
-  .description("check an .agentpack without importing it")
+  .description("check an .agentpack or .jetpack without importing it")
   .action((pkg) =>
     run(async (nomad) => {
       const { readFileSync } = await import("node:fs");
@@ -210,19 +210,20 @@ program
   .option("--include-files", "include knowledge and other files")
   .option("--include-secrets", "keep secret values in the package (not recommended)")
   .option("--include-sensitive-files", "keep credential files such as .env (not recommended)")
+  .addOption(new Option("--format <format>", "agentpack (complete) or jetpack (interchange archive for other tools)").choices(["agentpack", "jetpack"]).default("agentpack"))
   .action((source, o) =>
     run(async (nomad) => {
       const spec = await parseSource(nomad, source, { sourceDir: o.sourceDir, agent: o.agent });
       if (o.includeSecrets && !out().json) process.stderr.write(yellow("Warning: secret values will be stored in the package. Share it only with people who may see them.\n"));
-      const r = await nomad.exportAgent(spec, { outPath: resolve(o.out), includeSecrets: o.includeSecrets, includeFiles: o.includeFiles, includeSensitiveFiles: o.includeSensitiveFiles, components: components(o.components) });
-      print(out(), () => [green("Exported") + `  ${r.path}`, `${r.files.size} files, ${r.bytes.length} bytes`, ...(r.sanitize.redactedText || r.sanitize.strippedEnvValues.length ? [yellow(`${r.sanitize.redactedText} secret(s) redacted, ${r.sanitize.strippedEnvValues.length} credential(s) replaced by references`)] : []), ...(r.sanitize.removedFiles.length ? [yellow(`Left out credential files: ${r.sanitize.removedFiles.join(", ")}`)] : [])], r.receipt);
+      const r = await nomad.exportAgent(spec, { outPath: resolve(o.out), includeSecrets: o.includeSecrets, includeFiles: o.includeFiles, includeSensitiveFiles: o.includeSensitiveFiles, components: components(o.components), format: o.format === "jetpack" ? "interchange" : "agentpack" });
+      print(out(), () => [green("Exported") + `  ${r.path}`, ...(r.receipt.notIncluded.length ? [yellow(`Not representable in this format: ${r.receipt.notIncluded.join(", ")}`)] : []), `${r.files.size} files, ${r.bytes.length} bytes`, ...(r.sanitize.redactedText || r.sanitize.strippedEnvValues.length ? [yellow(`${r.sanitize.redactedText} secret(s) redacted, ${r.sanitize.strippedEnvValues.length} credential(s) replaced by references`)] : []), ...(r.sanitize.removedFiles.length ? [yellow(`Left out credential files: ${r.sanitize.removedFiles.join(", ")}`)] : [])], r.receipt);
     })
   );
 
 approvalOptions(
   program
     .command("import <package>")
-    .description("import an .agentpack into the library, and optionally into a platform")
+    .description("import an .agentpack or .jetpack into the library, and optionally into a platform")
     .option("--to <platform>", "also write the agent to this platform")
     .option("--dest-dir <dir>", "destination directory")
     .addOption(new Option("--mode <mode>", "conflict handling").choices(["merge", "copy", "replace"]).default("merge"))

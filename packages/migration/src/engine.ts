@@ -23,7 +23,7 @@ import {
 } from "@nomad/core";
 import { atomicWrite, displayPath, makeTempDir, nomadHome, resolveRoot, safeJoin } from "@nomad/core/node";
 import { sanitizeDocument, scanDocument, type DocumentScan, type SanitizeReport } from "@nomad/security";
-import { packAgent, unpackAgent, PACKAGE_EXTENSION, type UnpackResult } from "@nomad/archive";
+import { packAgent, packInterchange, unpackAgent, INTERCHANGE_EXTENSION, PACKAGE_EXTENSION, type UnpackResult } from "@nomad/archive";
 import { analyzeCompatibility, type CompatibilityReport } from "@nomad/compatibility";
 import { getAdapter, findAdapter, listAdapters, scanPlatforms } from "@nomad/adapters";
 import { NomadStore } from "@nomad/storage";
@@ -532,15 +532,18 @@ export class Nomad {
   /* Export and import                                                    */
   /* ------------------------------------------------------------------ */
 
-  async exportAgent(source: SourceSpec, options: { outPath?: string; includeSecrets?: boolean; includeSensitiveFiles?: boolean; includeFiles?: boolean; components?: ComponentCategory[] } = {}) {
+  async exportAgent(source: SourceSpec, options: { outPath?: string; includeSecrets?: boolean; includeSensitiveFiles?: boolean; includeFiles?: boolean; components?: ComponentCategory[]; format?: "agentpack" | "interchange" } = {}) {
     const loaded = await this.loadSource(source, { includeSecrets: options.includeSecrets, includeFiles: options.includeFiles });
     const doc = options.components?.length ? filterComponents(loaded.doc, options.components) : loaded.doc;
     const operationId = shortId("op");
     const withHistory: AgentDocument = { ...doc, history: [...doc.history, { operationId, kind: "export", from: loaded.label, at: new Date().toISOString() }] };
-    const pack = packAgent(withHistory, { includeSecrets: options.includeSecrets, includeSensitiveFiles: options.includeSensitiveFiles, includeFiles: options.includeFiles });
+    const packOpts = { includeSecrets: options.includeSecrets, includeSensitiveFiles: options.includeSensitiveFiles, includeFiles: options.includeFiles };
+    const interchange = options.format === "interchange" || options.outPath?.endsWith(INTERCHANGE_EXTENSION);
+    const pack = interchange ? { ...packInterchange(withHistory, packOpts), manifest: null } : { ...packAgent(withHistory, packOpts), carried: [] as string[], dropped: [] as string[] };
+    const ext = interchange ? INTERCHANGE_EXTENSION : PACKAGE_EXTENSION;
     let path: string | null = null;
     if (options.outPath !== undefined) {
-      path = options.outPath.endsWith(PACKAGE_EXTENSION) ? options.outPath : join(options.outPath, `${doc.name.replace(/[^A-Za-z0-9._-]+/g, "-")}${PACKAGE_EXTENSION}`);
+      path = options.outPath.endsWith(ext) ? options.outPath : join(options.outPath, `${doc.name.replace(/[^A-Za-z0-9._-]+/g, "-")}${ext}`);
       await atomicWrite(path, pack.bytes, 0o600);
     }
     const receipt = {
@@ -556,6 +559,9 @@ export class Nomad {
       strippedEnv: pack.sanitize.strippedEnvValues.length,
       removedFiles: pack.sanitize.removedFiles,
       findings: pack.scan.findings.map((f) => ({ ruleName: f.ruleName, file: f.file, line: f.line })),
+      format: interchange ? "interchange" : "agentpack",
+      carriedInExtension: pack.carried,
+      notIncluded: pack.dropped,
       at: new Date().toISOString()
     };
     this.store.saveOperation({ id: operationId, kind: "export", agentId: doc.id, source: loaded.label, destination: path, status: "success", createdAt: receipt.at, receipt });

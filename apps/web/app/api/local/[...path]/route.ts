@@ -124,12 +124,12 @@ async function handle(req: Request, ctx: Ctx) {
       const s = await body(req);
       const dir = join(home, "exports");
       await mkdir(dir, { recursive: true, mode: 0o700 });
-      const r = await nomad.exportAgent(safeSource(home, s.source), { outPath: dir, includeSecrets: !!s.includeSecrets, includeFiles: !!s.includeFiles, components: Array.isArray(s.components) && s.components.length ? s.components : undefined });
-      return json({ file: basename(r.path!), size: r.bytes.length, redacted: r.sanitize.redactedText, references: r.sanitize.strippedEnvValues.length, removedFiles: r.sanitize.removedFiles, receipt: r.receipt });
+      const r = await nomad.exportAgent(safeSource(home, s.source), { outPath: dir, includeSecrets: !!s.includeSecrets, includeFiles: !!s.includeFiles, components: Array.isArray(s.components) && s.components.length ? s.components : undefined, format: s.format === "interchange" ? "interchange" : "agentpack" });
+      return json({ file: basename(r.path!), size: r.bytes.length, notIncluded: r.receipt.notIncluded, redacted: r.sanitize.redactedText, references: r.sanitize.strippedEnvValues.length, removedFiles: r.sanitize.removedFiles, receipt: r.receipt });
     }
     case "GET download": {
       const name = q("file") ?? "";
-      if (!/^[\w.-]+\.agentpack$/.test(name)) throw new HttpError(400, "Invalid file name.");
+      if (!/^[\w.-]+\.(agentpack|jetpack)$/.test(name)) throw new HttpError(400, "Invalid file name.");
       const data = await readFile(join(home, "exports", name)).catch(() => {
         throw new HttpError(404, "File not found.");
       });

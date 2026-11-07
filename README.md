@@ -25,6 +25,8 @@ nomad restore <backup-id>
 
 `nomad adapters --platform <id>` prints the per category capability matrix. Nothing is labelled full unless it is.
 
+Packages: Nomad's own `.agentpack` is complete and carries integrity hashes. Nomad also reads and writes `.jetpack` interchange archives, the flat layout other agent portability tools use (`nomad export <agent> --format jetpack`, and any `.jetpack` works wherever a package is accepted). Parts that layout has no place for, such as MCP tools, travel in a namespaced manifest key that other readers ignore.
+
 ## Install
 
 Requires Node.js 22 or newer and pnpm.
@@ -77,7 +79,7 @@ tests               fixtures, unit, integration, end to end and CLI/MCP tests
 ## Development
 
 ```
-pnpm test          # 78 tests: schema, security, archive safety, adapters, migrations, CLI, MCP, SDK contract
+pnpm test          # 84 tests: schema, security, archive safety, adapters, migrations, CLI, MCP, SDK contract
 pnpm typecheck
 pnpm nomad scan    # run the CLI from source
 pnpm dev:web       # web app in development

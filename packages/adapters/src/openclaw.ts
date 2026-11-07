@@ -57,13 +57,36 @@ async function loadConfig(root: string, notes: Note[]): Promise<{ cfg: any; exis
   }
 }
 
+/**
+ * The agent roster. OpenClaw has used two forms: an array under agents.list
+ * (older releases, still read by newer ones) and a map keyed by id under
+ * agents.entries (2026.6 and later). Entries win when an id is in both.
+ */
 function agentsList(cfg: any): OcAgent[] {
-  return Array.isArray(cfg?.agents?.list) ? cfg.agents.list.filter((a: any) => a && typeof a.id === "string") : [];
+  const byId = new Map<string, OcAgent>();
+  if (Array.isArray(cfg?.agents?.list)) for (const a of cfg.agents.list) if (a && typeof a.id === "string" && a.id) byId.set(a.id, a);
+  const entries = cfg?.agents?.entries;
+  if (entries && typeof entries === "object" && !Array.isArray(entries)) {
+    for (const [id, e] of Object.entries(entries)) byId.set(id, { ...(e && typeof e === "object" ? (e as object) : {}), id });
+  }
+  return [...byId.values()];
+}
+
+function rosterForm(cfg: any): "list" | "entries" | "none" {
+  if (cfg?.agents?.entries && typeof cfg.agents.entries === "object") return "entries";
+  if (Array.isArray(cfg?.agents?.list)) return "list";
+  return "none";
 }
 
 function defaultAgentId(cfg: any): string {
-  const list = agentsList(cfg);
-  return (list.find((a) => a.default) ?? list[0])?.id ?? "main";
+  if (rosterForm(cfg) === "list") {
+    const list = agentsList(cfg);
+    return (list.find((a) => a.default) ?? list[0])?.id ?? "main";
+  }
+  const designated = cfg?.agents?.defaults?.systemAgent?.agentId;
+  if (typeof designated === "string" && designated.trim()) return designated;
+  const ids = agentsList(cfg).map((a) => a.id);
+  return ids.length === 1 ? ids[0] : ids.includes("main") || !ids.length ? "main" : ids[0];
 }
 
 function defaultWorkspace(cfg: any, root: string): string {
@@ -75,7 +98,9 @@ function workspaceFor(cfg: any, root: string, agentId: string): string {
   const entry = agentsList(cfg).find((a) => a.id === agentId);
   if (entry?.workspace) return expandHome(entry.workspace);
   if (agentId === defaultAgentId(cfg)) return defaultWorkspace(cfg, root);
-  return join(root, `workspace-${agentId}`);
+  // Other agents live next to the shared workspace when one is configured.
+  const shared = cfg?.agents?.defaults?.workspace;
+  return typeof shared === "string" && shared.trim() ? join(expandHome(shared), agentId) : join(root, `workspace-${agentId}`);
 }
 
 function modelOf(cfg: any, agentId: string): { primary?: string; fallbacks: string[] } {
@@ -453,11 +478,19 @@ async function planAgent(doc: AgentDocument, ctx: WriteContext): Promise<Planned
     const allows = doc.permissions.rules.filter((r) => r.effect === "allow" && !r.source?.startsWith("openclaw:"));
     if (allows.length) notes.push({ level: "info", category: "permissions", message: `${allows.length} allow rule(s) are documented but not applied, so the agent gets no new privileges.` });
   }
-  if (targetEntry) {
-    const listPatch: OcAgent[] = [];
-    if (newEntry && !list.length) listPatch.push({ id: defaultAgentId(cfg), default: true });
-    listPatch.push(targetEntry);
-    if (Object.keys(targetEntry).length > 1 || newEntry) cfgPatch.agents = { ...(cfgPatch.agents ?? {}), list: listPatch };
+  if (targetEntry && (Object.keys(targetEntry).length > 1 || newEntry)) {
+    if (rosterForm(cfg) === "entries") {
+      // Keyed roster: write agents.entries.<id>, and pin the current default so adding an agent never changes it.
+      const { id, ...rest } = targetEntry;
+      const agentsPatch: any = { ...(cfgPatch.agents ?? {}), entries: { [id]: rest } };
+      if (newEntry && !cfg?.agents?.defaults?.systemAgent?.agentId) agentsPatch.defaults = { ...(agentsPatch.defaults ?? {}), systemAgent: { agentId: defaultAgentId(cfg) } };
+      cfgPatch.agents = agentsPatch;
+    } else {
+      const listPatch: OcAgent[] = [];
+      if (newEntry && !list.length) listPatch.push({ id: defaultAgentId(cfg), default: true });
+      listPatch.push(targetEntry);
+      cfgPatch.agents = { ...(cfgPatch.agents ?? {}), list: listPatch };
+    }
   }
   if (Object.keys(cfgPatch).length) {
     files.push({ path: "openclaw.json", content: JSON.stringify(cfgPatch, null, 2) + "\n", strategy: "merge-json5", arrayKeys: { "agents.list": "id" }, component: "project", description: newEntry ? `Register agent "${agentId}" in openclaw.json` : "Model and tool policy in openclaw.json" });

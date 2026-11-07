@@ -88,7 +88,7 @@ export function Inspector() {
           onFile(e.dataTransfer.files[0]);
         }}
       >
-        <p style={{ fontWeight: 600, fontSize: "1.1rem" }}>Drop an .agentpack here</p>
+        <p style={{ fontWeight: 600, fontSize: "1.1rem" }}>Drop an .agentpack or .jetpack here</p>
         <p className="muted" style={{ marginTop: 6 }}>
           The file is read in this browser tab. It is never uploaded.
         </p>
@@ -103,7 +103,7 @@ export function Inspector() {
             Load a tampered sample
           </button>
         </div>
-        <input ref={input} type="file" accept=".agentpack,.zip,application/zip" className="visually-hidden" onChange={(e) => onFile(e.target.files?.[0])} aria-label="Choose an agent package" />
+        <input ref={input} type="file" accept=".agentpack,.jetpack,.zip,application/zip" className="visually-hidden" onChange={(e) => onFile(e.target.files?.[0])} aria-label="Choose an agent package" />
       </div>
 
       {busy && (
@@ -129,7 +129,10 @@ export function Inspector() {
       {result?.ok && doc && (
         <>
           <Notice tone="ok" title="Valid package">
-            Structure, manifest and SHA-256 integrity of all {result.fileCount} files checked. {result.warnings.join(" ")}
+            {result.format === "interchange"
+              ? `Interchange archive (.jetpack). Structure and safety of all ${result.fileCount} files checked; this format carries no integrity hashes.`
+              : `Structure, manifest and SHA-256 integrity of all ${result.fileCount} files checked.`}{" "}
+            {result.warnings.filter((w) => !w.startsWith("Interchange archive")).join(" ")}
           </Notice>
           <div className="grid-2">
             <div className="panel">
@@ -153,11 +156,9 @@ export function Inspector() {
                 <dt>Model</dt>
                 <dd>{doc.models.preferred ?? "Not set"}</dd>
                 <dt>Format</dt>
-                <dd>
-                  UAF {doc.schemaVersion}, package v{doc.packageVersion}
-                </dd>
+                <dd>{result.format === "interchange" ? "Interchange archive, converted to UAF " + doc.schemaVersion : `UAF ${doc.schemaVersion}, package v${doc.packageVersion}`}</dd>
                 <dt>Exported</dt>
-                <dd>{result.manifest?.exportedAt.slice(0, 19).replace("T", " ")} UTC</dd>
+                <dd>{result.manifest ? `${result.manifest.exportedAt.slice(0, 19).replace("T", " ")} UTC` : doc.updatedAt.slice(0, 10)}</dd>
                 <dt>Size</dt>
                 <dd>
                   {result.fileCount} files, {(result.totalBytes / 1024).toFixed(1)} KB

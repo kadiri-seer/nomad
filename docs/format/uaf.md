@@ -31,6 +31,10 @@ Environment values in tools are either `{ "value": "..." }` or `{ "secretRef": "
 
 An `.agentpack` is a ZIP with `manifest.json` (format `nomad.agentpack`), and only the files the agent needs. The manifest lists every component with its path and carries a SHA-256 per file under `integrity`. See the layout in `packages/archive/src/layout.ts` and on the website under Docs, Agent format.
 
+## Interchange archives
+
+Nomad also reads and writes `.jetpack` archives: `jetpack.json` (schema 0.1), `AGENTS.md`, `SOUL.md`, `MEMORY.md` (lines starting with `- ` are facts), `memory/<name>.md`, `routines/<name>.json`, `skills/<name>/` and `files/`. The mapping lives in `packages/archive/src/interchange.ts`. Instructions, memory metadata, tools and integrations that the layout cannot express are stored under the `x-nomad` manifest key so a round trip through Nomad is lossless. The format has no integrity hashes, so imports report that.
+
 ## Compatibility rules
 
 - Unknown fields are kept (`passthrough`), unknown `x-` extensions never fail validation.

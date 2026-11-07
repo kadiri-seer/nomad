@@ -2,6 +2,7 @@ import type { AgentDocument, PackageManifest, ValidationIssue } from "@nomad/sch
 import { disableWorkflows, utf8 } from "@nomad/core";
 import { sanitizeDocument, scanDocument, type DocumentScan, type SanitizeReport } from "@nomad/security";
 import { documentToFiles, filesToDocument } from "./layout";
+import { isInterchange, readInterchange, writeInterchange } from "./interchange";
 import { ArchiveError, createZip, DEFAULT_LIMITS, extractEntries, extensionOf, EXECUTABLE_EXTENSIONS, type ArchiveLimits } from "./zip";
 
 export const PACKAGE_EXTENSION = ".agentpack";
@@ -62,6 +63,7 @@ export interface UnpackResult {
   executableFiles: string[];
   fileCount: number;
   totalBytes: number;
+  format?: "agentpack" | "interchange";
 }
 
 /** Validate and read an .agentpack. Nothing is written to disk. */
@@ -93,13 +95,24 @@ export function unpackAgent(bytes: Uint8Array, options: UnpackOptions = {}): Unp
 export function unpackFiles(files: Map<string, Uint8Array>, options: UnpackOptions = {}): UnpackResult {
   const executableFiles = [...files.keys()].filter((p) => EXECUTABLE_EXTENSIONS.has(extensionOf(p)));
   const totalBytes = [...files.values()].reduce((n, d) => n + d.length, 0);
-  const read = filesToDocument(files, { verifyIntegrity: options.verifyIntegrity });
+  const interchange = isInterchange(files) || (!files.has("manifest.json") && files.has("AGENTS.md"));
+  const read = interchange
+    ? { ...readInterchange(files), manifest: null }
+    : filesToDocument(files, { verifyIntegrity: options.verifyIntegrity });
   if (!read.doc) {
     return { ok: false, doc: null, manifest: read.manifest, issues: read.issues, warnings: read.warnings, scan: null, sanitize: null, executableFiles, fileCount: files.size, totalBytes };
   }
   const scan = scanDocument(read.doc);
   const { doc, report } = sanitizeDocument(disableWorkflows(read.doc), { includeSecrets: options.includeSecrets });
   const warnings = [...read.warnings];
+  if (interchange) warnings.unshift("Interchange archive (.jetpack): read without integrity hashes, which this format does not carry.");
   if (executableFiles.length) warnings.push(`Package contains ${executableFiles.length} script file(s). They are stored but never executed by Nomad.`);
-  return { ok: true, doc, manifest: read.manifest, issues: [], warnings, scan, sanitize: report, executableFiles, fileCount: files.size, totalBytes };
+  return { ok: true, doc, manifest: read.manifest, issues: [], warnings, scan, sanitize: report, executableFiles, fileCount: files.size, totalBytes, format: interchange ? "interchange" : "agentpack" };
+}
+
+/** Export as an interchange archive (.jetpack) instead of an .agentpack. */
+export function packInterchange(doc: AgentDocument, options: PackOptions = {}) {
+  const { doc: clean, scan, sanitize } = prepareForExport(doc, options);
+  const r = writeInterchange(clean, { exportedAt: options.exportedAt });
+  return { bytes: createZip(r.files), files: r.files, carried: r.carried, dropped: r.dropped, scan, sanitize };
 }

@@ -190,7 +190,7 @@ async function readHome(root: string, nativeId: string, notes: Note[], agentId?:
           dependencies: skills,
           conditions: [],
           delivery: typeof j.deliver === "string" ? j.deliver : undefined,
-          sourceEnabled: j.enabled !== false && j.state !== "paused" && j.state !== "completed",
+          sourceEnabled: j.enabled !== false && j.state !== "paused" && j.state !== "completed" && !j.paused_at,
           enabled: false,
           source: { platform: P, path: "cron/jobs.json" }
         });
@@ -315,6 +315,9 @@ async function planHome(doc: AgentDocument, ctx: WriteContext): Promise<PlannedW
         deliver: "local",
         enabled: false,
         state: "paused",
+        paused_at: new Date().toISOString(),
+        paused_reason: `Imported by Nomad. Resume with: hermes cron resume ${w.source?.platform === P ? w.id : `nomad-${safeName(w.id)}`.slice(0, 40)}`,
+        next_run_at: null,
         created_at: new Date().toISOString()
       });
     }

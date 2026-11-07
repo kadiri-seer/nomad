@@ -50,6 +50,10 @@ export async function scanPlatforms(extraRoots: Array<{ adapter: string; root: s
   const candidates: Array<{ adapter: Adapter; root: string }> = [];
   for (const a of listAdapters()) for (const loc of a.info.defaultLocations) candidates.push({ adapter: a, root: expandHome(loc) });
   for (const e of extraRoots) candidates.push({ adapter: getAdapter(e.adapter), root: expandHome(e.root) });
+  // Platforms that let users move their state directory with an environment variable.
+  if (process.env.OPENCLAW_STATE_DIR) candidates.push({ adapter: getAdapter("openclaw"), root: expandHome(process.env.OPENCLAW_STATE_DIR) });
+  if (process.env.CODEX_HOME) candidates.push({ adapter: getAdapter("codex"), root: expandHome(process.env.CODEX_HOME) });
+  if (process.env.CLAUDE_CONFIG_DIR) candidates.push({ adapter: getAdapter("claude-code"), root: expandHome(process.env.CLAUDE_CONFIG_DIR) });
   for (const c of candidates) {
     if (!(await isDirectory(c.root))) continue;
     try {
