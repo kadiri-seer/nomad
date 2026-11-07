@@ -1,6 +1,8 @@
 name: Publish to npm
 # Run from GitHub: Actions tab -> "Publish to npm" -> Run workflow.
-# Needs one repository secret, NPM_TOKEN (an npm access token that can publish).
+# First publish: needs the repository secret NPM_TOKEN (an npm access token that can publish).
+# After that, set up Trusted Publishing on npmjs.com for this repo and workflow, delete the
+# secret, and no token is needed again.
 on:
   workflow_dispatch:
     inputs:
@@ -8,6 +10,9 @@ on:
         description: "Package name on npm"
         default: "nomad"
         required: true
+permissions:
+  contents: read
+  id-token: write # lets npm Trusted Publishing work without a token
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -19,6 +24,7 @@ jobs:
           node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest # Trusted Publishing needs npm 11.5 or newer
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: node scripts/prepare-npm.mjs "${{ inputs.name }}"
