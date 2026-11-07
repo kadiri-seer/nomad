@@ -127,8 +127,8 @@ export function analyzeCompatibility(doc: AgentDocument | null, source: AdapterI
     if (isAttention) {
       attention.push(
         status === "unsupported"
-          ? `${CATEGORY_LABELS[category]}: ${destination.displayName} cannot store ${items} item(s). They stay in the package.`
-          : `${CATEGORY_LABELS[category]}: ${items} item(s) need manual setup in ${destination.displayName}.`
+          ? `${CATEGORY_LABELS[category]}: ${destination.displayName} has no place for ${items === 1 ? "1 item" : `${items} items`}, so ${items === 1 ? "it is" : "they are"} not moved. Nomad keeps a copy and gives you steps to set ${items === 1 ? "it" : "them"} up another way.`
+          : `${CATEGORY_LABELS[category]}: you finish setting up ${items === 1 ? "1 item" : `${items} items`} in ${destination.displayName} yourself. Nomad lists the steps.`
       );
     }
     categories.push({
