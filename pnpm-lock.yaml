@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.32.2
+        version: 1.32.2(zod@4.6.7)
       '@nomad/adapters':
         specifier: workspace:*
         version: link:packages/adapters
@@ -44,6 +47,9 @@ importers:
       '@types/node':
         specifier: ^22.10.0
         version: 22.20.5
+      commander:
+        specifier: ^14.0.3
+        version: 14.0.3
       fflate:
         specifier: ^0.8.3
         version: 0.8.3

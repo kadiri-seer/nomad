@@ -20,6 +20,7 @@
     "schema:json": "tsx packages/schema/scripts/emit-json-schema.ts"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@nomad/adapters": "workspace:*",
     "@nomad/archive": "workspace:*",
     "@nomad/compatibility": "workspace:*",
@@ -32,6 +33,7 @@
     "@nomad/storage": "workspace:*",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.10.0",
+    "commander": "^14.0.3",
     "fflate": "^0.8.3",
     "json5": "^2.2.3",
     "smol-toml": "^1.9.1",

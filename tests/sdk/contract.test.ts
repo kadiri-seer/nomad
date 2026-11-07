@@ -1,0 +1,45 @@
+import { describe, expect, it } from "vitest";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { runAdapterContract } from "@nomad/sdk";
+import { getAdapter } from "@nomad/adapters";
+import { jsonAgentAdapter } from "../../packages/sdk/examples/json-agent";
+import { buildClaudeCode, buildCodex, buildHermes, buildOpenClaw } from "../fixtures/platforms";
+
+const failures = (r: Awaited<ReturnType<typeof runAdapterContract>>) => r.filter((x) => !x.ok);
+
+describe("adapter contract", () => {
+  it("the SDK example adapter passes", async () => {
+    const r = await runAdapterContract(jsonAgentAdapter, {
+      build: (home) => {
+        const root = join(home, "json-agents");
+        mkdirSync(join(root, "agents"), { recursive: true });
+        writeFileSync(join(root, "agents", "helper.json"), JSON.stringify({ name: "Helper", system_prompt: "Help.", memories: ["a", "b"], mcp: { fs: { command: "npx", args: ["fs"] } } }));
+        return root;
+      },
+      nativeId: "helper",
+      expect: { memory: 2, tools: 1 }
+    });
+    expect(failures(r)).toEqual([]);
+  });
+
+  const direct: Array<[string, (h: string) => string, string, Record<string, number>]> = [
+    ["openclaw", buildOpenClaw, "main", { instructions: 3, memory: 8, skills: 1, workflows: 1 }],
+    ["claude-code", buildClaudeCode, "main", { instructions: 1, skills: 2, tools: 1 }],
+    ["codex", buildCodex, "main", { instructions: 1, skills: 2, tools: 1 }],
+    ["hermes", buildHermes, "default", { memory: 6, skills: 1, tools: 1, workflows: 1 }]
+  ];
+  for (const [id, build, nativeId, expectCounts] of direct) {
+    it(`${id} passes the contract`, async () => {
+      const r = await runAdapterContract(getAdapter(id), { build, nativeId, expect: expectCounts });
+      expect(failures(r)).toEqual([]);
+    });
+  }
+
+  for (const id of ["cursor", "windsurf", "cline", "roo-code", "continue", "opencode", "goose", "aider", "gemini-cli", "generic", "chatgpt", "crewai", "letta"]) {
+    it(`${id} passes the write contract`, async () => {
+      const r = await runAdapterContract(getAdapter(id));
+      expect(failures(r)).toEqual([]);
+    });
+  }
+});

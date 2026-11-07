@@ -127,7 +127,8 @@ export const genericAdapter: Adapter = {
   },
 
   async plan(doc, ctx) {
-    const { files } = documentToFiles(doc);
+    // Deterministic output: the same agent always produces the same files.
+    const { files } = documentToFiles(doc, { exportedAt: doc.updatedAt });
     const out: DesiredFile[] = [...files.entries()].map(([path, content]) => ({
       path,
       content,

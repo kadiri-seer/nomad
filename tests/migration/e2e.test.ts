@@ -126,6 +126,18 @@ describe("OpenClaw to Hermes", () => {
   });
 });
 
+describe("structured merges", () => {
+  it("merges into an existing config.toml without dropping either side", async () => {
+    const { receipt } = await migrate({ adapter: "hermes", root: env.roots.hermes, nativeId: "default" }, { adapter: "codex", root: env.roots.codex });
+    expect(receipt.status).toBe("success");
+    const cfg = parseToml(read(join(env.roots.codex, "config.toml"))) as any;
+    expect(cfg.mcp_servers.docs.command).toBe("npx");
+    expect(cfg.mcp_servers.filesystem.command).toBe("npx");
+    expect(cfg.model).toBe("gpt-5-codex");
+    expect(cfg.profiles.fast.model).toBe("gpt-5-mini");
+  });
+});
+
 describe("Generic package folder round trip", () => {
   it("is lossless through a package folder", async () => {
     const folder = join(env.home, "exported-folder");
@@ -152,11 +164,13 @@ describe("conflict handling", () => {
   });
 
   it("replace requires explicit approval for content Nomad did not write", async () => {
+    writeFileSync(join(env.roots.codex, "config.toml"), read(join(env.roots.codex, "config.toml")).replace('approval_policy = "on-request"', 'approval_policy = "untrusted"'));
     const plan = await env.nomad.plan({ source: { kind: "location", adapter: "claude-code", root: env.roots.claude, nativeId: "main" }, destination: { adapter: "codex", root: env.roots.codex }, mode: "replace" });
     expect(plan.approvalsRequired).toContain("replace");
     await expect(env.nomad.execute(plan.id)).rejects.toThrow(/approval/i);
     const r = await env.nomad.execute(plan.id, { replace: true, broaderPermissions: true });
     expect(r.status).toBe("success");
+    expect((parseToml(read(join(env.roots.codex, "config.toml"))) as any).approval_policy).toBe("on-request");
   });
 
   it("detects files edited after Nomad wrote them", async () => {

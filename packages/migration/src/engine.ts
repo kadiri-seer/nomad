@@ -281,7 +281,7 @@ export class Nomad {
     const unenforced = [
       ...new Set([
         ...(components.includes("permissions") && adapter.readPolicy && adapter.info.support !== "GUIDED" ? unenforcedRestrictions(doc.permissions, after) : []),
-        ...planned.unsupported.filter((u) => u.category === "permissions").map((u) => u.item)
+        ...planned.unsupported.filter((u) => u.category === "permissions" && !u.item.startsWith("allow ")).map((u) => u.item)
       ])
     ];
 
