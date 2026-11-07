@@ -1,0 +1,8 @@
+{
+  "name": "nomad",
+  "version": "0.1.0",
+  "description": "Export, inspect and migrate this Claude Code agent with Nomad. Every change is previewed first.",
+  "author": { "name": "kadiri-seer" },
+  "homepage": "https://github.com/kadiri-seer/nomad",
+  "license": "MIT"
+}

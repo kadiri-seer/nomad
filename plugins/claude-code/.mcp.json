@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "nomad": {
+      "command": "nomad",
+      "args": ["mcp"]
+    }
+  }
+}

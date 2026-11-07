@@ -214,7 +214,7 @@ function jobFromWorkflow(w: Workflow, agentId: string | undefined): Record<strin
 
 /* ------------------------------ read ------------------------------ */
 
-async function readAgent(root: string, agentId: string, notes: Note[]) {
+async function readAgent(root: string, agentId: string, notes: Note[], prefer?: string) {
   const { cfg } = await loadConfig(root, notes);
   const ws = workspaceFor(cfg, root, agentId);
   const sourceFiles: string[] = [];
@@ -239,7 +239,7 @@ async function readAgent(root: string, agentId: string, notes: Note[]) {
     if (id.emoji) doc.identity.emoji = id.emoji;
     if (id.vibe) doc.identity.tone = id.vibe;
     if (id.creature) doc.identity.extensions = { "x-openclaw": { creature: id.creature } };
-    const marker = findAgentIdMarker(identity);
+    const marker = findAgentIdMarker(identity, prefer);
     if (marker) doc.id = marker;
   }
   if (entry?.identity?.emoji && !doc.identity.emoji) doc.identity.emoji = entry.identity.emoji;
@@ -250,7 +250,7 @@ async function readAgent(root: string, agentId: string, notes: Note[]) {
   const parseInstrFile = async (file: string, kind: AgentDocument["instructions"][number]["kind"], id: string) => {
     const text = await read(file);
     if (text === null) return;
-    const marker = findAgentIdMarker(text);
+    const marker = findAgentIdMarker(text, prefer);
     if (marker && !identity) doc.id = marker;
     const block = marker ? extractBlock(text, `agent=${marker}`) : null;
     if (block) {
@@ -268,7 +268,7 @@ async function readAgent(root: string, agentId: string, notes: Note[]) {
 
   const user = await read("USER.md");
   if (user !== null) {
-    const marker = findAgentIdMarker(user);
+    const marker = findAgentIdMarker(user, prefer);
     const block = marker ? extractBlock(user, `agent=${marker}`) : null;
     if (block) {
       const parsed = parseAgentMarkdown(block, P, "USER.md");
@@ -501,9 +501,9 @@ export const openclawAdapter: Adapter = {
     return refs;
   },
 
-  async read(root, nativeId) {
+  async read(root, nativeId, options = {}) {
     const notes: Note[] = [];
-    const r = await readAgent(root, nativeId, notes);
+    const r = await readAgent(root, nativeId, notes, options.agentId);
     return { ...r, notes };
   },
 
@@ -521,7 +521,7 @@ export const openclawAdapter: Adapter = {
     const notes: Note[] = [];
     await loadConfig(root, notes);
     checks.push({ name: "openclaw.json parses", ok: !notes.some((n) => n.level === "error"), detail: notes[0]?.message });
-    const got = (await readAgent(root, nativeId, [])).doc;
+    const got = (await readAgent(root, nativeId, [], doc.id)).doc;
     if (ctx.mode !== "merge") checks.push({ name: "Agent identity preserved", ok: got.id === doc.id && got.identity.name === doc.identity.name });
     if (wants(ctx, "instructions")) {
       const missing = doc.instructions.filter((i) => i.content.trim() && !got.instructions.some((g) => g.content.trim() === i.content.trim()));

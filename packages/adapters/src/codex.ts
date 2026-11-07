@@ -130,7 +130,7 @@ export const codexAdapter: Adapter = {
     return [{ nativeId: "main", name, description: "AGENTS.md, config.toml and skills", location: root, kind: "main" }];
   },
 
-  async read(root) {
+  async read(root, _nativeId, options = {}) {
     const L = await layoutOf(root);
     const notes: Note[] = [];
     const sourceFiles: string[] = [];
@@ -141,7 +141,7 @@ export const codexAdapter: Adapter = {
     const md = await readTextIfExists(mdPath);
     if (md !== null) {
       sourceFiles.push(mdPath);
-      const id = findAgentIdMarker(md);
+      const id = findAgentIdMarker(md, options.agentId);
       if (id) {
         doc.id = id;
         const block = extractBlock(md, `agent=${id}`) ?? "";
@@ -292,7 +292,7 @@ export const codexAdapter: Adapter = {
       const cfg = await readConfig(join(root, L.config), notes);
       checks.push({ name: "config.toml parses", ok: !!cfg, detail: notes[0]?.message });
     }
-    const got = (await this.read!(root, nativeId)).doc;
+    const got = (await this.read!(root, nativeId, { agentId: doc.id })).doc;
     checks.push({ name: "Agent identity marker present", ok: got.id === doc.id });
     if (wants(ctx, "instructions")) {
       const missing = doc.instructions.filter((i) => i.content.trim() && !got.instructions.some((g) => g.content.trim() === i.content.trim()));

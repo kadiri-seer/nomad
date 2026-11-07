@@ -190,8 +190,9 @@ function toolsForSubagent(doc: AgentDocument): string[] | undefined {
   if (Array.isArray(ext?.tools)) return ext.tools;
   const denied = new Set(doc.permissions.rules.filter((r) => r.effect === "deny" && !r.pattern).map((r) => r.capability));
   if (doc.permissions.mode === "read-only") denied.add("write"), denied.add("shell");
-  if (!denied.size) return undefined;
-  return SUBAGENT_TOOLS.filter((t) => !denied.has(TOOL_CAP[t]));
+  const tools = SUBAGENT_TOOLS.filter((t) => !denied.has(TOOL_CAP[t]));
+  // No restriction that subagent tools can express: inherit, as Claude Code does by default.
+  return tools.length === SUBAGENT_TOOLS.length ? undefined : tools;
 }
 
 function subagentModel(doc: AgentDocument): string | undefined {
@@ -205,7 +206,7 @@ function subagentModel(doc: AgentDocument): string | undefined {
 
 /* ------------------------------ adapter ------------------------------ */
 
-async function readMain(root: string, notes: Note[], includeSecrets: boolean | undefined) {
+async function readMain(root: string, notes: Note[], includeSecrets: boolean | undefined, agentId?: string) {
   const L = await layoutOf(root);
   const sourceFiles: string[] = [];
   const mdPath = join(root, L.claudeMd);
@@ -221,7 +222,7 @@ async function readMain(root: string, notes: Note[], includeSecrets: boolean | u
   doc.source.nativeId = "main";
 
   if (md) {
-    const id = findAgentIdMarker(md);
+    const id = findAgentIdMarker(md, agentId);
     if (id) {
       doc.id = id;
       const block = extractBlock(md, `agent=${id}`) ?? "";
@@ -491,7 +492,7 @@ export const claudeCodeAdapter: Adapter = {
       const r = await readSubagent(root, nativeId.slice("subagent:".length), notes);
       return { ...r, notes };
     }
-    const r = await readMain(root, notes, options.includeSecrets);
+    const r = await readMain(root, notes, options.includeSecrets, options.agentId);
     return { ...r, notes };
   },
 
@@ -521,7 +522,7 @@ export const claudeCodeAdapter: Adapter = {
     const checks: VerifyCheck[] = [];
     let read;
     try {
-      read = await this.read!(root, nativeId);
+      read = await this.read!(root, nativeId, { agentId: doc.id });
       checks.push({ name: "Destination configuration is readable", ok: true });
     } catch (e) {
       return [{ name: "Destination configuration is readable", ok: false, detail: (e as Error).message }];

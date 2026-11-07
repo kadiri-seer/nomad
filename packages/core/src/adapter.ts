@@ -71,6 +71,8 @@ export interface ReadOptions {
   includeFiles?: boolean;
   /** Keep secret values instead of replacing them with references. */
   includeSecrets?: boolean;
+  /** When a file holds several Nomad agents, read this one. */
+  agentId?: string;
 }
 
 export interface ReadResult {

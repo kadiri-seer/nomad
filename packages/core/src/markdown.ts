@@ -78,7 +78,8 @@ export function removeBlocks(text: string): string {
 }
 
 /** Nomad agent identity marker. Lets a later read recover the portable id. */
-export function findAgentIdMarker(text: string): string | null {
+export function findAgentIdMarker(text: string, prefer?: string): string | null {
+  if (prefer && text.includes(`agent=${prefer}`)) return prefer;
   const m = /<!-- nomad:(?:begin )?agent=([0-9A-HJKMNP-TV-Z]{26})/.exec(text);
   return m ? m[1] : null;
 }

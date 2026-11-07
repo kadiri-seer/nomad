@@ -110,7 +110,7 @@ function memoryEntriesFrom(text: string, kind: MemoryEntry["kind"], scope: Memor
   }));
 }
 
-async function readHome(root: string, nativeId: string, notes: Note[]) {
+async function readHome(root: string, nativeId: string, notes: Note[], agentId?: string) {
   const h = homeFor(root, nativeId);
   const sourceFiles: string[] = [];
   const read = async (rel: string) => {
@@ -124,7 +124,7 @@ async function readHome(root: string, nativeId: string, notes: Note[]) {
 
   const soul = await read("SOUL.md");
   if (soul !== null) {
-    const id = findAgentIdMarker(soul);
+    const id = findAgentIdMarker(soul, agentId);
     if (id) {
       doc.id = id;
       const block = extractBlock(soul, `agent=${id}`) ?? "";
@@ -359,9 +359,9 @@ export const hermesAdapter: Adapter = {
     return refs;
   },
 
-  async read(root, nativeId) {
+  async read(root, nativeId, options = {}) {
     const notes: Note[] = [];
-    return { ...(await readHome(root, nativeId, notes)), notes };
+    return { ...(await readHome(root, nativeId, notes, options.agentId)), notes };
   },
 
   plan: planHome,
@@ -382,7 +382,7 @@ export const hermesAdapter: Adapter = {
       await loadYaml(join(h, "config.yaml"), notes);
       checks.push({ name: "config.yaml parses", ok: !notes.some((n) => n.level === "error"), detail: notes[0]?.message });
     }
-    const got = (await readHome(root, nativeId, [])).doc;
+    const got = (await readHome(root, nativeId, [], doc.id)).doc;
     checks.push({ name: "Nomad section present in SOUL.md", ok: got.id === doc.id });
     if (wants(ctx, "instructions")) {
       const missing = doc.instructions.filter((i) => i.content.trim() && !got.instructions.some((g) => g.content.trim() === i.content.trim()));

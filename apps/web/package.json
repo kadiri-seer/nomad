@@ -1,0 +1,31 @@
+{
+  "name": "@nomad/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -H 127.0.0.1 -p 4317",
+    "build": "next build",
+    "start": "next start -H 127.0.0.1 -p 4317"
+  },
+  "dependencies": {
+    "@fontsource-variable/schibsted-grotesk": "^5.2.0",
+    "@fontsource/ibm-plex-mono": "^5.2.0",
+    "@nomad/adapters": "workspace:*",
+    "@nomad/archive": "workspace:*",
+    "@nomad/compatibility": "workspace:*",
+    "@nomad/core": "workspace:*",
+    "@nomad/migration": "workspace:*",
+    "@nomad/schema": "workspace:*",
+    "@nomad/security": "workspace:*",
+    "@nomad/storage": "workspace:*",
+    "next": "^16.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.7.0"
+  }
+}

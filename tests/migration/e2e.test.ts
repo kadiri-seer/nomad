@@ -138,6 +138,17 @@ describe("structured merges", () => {
   });
 });
 
+describe("several agents in one single-file platform", () => {
+  it("verifies each agent against its own section", async () => {
+    const dest = emptyDir(env.home, "two/.codex");
+    const a = await migrate({ adapter: "claude-code", root: env.roots.claude, nativeId: "main" }, { adapter: "codex", root: dest });
+    const b = await migrate({ adapter: "hermes", root: env.roots.hermes, nativeId: "default" }, { adapter: "codex", root: dest }, { approvals: { broaderPermissions: true } });
+    expect(a.receipt.status).toBe("success");
+    expect(b.receipt.status).toBe("success");
+    expect(read(join(dest, "AGENTS.md")).match(/nomad:begin agent=/g)).toHaveLength(2);
+  });
+});
+
 describe("Generic package folder round trip", () => {
   it("is lossless through a package folder", async () => {
     const folder = join(env.home, "exported-folder");

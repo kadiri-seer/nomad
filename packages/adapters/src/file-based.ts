@@ -156,8 +156,10 @@ function patchForStyle(tools: Tool[], spec: McpSpec, platformName: string) {
   }
 }
 
-function parseInstructionText(text: string, kind: Instruction["kind"], id: string, path: string, platform: string, doc: AgentDocument, memorySection?: RegExp) {
-  const marker = findAgentIdMarker(text);
+function parseInstructionText(text: string, kind: Instruction["kind"], id: string, path: string, platform: string, doc: AgentDocument, memorySection?: RegExp, prefer?: string) {
+  const marker = findAgentIdMarker(text, prefer);
+  // A file that belongs to another Nomad agent is not part of this one.
+  if (marker && prefer && marker !== prefer && !text.includes(`agent=${prefer}`)) return;
   if (marker) {
     doc.id = marker;
     const block = extractBlock(text, `agent=${marker}`) ?? text;
@@ -221,7 +223,7 @@ export function defineFileAdapter(spec: FileAdapterSpec): Adapter {
       return refs;
     },
 
-    async read(root, nativeId) {
+    async read(root, nativeId, options = {}) {
       const notes: Note[] = [];
       const sourceFiles: string[] = [];
       const doc = createDocument({ name: `${name}: ${basename(root)}`, platform: P });
@@ -244,7 +246,7 @@ export function defineFileAdapter(spec: FileAdapterSpec): Adapter {
         const text = await readTextIfExists(join(root, f.path));
         if (text === null) continue;
         sourceFiles.push(join(root, f.path));
-        parseInstructionText(text, f.kind, f.path.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase(), f.path, P, doc, spec.memorySection);
+        parseInstructionText(text, f.kind, f.path.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase(), f.path, P, doc, spec.memorySection, options.agentId);
       }
       for (const dir of (await spec.rulesDirs?.(root)) ?? []) {
         if (!(await isDirectory(join(root, dir.path)))) continue;
@@ -254,7 +256,7 @@ export function defineFileAdapter(spec: FileAdapterSpec): Adapter {
           const text = (await readTextIfExists(join(root, rel)))!;
           sourceFiles.push(join(root, rel));
           const fm = parseFrontmatter(text);
-          parseInstructionText(text, "custom", e.name.replace(/\.[^.]+$/, ""), rel, P, doc);
+          parseInstructionText(text, "custom", e.name.replace(/\.[^.]+$/, ""), rel, P, doc, undefined, options.agentId);
           const last = doc.instructions[doc.instructions.length - 1];
           if (last && Object.keys(fm.data).length) (last as any)[`x-${P}`] = { frontmatter: fm.data };
         }
@@ -340,7 +342,7 @@ export function defineFileAdapter(spec: FileAdapterSpec): Adapter {
 
     async verify(doc, root, nativeId, ctx) {
       const checks: VerifyCheck[] = [];
-      const got = (await adapter.read!(root, nativeId)).doc;
+      const got = (await adapter.read!(root, nativeId, { agentId: doc.id })).doc;
       checks.push({ name: "Agent identity marker present", ok: got.id === doc.id });
       if (wants(ctx, "instructions")) {
         const missing = doc.instructions.filter((i) => i.content.trim() && !got.instructions.some((g) => g.content.trim() === i.content.trim()));
