@@ -3,10 +3,12 @@
 import { useMemo, useState } from "react";
 import { ALL_INFOS, infoById } from "@nomad/adapters/catalog";
 import { analyzeCompatibility, STATUS_LABELS } from "@nomad/compatibility";
-import { sampleAgent } from "@/lib/sample";
+import { sampleFrom } from "@/lib/sample";
 import { Badge } from "./ui";
 
-const SOURCES = ["openclaw", "claude-code", "codex", "hermes"];
+// Every platform Nomad can read an agent from. Hosted services and frameworks
+// (guided) have nothing on disk to read, so they are destinations only.
+const SOURCES = ALL_INFOS.filter((a) => a.support !== "GUIDED" && a.support !== "UNAVAILABLE").map((a) => a.id);
 
 /**
  * Live preview on the home page. It runs the real compatibility engine in the
@@ -17,7 +19,7 @@ export function CompatDemo() {
   const [to, setTo] = useState("claude-code");
   const report = useMemo(() => {
     const src = infoById(from)!;
-    return analyzeCompatibility(sampleAgent(from), src, infoById(to)!);
+    return analyzeCompatibility(sampleFrom(from), src, infoById(to)!);
   }, [from, to]);
   const rows = report.categories.filter((c) => c.status !== "not-applicable");
   return (
@@ -32,7 +34,15 @@ export function CompatDemo() {
       <div className="panel-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, borderBottom: "1px solid var(--line)" }}>
         <label className="field">
           <span>From</span>
-          <select className="select" value={from} onChange={(e) => setFrom(e.target.value)}>
+          <select
+            className="select"
+            value={from}
+            onChange={(e) => {
+              const next = e.target.value;
+              setFrom(next);
+              if (next === to) setTo(next === "claude-code" ? "codex" : "claude-code");
+            }}
+          >
             {SOURCES.map((id) => (
               <option key={id} value={id}>
                 {infoById(id)!.displayName}

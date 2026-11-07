@@ -1,4 +1,5 @@
 import { createDocument } from "@nomad/core";
+import { infoById } from "@nomad/adapters/catalog";
 import type { AgentDocument } from "@nomad/schema";
 
 /**
@@ -39,5 +40,25 @@ export function sampleAgent(platform = "openclaw"): AgentDocument {
   d.integrations.push({ name: "telegram", kind: "channel", requiresAuth: true, config: {}, notes: "Messaging channel" });
   d.workflows.push({ id: "job-morning", name: "Morning brief", trigger: { kind: "cron", expr: "0 7 * * *" }, timezone: "Africa/Lagos", actions: [{ kind: "prompt", text: "Give me the morning brief: weather, calendar, top email." }], requiredTools: [], dependencies: [], conditions: [], sourceEnabled: true, enabled: false });
   d.permissions = { mode: "ask", rules: [{ capability: "browser", effect: "deny" }, { capability: "shell", effect: "ask" }], notes: [] };
+  return d;
+}
+
+/**
+ * The sample agent as it would look when read from a given platform: parts the
+ * platform cannot hold (a Cursor project has no routines or chat channels, for
+ * example) are left out, so the demo shows a realistic agent for every source.
+ */
+export function sampleFrom(platform: string): AgentDocument {
+  const d = sampleAgent(platform);
+  const caps = infoById(platform)?.capabilities;
+  if (!caps) return d;
+  const holds = (c: keyof typeof caps) => caps[c].read === "full" || caps[c].read === "convert";
+  if (!holds("memory")) d.memory = [];
+  if (!holds("skills")) d.skills = [];
+  if (!holds("tools")) d.tools = [];
+  if (!holds("integrations")) d.integrations = [];
+  if (!holds("workflows")) d.workflows = [];
+  if (!holds("models")) d.models = { ...d.models, preferred: undefined };
+  if (!holds("permissions")) d.permissions = { mode: "ask", rules: [], notes: [] };
   return d;
 }
