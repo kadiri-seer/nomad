@@ -57,6 +57,10 @@ Conflict modes: `merge` keeps existing content and reports differences, `copy` c
 
 ## Publishing to npm
 
+From GitHub, no terminal needed: add an npm access token as the repository secret `NPM_TOKEN`, then open Actions, choose "Publish to npm" and press Run workflow.
+
+From a terminal:
+
 ```
 pnpm release:npm              # builds release/npm with a clean package.json (name: nomad)
 cd release/npm

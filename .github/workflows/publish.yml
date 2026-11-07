@@ -1,0 +1,31 @@
+name: Publish to npm
+# Run from GitHub: Actions tab -> "Publish to npm" -> Run workflow.
+# Needs one repository secret, NPM_TOKEN (an npm access token that can publish).
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "Package name on npm"
+        default: "nomad"
+        required: true
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: node scripts/prepare-npm.mjs "${{ inputs.name }}"
+      - name: Publish
+        working-directory: release/npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Done
+        run: echo "Published. Anyone can now run npx ${{ inputs.name }}" >> "$GITHUB_STEP_SUMMARY"
