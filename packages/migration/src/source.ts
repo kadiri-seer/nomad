@@ -6,7 +6,7 @@ import type { Nomad, SourceSpec } from "./engine";
 
 /**
  * Accepted source forms:
- *   ./agent.agentpack          a package file
+ *   ./agent.nomad              a package file (.nomad, .agentpack or .jetpack)
  *   openclaw                   platform at its default location (first agent)
  *   openclaw:~/.openclaw#main  platform, root and agent
  *   01J...ULID or "Kestrel"    an agent in the local library (optionally @3 for version 3)
@@ -14,7 +14,7 @@ import type { Nomad, SourceSpec } from "./engine";
  */
 export async function parseSource(nomad: Nomad, spec: string, opts: { sourceDir?: string; agent?: string } = {}): Promise<SourceSpec> {
   const expanded = expandHome(spec);
-  if (/\.(agentpack|jetpack)$/i.test(spec) && existsSync(expanded)) return { kind: "package", path: expanded };
+  if (/\.(nomad|agentpack|jetpack)$/i.test(spec) && existsSync(expanded)) return { kind: "package", path: expanded };
 
   const m = /^([a-z0-9-]+)(?::(.*?))?(?:#(.+))?$/.exec(spec);
   const adapter = m ? findAdapter(m[1]) : undefined;

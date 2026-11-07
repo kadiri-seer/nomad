@@ -9,7 +9,7 @@ metadata: {"openclaw": {"requires": {"bins": ["nomad"]}}}
 Use the `nomad` command line to work with portable copies of this agent.
 
 - Inspect: `nomad inspect openclaw` lists what the agent contains. Secrets are redacted.
-- Export: `nomad export openclaw -o ~/agent-backups` writes a `.agentpack`.
+- Export: `nomad export openclaw -o ~/agent-backups` writes a `.nomad` file.
 - Back up: `nomad backup <agent name>` snapshots the workspace files.
 - Move: `nomad migrate --from openclaw --to <platform> --dry-run` shows a preview. Tell the user what transfers, what is converted, what cannot move, and which files change.
 

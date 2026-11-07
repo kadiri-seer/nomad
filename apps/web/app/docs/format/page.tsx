@@ -1,4 +1,4 @@
-export const metadata = { title: "Agent format", description: "The Universal Agent Format and the .agentpack package layout." };
+export const metadata = { title: "Agent format", description: "The Universal Agent Format and the .nomad package layout." };
 
 export default function Format() {
   return (
@@ -11,32 +11,26 @@ export default function Format() {
 
       <h2>Package layout</h2>
       <p>
-        An <code>.agentpack</code> is a ZIP archive. It contains a manifest and only the files the agent needs; empty folders are never created.
+        A <code>.nomad</code> file is a ZIP archive you can open with any unzip tool and read as plain Markdown. It holds only what the agent has: a typical agent is about eight files.
       </p>
       <pre className="code">
-        {`manifest.json                format, schema version, id, references, integrity hashes
-identity/identity.json       name, description, tone, extensions
-identity/persona.md
-instructions/01-agents-md.md one file per instruction section
-memory/memory-index.json     kind, scope, title, date, tags, provenance per entry
-memory/facts/memory-1.md     one file per entry, grouped by kind
-skills/<name>/skill.json     metadata, dependencies, allowed tools
-skills/<name>/instructions.md
-skills/<name>/files/...      scripts and references
-tools/<name>/tool.json       MCP transport, command, url, env references
-integrations/integrations.json
-workflows/<id>.json          trigger, timezone, actions, enabled state
-policies/permissions.json    mode and allow / ask / deny rules
-knowledge/knowledge-index.json
-files/...
-metadata/source.json
-metadata/migration-history.json
-README.md`}
+        {`nomad.json         id, name, model, policy, provenance, file hashes, signature
+AGENTS.md          instructions, one ## section each
+SOUL.md            persona
+MEMORY.md          memory entries as bullets under their kind
+memory/<slug>.md   long entries such as documents and daily logs
+skills/<name>/     SKILL.md and its files
+routines/<id>.json schedule ("0 7 * * *", "every 2h"), prompt, paused state
+tools.json         MCP servers, with \${VAR} where a secret goes
+files/...          knowledge files, only when asked for`}
       </pre>
+      <p>
+        <code>nomad.json</code> lists the SHA-256 of every file, so any change is caught. When the package is signed, an Ed25519 signature covers <code>nomad.json</code> and through it every file. Local absolute paths are never written; provenance is kept as <code>platform:relative/path</code>. Nomad still reads the older <code>.agentpack</code> layout.
+      </p>
 
       <h2>Interchange archives</h2>
       <p>
-        Nomad also reads and writes <code>.jetpack</code> archives, the flat layout used by other agent portability tools: <code>jetpack.json</code>, <code>AGENTS.md</code>, <code>SOUL.md</code>, <code>MEMORY.md</code>, <code>memory/</code>, <code>routines/</code>, <code>skills/</code> and <code>files/</code>. Import them anywhere a package is accepted, or export with <code>nomad export &lt;agent&gt; --format jetpack</code>. Parts the layout cannot hold, such as MCP tools, travel in an <code>x-nomad</code> manifest key that other readers ignore. These archives carry no integrity hashes, so Nomad says so when it reads one.
+        Nomad also reads and writes <code>.jetpack</code> archives, the flat layout used by other agent portability tools: <code>jetpack.json</code>, <code>AGENTS.md</code>, <code>SOUL.md</code>, <code>MEMORY.md</code>, <code>memory/</code>, <code>routines/</code>, <code>skills/</code> and <code>files/</code>. Import them anywhere a package is accepted, or export with <code>nomad export &lt;agent&gt; --format jetpack</code>. Parts the layout cannot hold, such as MCP tools, travel in an <code>x-nomad</code> manifest key that other readers ignore. These archives carry no integrity hashes and cannot be signed, so Nomad says so when it reads one.
       </p>
 
       <h2>Identity</h2>

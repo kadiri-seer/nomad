@@ -132,3 +132,39 @@ export function comparisonText(c: Comparison): string[] {
 export function restoreText(p: RestorePreview): string[] {
   return [bold(`Restore ${p.backupId}`) + dim(`  ${p.description}, ${p.createdAt}`), ...p.items.map((i) => `  ${i.action.padEnd(9)} ${i.path}${i.reason ? dim(" " + i.reason) : ""}`), "", `${p.changes} file(s) would change.`];
 }
+
+const plural = (n: number, one: string, many = one + "s") => `${n} ${n === 1 ? one : many}`;
+
+/** The short, plain-language preview shown by default. */
+export function summaryText(p: MigrationPlan): string[] {
+  const moving = p.compatibility.categories.filter((c) => c.items > 0 && (c.status === "full" || c.status === "convert"));
+  const what = moving
+    .filter((c) => ["instructions", "memory", "skills", "tools", "workflows"].includes(c.category))
+    .map((c) => (c.category === "memory" ? plural(c.items, "memory", "memories") : c.category === "workflows" ? plural(c.items, "routine") : c.category === "instructions" ? plural(c.items, "instruction section") : plural(c.items, c.category.slice(0, -1))));
+  const lines = [
+    bold(`${p.agent.name} → ${p.destination.displayName}`) + dim(`  (${p.destination.root})`),
+    `Moves ${["persona", ...what].join(", ")}.`
+  ];
+  if (p.conversions.length) lines.push(`Adapted: ${p.conversions.map((c) => `${c.item} ${dim("→ " + c.to)}`).join("; ")}.`);
+  if (p.unsupported.length) lines.push(yellow(`Can't move: ${p.unsupported.map((u) => u.item).join(", ")}`) + dim(" (kept in the report with setup steps)"));
+  if (p.disabledRoutines.length) lines.push(`Routines arrive paused: ${p.disabledRoutines.join(", ")}.`);
+  if (p.secrets.findings || p.secrets.strippedEnv.length) {
+    const parts = [p.secrets.findings ? `${p.secrets.findings} found in text and removed` : "", p.secrets.strippedEnv.length ? `you will reconnect ${p.secrets.strippedEnv.map((s) => s.split(":")[1]).join(", ")}` : ""].filter(Boolean);
+    lines.push(`Secrets stay behind: ${parts.join("; ")}.`);
+  }
+  const files = [p.summary.create && `${p.summary.create} new`, p.summary.update && `${p.summary.update} updated`, p.summary.kept && `${p.summary.kept} kept as they are`].filter(Boolean).join(", ");
+  lines.push(`Files: ${files || "nothing changes"}. A backup is taken first.`);
+  for (const c of p.conflicts.slice(0, 3)) lines.push(dim(`  ${c.path}: ${c.detail}`));
+  if (p.conflicts.length > 3) lines.push(dim(`  and ${p.conflicts.length - 3} more (use --details)`));
+  if (p.blocked.length) lines.push(red(`Can't run: ${p.blocked.join(" ")}`));
+  return lines;
+}
+
+/** Plain-language question for the approvals a plan needs. */
+export function approvalQuestion(p: MigrationPlan): string | null {
+  const parts: string[] = [];
+  if (p.approvalsRequired.includes("replace")) parts.push(`it replaces content Nomad did not create`);
+  if (p.approvalsRequired.includes("overwrite-modified")) parts.push(`it overwrites files you edited after Nomad wrote them`);
+  if (p.approvalsRequired.includes("broader-permissions")) parts.push(`the destination would allow more than it does now (${p.permissions.widened.join("; ")})`);
+  return parts.length ? `Heads up: ${parts.join(", and ")}.` : null;
+}

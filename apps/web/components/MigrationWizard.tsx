@@ -200,7 +200,7 @@ export function MigrationWizard() {
           <div className="choice-list">
             {[
               { id: "platform", title: "On a platform on this machine", text: "OpenClaw, Claude Code, Codex, Hermes, Cursor and other supported tools." },
-              { id: "package", title: "In an .agentpack file", text: "A package exported by Nomad, from this machine or another one." },
+              { id: "package", title: "In a .nomad file", text: "A package exported by Nomad, from this machine or another one." },
               { id: "library", title: "In my Nomad library", text: "An agent Nomad has already read, including earlier versions." }
             ].map((c) => (
               <label key={c.id} className="choice">

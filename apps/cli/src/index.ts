@@ -10,8 +10,9 @@ import { NOMAD_VERSION, NomadError, SUPPORT_DESCRIPTIONS } from "@nomad/core";
 import { displayPath, makeTempDir, nomadHome, resolveRoot } from "@nomad/core/node";
 import { Nomad, parseSource, type Approvals, type MigrationPlan } from "@nomad/migration";
 import { analyzeCompatibility } from "@nomad/compatibility";
-import { getAdapter } from "@nomad/adapters";
-import { bold, comparisonText, compatibilityText, dim, docText, green, planText, print, receiptText, red, restoreText, table, yellow, type Output } from "./format";
+import { findAdapter, getAdapter, listAdapters } from "@nomad/adapters";
+import type { SourceSpec } from "@nomad/migration";
+import { approvalQuestion, bold, comparisonText, compatibilityText, dim, docText, green, planText, print, receiptText, red, restoreText, summaryText, table, yellow, type Output } from "./format";
 import { remoteMigrate } from "./remote";
 
 export const EXIT = { ok: 0, error: 1, usage: 2, approval: 3, invalid: 4, verification: 5, rolledBack: 6 } as const;
@@ -25,6 +26,15 @@ program
   .option("-q, --quiet", "print nothing except errors")
   .option("-v, --verbose", "show details and diffs")
   .option("--home <dir>", "Nomad data directory (default ~/.nomad)");
+program.addHelpText(
+  "after",
+  `
+Start here:
+  nomad                              guided: pick an agent and where it goes
+  nomad move openclaw codex          the same in one line, with a short preview first
+  nomad move openclaw ./me.nomad     save to a file you can share or keep
+  nomad move ./me.nomad claude-code  open that file somewhere else`
+);
 
 function out(): Output {
   const o = program.opts();
@@ -44,12 +54,12 @@ function components(list?: string): ComponentCategory[] | undefined {
   return items as ComponentCategory[];
 }
 
-async function confirm(question: string): Promise<boolean> {
+async function confirm(question: string, defaultYes = false): Promise<boolean> {
   if (!process.stdin.isTTY) return false;
   const rl = createInterface({ input: process.stdin, output: process.stderr });
-  const a = await rl.question(`${question} [y/N] `);
+  const a = (await rl.question(`${question} ${defaultYes ? "[Y/n]" : "[y/N]"} `)).trim();
   rl.close();
-  return /^y(es)?$/i.test(a.trim());
+  return a === "" ? defaultYes : /^y(es)?$/i.test(a);
 }
 
 async function run(fn: (nomad: Nomad) => Promise<number | void>) {
@@ -73,44 +83,56 @@ async function run(fn: (nomad: Nomad) => Promise<number | void>) {
   process.exitCode = code;
 }
 
-/** Shared: preview, ask, execute. Used by migrate, import --to and sync. */
-async function previewAndApply(nomad: Nomad, plan: MigrationPlan, o: { dryRun?: boolean; yes?: boolean; approveReplace?: boolean; approveModified?: boolean; approvePermissions?: boolean }): Promise<number> {
+/** Shared: preview, ask once, execute. Used by move, migrate, import --to and sync. */
+export async function previewAndApply(nomad: Nomad, plan: MigrationPlan, o: { dryRun?: boolean; yes?: boolean; details?: boolean; approveReplace?: boolean; approveModified?: boolean; approvePermissions?: boolean }): Promise<number> {
   const output = out();
+  const show = () => (o.details || output.verbose ? planText(plan, output.verbose) : summaryText(plan));
   if (o.dryRun || plan.blocked.length) {
-    print(output, () => planText(plan, output.verbose), { plan });
+    print(output, () => [...show(), ...(o.dryRun && !plan.blocked.length ? ["", dim("Preview only. Run again without --dry-run to apply.")] : [])], { plan });
     return plan.blocked.length ? EXIT.error : EXIT.ok;
   }
-  if (!output.json) print(output, () => planText(plan, output.verbose), null);
+  if (!output.json) print(output, show, null);
   const approvals: Approvals = { replace: o.approveReplace, overwriteModified: o.approveModified, broaderPermissions: o.approvePermissions };
   const missing = plan.approvalsRequired.filter((a) => (a === "replace" && !approvals.replace) || (a === "overwrite-modified" && !approvals.overwriteModified) || (a === "broader-permissions" && !approvals.broaderPermissions));
-  if (missing.length) {
-    if (o.yes || !process.stdin.isTTY) {
+  if (o.yes || !process.stdin.isTTY) {
+    if (missing.length) {
       const flags = missing.map((m) => (m === "replace" ? "--approve-replace" : m === "overwrite-modified" ? "--approve-modified" : "--approve-permissions"));
       throw new NomadError(`This migration needs explicit approval: ${missing.join(", ")}.`, "approval-required", `Review the preview, then add ${flags.join(" ")}.`);
     }
+    if (!o.yes) throw new NomadError("Not running interactively.", "approval-required", "Add --yes to apply without a prompt, or --dry-run to preview.");
+  } else {
+    // One question, in plain language, covers everything that needs approval.
+    const heads = missing.length ? approvalQuestion(plan) : null;
+    if (heads) process.stderr.write("\n" + yellow(heads) + "\n");
+    if (!(await confirm(bold("\nGo ahead?"), !heads))) {
+      process.stderr.write("Nothing was changed.\n");
+      return EXIT.approval;
+    }
     for (const m of missing) {
-      const q = m === "replace" ? "Replace content that Nomad did not write?" : m === "overwrite-modified" ? "Overwrite files that were edited after Nomad wrote them?" : "Apply permissions that are broader than the destination has now?";
-      if (!(await confirm(yellow(q)))) return EXIT.approval;
       if (m === "replace") approvals.replace = true;
       if (m === "overwrite-modified") approvals.overwriteModified = true;
       if (m === "broader-permissions") approvals.broaderPermissions = true;
     }
   }
-  if (!o.yes) {
-    if (!process.stdin.isTTY) throw new NomadError("Not running interactively.", "approval-required", "Add --yes to apply without a prompt, or --dry-run to preview.");
-    if (!(await confirm(bold("Apply these changes?")))) {
-      process.stderr.write("Nothing was changed.\n");
-      return EXIT.approval;
-    }
-  }
   const receipt = await nomad.execute(plan.id, approvals, { token: plan.token });
-  print(output, () => receiptText(receipt), { plan, receipt });
+  print(output, () => (o.details || output.verbose ? receiptText(receipt) : shortReceipt(receipt)), { plan, receipt });
   return receipt.status === "success" ? EXIT.ok : receipt.status === "verification-failed" ? EXIT.verification : EXIT.rolledBack;
+}
+
+function shortReceipt(r: import("@nomad/migration").MigrationReceipt): string[] {
+  if (r.status !== "success") return receiptText(r);
+  return [
+    "",
+    green("Done.") + ` ${r.agent.name} is in ${findAdapter(r.destination.adapter)?.info.displayName ?? r.destination.adapter} and checked (${r.verification.length} checks passed).`,
+    ...(r.manualSteps.length ? ["", bold("Your turn:"), ...r.manualSteps.map((s, i) => `  ${i + 1}. ${s}`)] : []),
+    ...(r.backupId ? ["", dim(`Changed your mind? nomad restore ${r.backupId}`)] : [])
+  ];
 }
 
 const approvalOptions = (cmd: Command) =>
   cmd
     .option("--dry-run", "only show the preview")
+    .option("--details", "show the full preview: every category, file and diff")
     .option("-y, --yes", "apply without asking (non-interactive)")
     .option("--approve-replace", "allow replacing content Nomad did not write")
     .option("--approve-modified", "allow overwriting files edited after Nomad wrote them")
@@ -188,12 +210,13 @@ program
 
 program
   .command("validate <package>")
-  .description("check an .agentpack or .jetpack without importing it")
+  .description("check a package (.nomad, .agentpack or .jetpack) without importing it")
   .action((pkg) =>
     run(async (nomad) => {
       const { readFileSync } = await import("node:fs");
       const r = nomad.validatePackage(new Uint8Array(readFileSync(resolve(pkg))));
-      print(out(), () => (r.ok ? [green("Valid package") + `  ${r.doc!.name} (${r.doc!.id})`, `${r.fileCount} files, ${r.totalBytes} bytes`, ...r.warnings.map((w) => yellow("! ") + w), ...(r.scan?.findings.length ? [yellow(`${r.scan.findings.length} secret(s) found in the package`)] : [])] : [red("Invalid package"), ...r.issues.map((i) => `  ${i.path}: ${i.message}`)]), { ok: r.ok, issues: r.issues, warnings: r.warnings, manifest: r.manifest, findings: r.scan?.findings ?? [] });
+      const { describeSigner } = await import("@nomad/migration");
+      print(out(), () => (r.ok ? [green("Valid package") + `  ${r.doc!.name} (${r.doc!.id})`, `Format ${r.format}. ${describeSigner(r.signer)}`, `${r.fileCount} files, ${r.totalBytes} bytes`, ...r.warnings.map((w) => yellow("! ") + w), ...(r.scan?.findings.length ? [yellow(`${r.scan.findings.length} secret(s) found in the package`)] : [])] : [red("Invalid package"), ...r.issues.map((i) => `  ${i.path}: ${i.message}`)]), { ok: r.ok, format: r.format, signer: r.signer, issues: r.issues, warnings: r.warnings, info: r.info, findings: r.scan?.findings ?? [] });
       return r.ok ? EXIT.ok : EXIT.invalid;
     })
   );
@@ -202,7 +225,7 @@ program
 
 program
   .command("export <source>")
-  .description("export an agent to a portable .agentpack")
+  .description("export an agent to a portable .nomad package")
   .option("-o, --out <path>", "output file or folder", ".")
   .option("--source-dir <dir>", "platform directory")
   .option("--agent <id>", "agent inside the platform")
@@ -210,20 +233,21 @@ program
   .option("--include-files", "include knowledge and other files")
   .option("--include-secrets", "keep secret values in the package (not recommended)")
   .option("--include-sensitive-files", "keep credential files such as .env (not recommended)")
-  .addOption(new Option("--format <format>", "agentpack (complete) or jetpack (interchange archive for other tools)").choices(["agentpack", "jetpack"]).default("agentpack"))
+  .addOption(new Option("--format <format>", "nomad (complete) or jetpack (interchange archive for other tools)").choices(["nomad", "jetpack"]).default("nomad"))
+  .option("--sign", "sign the package with your Nomad key so others can verify it came from you")
   .action((source, o) =>
     run(async (nomad) => {
       const spec = await parseSource(nomad, source, { sourceDir: o.sourceDir, agent: o.agent });
       if (o.includeSecrets && !out().json) process.stderr.write(yellow("Warning: secret values will be stored in the package. Share it only with people who may see them.\n"));
-      const r = await nomad.exportAgent(spec, { outPath: resolve(o.out), includeSecrets: o.includeSecrets, includeFiles: o.includeFiles, includeSensitiveFiles: o.includeSensitiveFiles, components: components(o.components), format: o.format === "jetpack" ? "interchange" : "agentpack" });
-      print(out(), () => [green("Exported") + `  ${r.path}`, ...(r.receipt.notIncluded.length ? [yellow(`Not representable in this format: ${r.receipt.notIncluded.join(", ")}`)] : []), `${r.files.size} files, ${r.bytes.length} bytes`, ...(r.sanitize.redactedText || r.sanitize.strippedEnvValues.length ? [yellow(`${r.sanitize.redactedText} secret(s) redacted, ${r.sanitize.strippedEnvValues.length} credential(s) replaced by references`)] : []), ...(r.sanitize.removedFiles.length ? [yellow(`Left out credential files: ${r.sanitize.removedFiles.join(", ")}`)] : [])], r.receipt);
+      const r = await nomad.exportAgent(spec, { outPath: resolve(o.out), includeSecrets: o.includeSecrets, includeFiles: o.includeFiles, includeSensitiveFiles: o.includeSensitiveFiles, components: components(o.components), format: o.format === "jetpack" ? "interchange" : "nomad", sign: o.sign });
+      print(out(), () => [green("Exported") + `  ${r.path}`, ...(r.receipt.signedBy ? [`Signed with your key ${r.receipt.signedBy}`] : []), ...(r.receipt.notIncluded.length ? [yellow(`Not representable in this format: ${r.receipt.notIncluded.join(", ")}`)] : []), `${r.files.size} files, ${r.bytes.length} bytes`, ...(r.sanitize.redactedText || r.sanitize.strippedEnvValues.length ? [yellow(`${r.sanitize.redactedText} secret(s) redacted, ${r.sanitize.strippedEnvValues.length} credential(s) replaced by references`)] : []), ...(r.sanitize.removedFiles.length ? [yellow(`Left out credential files: ${r.sanitize.removedFiles.join(", ")}`)] : [])], r.receipt);
     })
   );
 
 approvalOptions(
   program
     .command("import <package>")
-    .description("import an .agentpack or .jetpack into the library, and optionally into a platform")
+    .description("import a package into the library, and optionally into a platform")
     .option("--to <platform>", "also write the agent to this platform")
     .option("--dest-dir <dir>", "destination directory")
     .addOption(new Option("--mode <mode>", "conflict handling").choices(["merge", "copy", "replace"]).default("merge"))
@@ -238,7 +262,7 @@ approvalOptions(
       return EXIT.invalid;
     }
     if (!o.to) {
-      print(out(), () => [green(r.recognized ? "Updated" : "Imported") + `  ${r.name} (${r.agentId}) v${r.version}`, ...r.warnings.map((w) => yellow("! ") + w)], r);
+      print(out(), () => [green(r.recognized ? "Updated" : "Imported") + `  ${r.name} (${r.agentId}) v${r.version}`, r.signerText, ...r.warnings.map((w) => yellow("! ") + w)], r);
       return;
     }
     if (!out().json && !out().quiet) process.stderr.write(dim(`Imported ${r.name} into the library.\n`));
@@ -279,6 +303,87 @@ approvalOptions(
     return previewAndApply(nomad, plan, o);
   })
 );
+
+/* ------------------------------ move (the short way) ------------------------------ */
+
+type Destination = { kind: "file"; path: string } | { kind: "platform"; adapter: string; root: string; nativeId?: string };
+
+/** "codex", "claude-code:~/project", "claude-code:~/project#main", or "./agent.nomad". */
+export function parseDestination(spec: string): Destination {
+  if (/\.(nomad|jetpack)$/i.test(spec)) return { kind: "file", path: resolve(spec.replace(/^~(?=$|\/)/, process.env.HOME ?? "~")) };
+  const m = /^([a-z0-9-]+)(?::(.*?))?(?:#(.+))?$/.exec(spec);
+  const adapter = m ? findAdapter(m[1]) : undefined;
+  if (!adapter || !m) throw new NomadError(`"${spec}" is not a platform or a package file.`, "usage", `Use a platform (${listAdapters().map((a) => a.info.id).slice(0, 5).join(", ")}, ...), a platform with a folder such as claude-code:~/project, or a file ending in .nomad.`);
+  const root = m[2] || adapter.info.defaultLocations[0] || process.cwd();
+  return { kind: "platform", adapter: adapter.info.id, root: resolveRoot(root), nativeId: m[3] };
+}
+
+async function moveTo(nomad: Nomad, source: SourceSpec, dest: Destination, o: Record<string, unknown>): Promise<number> {
+  if (dest.kind === "file") {
+    const r = await nomad.exportAgent(source, { outPath: dest.path, includeFiles: o.includeFiles as boolean, sign: o.sign as boolean, components: components(o.components as string) });
+    print(out(), () => [green("Saved") + `  ${displayPath(r.path!)}`, `${r.files.size} files, ${(r.bytes.length / 1024).toFixed(1)} KB${r.receipt.signedBy ? `, signed ${r.receipt.signedBy}` : ""}.`, ...(r.sanitize.redactedText || r.sanitize.strippedEnvValues.length ? [dim("Secrets were left out. You will reconnect them where you open it.")] : []), dim(`Open it anywhere with: nomad move ${displayPath(r.path!)} <platform>`)], r.receipt);
+    return EXIT.ok;
+  }
+  const mode = o.copy ? "copy" : o.replace ? "replace" : "merge";
+  const plan = await nomad.plan({ source, destination: { adapter: dest.adapter, root: dest.root, nativeId: dest.nativeId }, mode, targetName: o.name as string | undefined, components: components(o.components as string), includeFiles: o.includeFiles as boolean });
+  return previewAndApply(nomad, plan, o);
+}
+
+approvalOptions(
+  program
+    .command("move <from> <to>")
+    .description("move an agent in one step: nomad move openclaw codex, or nomad move openclaw ./me.nomad")
+    .option("--agent <id>", "which agent, when the source has several")
+    .option("--copy", "create a separate agent instead of updating a matching one")
+    .option("--replace", "overwrite the destination agent")
+    .option("--name <name>", "name for the copy")
+    .option("--components <list>", `only these components (${COMPONENT_CATEGORIES.join(",")})`)
+    .option("--include-files", "include knowledge files")
+    .option("--sign", "sign the package when saving to a file")
+).action((from, to, o) =>
+  run(async (nomad) => moveTo(nomad, await parseSource(nomad, from, { agent: o.agent }), parseDestination(to), o))
+);
+
+/* ------------------------------ signing ------------------------------ */
+
+program
+  .command("keys")
+  .description("show your signing key, and the keys you trust")
+  .action(() =>
+    run(async (nomad) => {
+      const own = nomad.signingKey(true)!;
+      const trusted = nomad.trustedKeys();
+      print(out(), () => [
+        (own.created ? green("Created your signing key") : bold("Your signing key")) + `  ${own.fingerprint}`,
+        dim("Share this fingerprint so people can check packages you sign with --sign."),
+        "",
+        trusted.length ? bold("Trusted keys") : "You do not trust anyone else's key yet. Use: nomad trust <package> --name <who>",
+        ...trusted.map((k) => `  ${k.fingerprint}  ${k.name}`)
+      ], { key: own, trusted });
+    })
+  );
+
+program
+  .command("trust <package>")
+  .description("trust the key that signed a package")
+  .requiredOption("--name <who>", "a name for this key, such as a person or team")
+  .action((pkg, o) =>
+    run(async (nomad) => {
+      const { readFileSync } = await import("node:fs");
+      const k = nomad.trustPackageSigner(new Uint8Array(readFileSync(resolve(pkg))), o.name);
+      print(out(), () => [green("Trusted") + `  ${k.fingerprint}  ${k.name}`, dim("Check this fingerprint with them through another channel.")], k);
+    })
+  );
+
+program
+  .command("untrust <fingerprint>")
+  .description("stop trusting a key")
+  .action((fp) =>
+    run(async (nomad) => {
+      nomad.untrust(fp);
+      print(out(), () => green("Removed") + `  ${fp}`, { removed: fp });
+    })
+  );
 
 /* ------------------------------ lifecycle ------------------------------ */
 
@@ -438,7 +543,7 @@ remote
     run(async (nomad) => {
       const spec = await parseSource(nomad, source);
       const tmp = await makeTempDir("nomad-remote-");
-      const exp = await nomad.exportAgent(spec, { outPath: join(tmp, "agent.agentpack") });
+      const exp = await nomad.exportAgent(spec, { outPath: join(tmp, "agent.nomad") });
       const r = await remoteMigrate({ host: o.host, port: o.port ? Number(o.port) : undefined, identity: o.identity, remoteCommand: o.remoteCommand }, exp.path!, { to: o.to, dest: o.destDir, mode: o.mode, apply: !!o.apply });
       print(out(), () => (typeof r.result === "string" ? r.result : r.result.receipt ? receiptText(r.result.receipt) : planText(r.result.plan, out().verbose)), r.result);
       return r.code;
@@ -518,5 +623,86 @@ program
     }, 2500);
     child.on("exit", (code) => (process.exitCode = code ?? 0));
   });
+
+/* ------------------------------ guided mode ------------------------------ */
+
+async function choose<T>(rl: import("node:readline/promises").Interface, question: string, items: Array<{ label: string; value: T }>): Promise<T> {
+  process.stderr.write("\n" + bold(question) + "\n");
+  items.forEach((it, i) => process.stderr.write(`  ${String(i + 1).padStart(2)}  ${it.label}\n`));
+  for (;;) {
+    const a = (await rl.question(dim(`Pick 1-${items.length} [1]: `))).trim();
+    const n = a === "" ? 1 : Number(a);
+    if (Number.isInteger(n) && n >= 1 && n <= items.length) return items[n - 1].value;
+    process.stderr.write(yellow(`Type a number from 1 to ${items.length}.\n`));
+  }
+}
+
+/** "nomad" with no arguments: pick an agent, pick where it goes, confirm once. */
+async function guided(nomad: Nomad): Promise<number> {
+  process.stderr.write(bold("Nomad") + dim(`  ${NOMAD_VERSION}`) + "\n" + dim("Looking for agents on this computer...") + "\n");
+  const found = await nomad.scan();
+  const library = nomad.listAgents();
+  const atFound = new Set(found.flatMap((p) => p.agents.map((a) => a.agentId).filter(Boolean)));
+  type Pick = { source: SourceSpec; adapter: string | null } | "file";
+  const items: Array<{ label: string; value: Pick }> = [
+    ...found.flatMap((p) => p.agents.map((a) => ({ label: `${a.name}  ${dim(`${p.displayName}, ${displayPath(p.root)}`)}`, value: { source: { kind: "location", adapter: p.adapter, root: p.root, nativeId: a.nativeId } as SourceSpec, adapter: p.adapter } }))),
+    ...library.filter((a) => !atFound.has(a.id)).map((a) => ({ label: `${a.name}  ${dim(`saved in Nomad, v${a.currentVersion}`)}`, value: { source: { kind: "stored", agentId: a.id } as SourceSpec, adapter: null } })),
+    { label: "A .nomad file", value: "file" as const }
+  ];
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  let source: SourceSpec;
+  let from: string | null;
+  let dest: Destination;
+  try {
+    if (items.length === 1) process.stderr.write(dim("No agents were found at the usual places. You can open a package file.") + "\n");
+    const pick = await choose(rl, "Which agent?", items);
+    if (pick === "file") {
+      const path = resolve((await rl.question("Path to the file: ")).trim().replace(/^~(?=$|\/)/, process.env.HOME ?? "~"));
+      if (!existsSync(path)) throw new NomadError(`There is no file at ${path}.`, "not-found");
+      source = { kind: "package", path };
+      from = null;
+    } else {
+      source = pick.source;
+      from = pick.adapter;
+    }
+    const label = (a: { displayName: string; support: string }) => `${a.displayName}${a.support === "GUIDED" ? dim("  (setup kit with steps)") : a.support === "EXPERIMENTAL" ? dim("  (experimental)") : ""}`;
+    const targets = listAdapters()
+      .map((a) => a.info)
+      .filter((a) => a.support !== "UNAVAILABLE" && a.id !== from && a.id !== "generic");
+    // Platforms installed here come first; everything else is one step away.
+    const installed = new Set(found.map((p) => p.adapter));
+    const near = targets.filter((a) => installed.has(a.id));
+    const rest = targets.filter((a) => !installed.has(a.id));
+    let where = await choose(rl, "Move it where?", [
+      ...near.map((a) => ({ label: `${label(a)}  ${dim("found here")}`, value: a.id as string })),
+      { label: `Save as a .nomad file ${dim("(to share or keep)")}`, value: "@file" },
+      { label: `Another platform ${dim(`(${rest.length} more)`)}`, value: "@more" }
+    ]);
+    if (where === "@more") where = await choose(rl, "Which platform?", rest.map((a) => ({ label: label(a), value: a.id as string })));
+    if (where === "@file") {
+      const name = (await nomad.loadSource(source).catch(() => null))?.doc.name ?? "agent";
+      const def = `./${name.replace(/[^A-Za-z0-9._-]+/g, "-")}.nomad`;
+      const a = (await rl.question(`Save to ${dim(`[${def}]`)}: `)).trim();
+      dest = { kind: "file", path: resolve(a || def) };
+    } else {
+      const info = getAdapter(where).info;
+      const def = info.defaultLocations[0] ?? displayPath(process.cwd());
+      const a = (await rl.question(`${info.displayName} folder ${dim(`[${def}]`)}: `)).trim();
+      dest = { kind: "platform", adapter: where, root: resolveRoot(a || def) };
+    }
+  } finally {
+    rl.close();
+  }
+  process.stderr.write("\n");
+  return moveTo(nomad, source, dest, {});
+}
+
+program.action(() => {
+  if (!process.stdin.isTTY || !process.stderr.isTTY || out().json) {
+    program.outputHelp();
+    return;
+  }
+  return run(guided);
+});
 
 program.parseAsync(process.argv);

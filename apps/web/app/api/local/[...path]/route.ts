@@ -40,7 +40,7 @@ function safeSource(nomadHome: string, s: any) {
   if (s.kind === "package") {
     const uploads = join(nomadHome, "uploads");
     const p = resolve(String(s.path));
-    if (!p.startsWith(uploads + sep) || !p.endsWith(".agentpack")) throw new HttpError(400, "Packages must be uploaded first.");
+    if (!p.startsWith(uploads + sep) || !/\.(nomad|agentpack|jetpack)$/.test(p)) throw new HttpError(400, "Packages must be uploaded first.");
     return { kind: "package" as const, path: p };
   }
   throw new HttpError(400, "Unknown source kind.");
@@ -124,12 +124,12 @@ async function handle(req: Request, ctx: Ctx) {
       const s = await body(req);
       const dir = join(home, "exports");
       await mkdir(dir, { recursive: true, mode: 0o700 });
-      const r = await nomad.exportAgent(safeSource(home, s.source), { outPath: dir, includeSecrets: !!s.includeSecrets, includeFiles: !!s.includeFiles, components: Array.isArray(s.components) && s.components.length ? s.components : undefined, format: s.format === "interchange" ? "interchange" : "agentpack" });
-      return json({ file: basename(r.path!), size: r.bytes.length, notIncluded: r.receipt.notIncluded, redacted: r.sanitize.redactedText, references: r.sanitize.strippedEnvValues.length, removedFiles: r.sanitize.removedFiles, receipt: r.receipt });
+      const r = await nomad.exportAgent(safeSource(home, s.source), { outPath: dir, includeSecrets: !!s.includeSecrets, includeFiles: !!s.includeFiles, components: Array.isArray(s.components) && s.components.length ? s.components : undefined, format: s.format === "interchange" ? "interchange" : "nomad", sign: !!s.sign && s.format !== "interchange" });
+      return json({ file: basename(r.path!), size: r.bytes.length, notIncluded: r.receipt.notIncluded, redacted: r.sanitize.redactedText, references: r.sanitize.strippedEnvValues.length, removedFiles: r.sanitize.removedFiles, signedBy: r.receipt.signedBy ?? null, receipt: r.receipt });
     }
     case "GET download": {
       const name = q("file") ?? "";
-      if (!/^[\w.-]+\.(agentpack|jetpack)$/.test(name)) throw new HttpError(400, "Invalid file name.");
+      if (!/^[\w.-]+\.(nomad|agentpack|jetpack)$/.test(name)) throw new HttpError(400, "Invalid file name.");
       const data = await readFile(join(home, "exports", name)).catch(() => {
         throw new HttpError(404, "File not found.");
       });
@@ -143,7 +143,7 @@ async function handle(req: Request, ctx: Ctx) {
       if (!v.ok) return json({ ok: false, issues: v.issues });
       const dir = join(home, "uploads");
       await mkdir(dir, { recursive: true, mode: 0o700 });
-      const path = join(dir, `${Date.now()}-${v.doc!.id}.agentpack`);
+      const path = join(dir, `${Date.now()}-${v.doc!.id}.nomad`);
       await writeFile(path, data, { mode: 0o600 });
       return json({ ok: true, path, name: v.doc!.name, id: v.doc!.id, warnings: v.warnings, secrets: v.scan?.findings.length ?? 0, files: v.fileCount, counts: { instructions: v.doc!.instructions.length, memory: v.doc!.memory.length, skills: v.doc!.skills.length, tools: v.doc!.tools.length, workflows: v.doc!.workflows.length } });
     }

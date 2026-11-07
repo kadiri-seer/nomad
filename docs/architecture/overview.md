@@ -17,7 +17,7 @@ Nomad is a TypeScript monorepo. One engine (`@nomad/migration`) is used by the C
 
 ## Data model
 
-`@nomad/schema` defines the Universal Agent Format (UAF) with Zod. `AgentDocument` is the in-memory form; `.agentpack` is its file serialization (`@nomad/archive`). JSON Schema is generated from the same definitions (`nomad schema`).
+`@nomad/schema` defines the Universal Agent Format (UAF) with Zod. `AgentDocument` is the in-memory form; `.nomad` is its file serialization (`@nomad/archive`). JSON Schema is generated from the same definitions (`nomad schema`).
 
 ## Adapters
 

@@ -5,11 +5,14 @@ Nomad moves AI agents between platforms without losing who they are. It reads an
 It runs entirely on your machine. There is no account and nothing is uploaded.
 
 ```
-nomad scan
-nomad migrate --from openclaw --to claude-code --dry-run
-nomad migrate --from openclaw --to claude-code --yes
-nomad restore <backup-id>
+nomad                                guided: pick an agent, pick where it goes, confirm once
+nomad move openclaw claude-code      the same in one line
+nomad move openclaw ./kestrel.nomad  save to a file you can share or keep
+nomad move ./kestrel.nomad codex     open it somewhere else
+nomad restore <backup-id>            undo
 ```
+
+Every move shows a short summary first (`--details` for every file and diff, `--dry-run` to stop there) and asks one question. A backup is taken before anything is written.
 
 ## What it supports
 
@@ -19,13 +22,13 @@ nomad restore <backup-id>
 | Claude Code | Partial | CLAUDE.md, subagents, skills, slash commands, settings.json permissions and model, MCP servers (user and project). No scheduler. |
 | Codex CLI | Partial | AGENTS.md, config.toml (model, approval policy, sandbox, network, MCP), skills, custom prompts. One agent per home. |
 | Hermes Agent | Partial | SOUL.md, MEMORY.md and USER.md entries, skills, config.yaml (model, MCP, command allowlist), cron jobs, profiles. |
-| Agent folder | Full | Unpacked `.agentpack` (lossless) or any folder of Markdown agent files. |
+| Agent folder | Full | Unpacked `.nomad` (lossless) or any folder of Markdown agent files. |
 | Cursor, Windsurf, Cline, Roo Code, Continue, OpenCode, Goose, Aider, Gemini CLI | Experimental | Rules files and MCP configuration where the platform has one. |
 | ChatGPT, Claude, Gemini, Grok, Perplexity, CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n, Letta | Guided | Nomad writes a setup kit (text sized for each field, starter code, memory items, steps). Nothing is sent to those services. |
 
 `nomad adapters --platform <id>` prints the per category capability matrix. Nothing is labelled full unless it is.
 
-Packages: Nomad's own `.agentpack` is complete and carries integrity hashes. Nomad also reads and writes `.jetpack` interchange archives, the flat layout other agent portability tools use (`nomad export <agent> --format jetpack`, and any `.jetpack` works wherever a package is accepted). Parts that layout has no place for, such as MCP tools, travel in a namespaced manifest key that other readers ignore.
+Packages: a `.nomad` file is a small ZIP of plain Markdown and JSON (`nomad.json`, `AGENTS.md`, `SOUL.md`, `MEMORY.md`, `skills/`, `routines/`, `tools.json`) with a SHA-256 for every file. Add `--sign` to sign it with your own Ed25519 key; whoever opens it sees whether it came from you, someone they trust or an unknown key, and any change after signing is reported (`nomad keys`, `nomad trust <file> --name <who>`). Older `.agentpack` files still open. Nomad also reads and writes `.jetpack` interchange archives, the flat layout other agent portability tools use (`nomad export <agent> --format jetpack`, and any `.jetpack` works wherever a package is accepted). Parts that layout has no place for, such as MCP tools, travel in a namespaced manifest key that other readers ignore.
 
 ## Install
 
@@ -64,7 +67,7 @@ apps/web            Next.js site, package inspector and local dashboard
 packages/schema     Universal Agent Format: Zod schemas, JSON Schema, versioning
 packages/core       ids, hashing, adapter contract, Markdown blocks, merges, safe fs
 packages/security   secret detection and redaction
-packages/archive    .agentpack layout and a hardened ZIP reader
+packages/archive    .nomad layout, interchange archives and a hardened ZIP reader
 packages/compatibility  per category compatibility and scoring
 packages/adapters   platform adapters and the static catalog
 packages/storage    SQLite (Drizzle) library: agents, versions, locations, receipts, backups
@@ -79,7 +82,7 @@ tests               fixtures, unit, integration, end to end and CLI/MCP tests
 ## Development
 
 ```
-pnpm test          # 84 tests: schema, security, archive safety, adapters, migrations, CLI, MCP, SDK contract
+pnpm test          # tests: schema, security, archive safety, adapters, migrations, CLI, MCP, SDK contract
 pnpm typecheck
 pnpm nomad scan    # run the CLI from source
 pnpm dev:web       # web app in development

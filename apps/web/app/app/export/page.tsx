@@ -15,7 +15,8 @@ function ExportForm() {
   const [components, setComponents] = useState<Set<ComponentCategory>>(new Set(COMPONENT_CATEGORIES));
   const [includeFiles, setIncludeFiles] = useState(false);
   const [includeSecrets, setIncludeSecrets] = useState(false);
-  const [format, setFormat] = useState<"agentpack" | "interchange">("agentpack");
+  const [format, setFormat] = useState<"nomad" | "interchange">("nomad");
+  const [sign, setSign] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +30,7 @@ function ExportForm() {
     setError(null);
     setResult(null);
     try {
-      setResult(await api("export", { body: { source: { kind: "stored", agentId, version: version || undefined }, includeFiles, includeSecrets, components: [...components], format } }));
+      setResult(await api("export", { body: { source: { kind: "stored", agentId, version: version || undefined }, includeFiles, includeSecrets, components: [...components], format, sign: sign && format === "nomad" } }));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -61,8 +62,8 @@ function ExportForm() {
       </div>
       <label className="field" style={{ maxWidth: 420 }}>
         <span>Format</span>
-        <select className="select" value={format} onChange={(e) => setFormat(e.target.value as "agentpack" | "interchange")}>
-          <option value="agentpack">.agentpack (complete, with integrity hashes)</option>
+        <select className="select" value={format} onChange={(e) => setFormat(e.target.value as "nomad" | "interchange")}>
+          <option value="nomad">.nomad (complete, with integrity hashes)</option>
           <option value="interchange">.jetpack (interchange archive for other tools)</option>
         </select>
       </label>
@@ -103,6 +104,16 @@ function ExportForm() {
           <small className="muted">Not recommended. The library stores agents with secrets already redacted, so this only matters for values that were never detected.</small>
         </span>
       </label>
+      {format === "nomad" && (
+        <label className="check">
+          <input type="checkbox" checked={sign} onChange={(e) => setSign(e.target.checked)} />
+          <span>
+            Sign with your Nomad key
+            <br />
+            <small className="muted">People you share it with can check it came from you and was not changed. Your key is created the first time.</small>
+          </span>
+        </label>
+      )}
       {includeSecrets && <Notice tone="warn" title="Share this package carefully">Anyone with the file could read any credential left in it.</Notice>}
       <div className="row">
         <button className="btn" disabled={busy || !agentId} onClick={run}>
@@ -116,6 +127,7 @@ function ExportForm() {
           {result.references ? `${result.references} credential(s) kept as references. ` : ""}
           {result.removedFiles.length ? `Left out: ${result.removedFiles.join(", ")}.` : ""}
           {result.notIncluded?.length ? ` Not representable in this format: ${result.notIncluded.join(", ")}.` : ""}
+          {result.signedBy ? ` Signed with key ${result.signedBy}.` : ""}
           <div className="row" style={{ marginTop: 12 }}>
             <a className="btn btn-sm" href={`/api/local/download?file=${encodeURIComponent(result.file)}`} download>
               Download
@@ -130,7 +142,7 @@ function ExportForm() {
 export default function ExportPage() {
   return (
     <>
-      <PageHead title="Export an agent" sub="Create a portable .agentpack you can keep as a backup, move to another machine or share." />
+      <PageHead title="Export an agent" sub="Create a portable .nomad file you can keep as a backup, move to another machine or share." />
       <Suspense fallback={<Skeleton rows={4} />}>
         <ExportForm />
       </Suspense>

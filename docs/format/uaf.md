@@ -29,7 +29,7 @@ Environment values in tools are either `{ "value": "..." }` or `{ "secretRef": "
 
 ## Package
 
-An `.agentpack` is a ZIP with `manifest.json` (format `nomad.agentpack`), and only the files the agent needs. The manifest lists every component with its path and carries a SHA-256 per file under `integrity`. See the layout in `packages/archive/src/layout.ts` and on the website under Docs, Agent format.
+A `.nomad` file (format 2) is a ZIP of plain files: `nomad.json` (id, name, model, policy, provenance, a SHA-256 per file and an optional Ed25519 signature), `AGENTS.md` (instruction sections), `SOUL.md` (persona), `MEMORY.md` (entries as bullets under their kind), `memory/<slug>.md` for long entries, `skills/<name>/`, `routines/<id>.json`, `tools.json` (MCP servers with `${VAR}` placeholders for secrets) and `files/` when knowledge files are included. Only what the agent has is written. The signature covers the canonical JSON of `nomad.json` without the signature field, which in turn covers every file through its hash. See `packages/archive/src/nomadpack.ts`. The older `.agentpack` layout (`packages/archive/src/layout.ts`) is still read.
 
 ## Interchange archives
 

@@ -77,7 +77,7 @@ export function createMcpServer(options: McpOptions = {}) {
     }
   });
 
-  const source = z.string().describe('Agent source: a library agent id or name, a platform like "openclaw" or "claude-code:~/project#main", or a path to an .agentpack');
+  const source = z.string().describe('Agent source: a library agent id or name, a platform like "openclaw" or "claude-code:~/project#main", or a path to a .nomad, .agentpack or .jetpack package');
 
   server.registerTool("inspect_agent", { title: "Inspect an agent", description: "Read an agent and summarise its components. Secrets are redacted.", inputSchema: { source } }, async ({ source: s }) => {
     try {
@@ -117,7 +117,7 @@ export function createMcpServer(options: McpOptions = {}) {
 
   server.registerTool(
     "export_agent",
-    { title: "Export an agent", description: `Write a portable .agentpack into ${exportsDir}. Secrets are always redacted.`, inputSchema: { source } },
+    { title: "Export an agent", description: `Write a portable .nomad package into ${exportsDir}. Secrets are always redacted.`, inputSchema: { source } },
     async ({ source: s }) => {
       try {
         const r = await nomad.exportAgent(await parseSource(nomad, s), { outPath: exportsDir });
@@ -130,11 +130,11 @@ export function createMcpServer(options: McpOptions = {}) {
 
   server.registerTool(
     "validate_package",
-    { title: "Validate a package", description: "Check an .agentpack file for structure, integrity and security problems.", inputSchema: { path: z.string().describe("Path to an .agentpack file") } },
+    { title: "Validate a package", description: "Check a .nomad, .agentpack or .jetpack package for structure, integrity and security problems.", inputSchema: { path: z.string().describe("Path to a package file") } },
     async ({ path }) => {
       try {
         const p = resolve(expandHome(path));
-        if (!p.endsWith(".agentpack")) throw new NomadError("Only .agentpack files can be validated.", "usage");
+        if (!/\.(nomad|agentpack|jetpack)$/.test(p)) throw new NomadError("Only .nomad, .agentpack or .jetpack files can be validated.", "usage");
         const r = nomad.validatePackage(new Uint8Array(readFileSync(p)));
         return text({ ok: r.ok, name: r.doc?.name, issues: r.issues, warnings: r.warnings, secretsFound: r.scan?.findings.length ?? 0 });
       } catch (e) {

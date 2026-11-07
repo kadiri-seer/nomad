@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -48,7 +48,7 @@ describe("CLI", () => {
     expect(run.code).toBe(0);
     expect(run.json.receipt.status).toBe("success");
 
-    const out = join(env.home, "k.agentpack");
+    const out = join(env.home, "k.nomad");
     expect(nomad("export", "Kestrel", "-o", out).code).toBe(0);
     const v = nomad("validate", out);
     expect(v.code).toBe(0);
@@ -67,6 +67,47 @@ describe("CLI", () => {
     const bad = join(env.home, "bad.agentpack");
     require("node:fs").writeFileSync(bad, "nope");
     expect(nomad("validate", bad).code).toBe(4);
+  });
+
+  it("moves in one line to a platform and to a signed file", () => {
+    const preview = nomad("move", "openclaw", "codex", "--dry-run");
+    expect(preview.code).toBe(0);
+    expect(preview.json.plan.summary.create + preview.json.plan.summary.update).toBeGreaterThan(0);
+    const moved = nomad("move", "openclaw", "codex", "--yes");
+    expect(moved.code).toBe(0);
+    expect(moved.json.receipt.status).toBe("success");
+    expect(readFileSync(join(env.home, ".codex/AGENTS.md"), "utf8")).toContain("nomad:begin");
+
+    const file = join(env.home, "out/kestrel.nomad");
+    const saved = nomad("move", "openclaw", file, "--sign");
+    expect(saved.code).toBe(0);
+    expect(saved.json.signedBy).toMatch(/^[0-9a-f]{4} /);
+    const v = nomad("validate", file);
+    expect(v.json.signer.state).toBe("you");
+    const keys = nomad("keys");
+    expect(keys.json.key.fingerprint).toBe(saved.json.signedBy);
+
+    // someone else opens it: unknown until trusted
+    const other = join(env.home, "other");
+    const asOther = (...args: string[]) => nomad("--home", other, ...args);
+    expect(asOther("validate", file).json.signer.state).toBe("unknown");
+    expect(asOther("trust", file, "--name", "Ada").code).toBe(0);
+    expect(asOther("validate", file).json.signer).toMatchObject({ state: "trusted", name: "Ada" });
+    const back = asOther("move", file, `claude-code:${join(env.home, "proj2/.claude")}`, "--yes");
+    expect(back.code).toBe(0);
+    expect(existsSync(join(env.home, "proj2/.claude/CLAUDE.md"))).toBe(true);
+  });
+
+  it("explains a destination it does not understand", () => {
+    const r = nomad("move", "openclaw", "somewhere-else");
+    expect(r.code).toBe(2);
+    expect(r.json.hint).toMatch(/\.nomad/);
+  });
+
+  it("prints help instead of prompting when not in a terminal", () => {
+    const r = spawnSync(TSX, [CLI], { env: { ...process.env, NOMAD_FAKE_HOME: env.home, NOMAD_HOME: env.nomadHome }, encoding: "utf8", timeout: 60000 });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("Start here");
   });
 
   it("explains unknown sources", () => {

@@ -31,6 +31,7 @@ import { applyOperations, computeOperations, type FileOperation } from "./ops";
 import { createBackup, previewRestore, restoreBackup, type RestorePreview } from "./backup";
 import { unenforcedRestrictions, widenedPermissions } from "./policy";
 import { compareDocuments, type Comparison } from "./compare";
+import { describeSigner, signer, signerStatus, signingIdentity, verifySignature, type SignerStatus, type TrustedKey } from "./keys";
 
 export type SourceSpec =
   | { kind: "location"; adapter: string; root: string; nativeId: string }
@@ -220,7 +221,11 @@ export class Nomad {
     return { doc: out.doc, notes: result.notes, scan, sanitize: clean.report, version, sourceFiles: result.sourceFiles, sourceAdapter: adapter };
   }
 
-  async loadSource(source: SourceSpec, options: { includeSecrets?: boolean; includeFiles?: boolean } = {}): Promise<LoadedAgent & { label: string; unpack?: UnpackResult }> {
+  private signerOf(u: UnpackResult): SignerStatus {
+    return signerStatus(u.info?.signature, signingIdentity(this.store.home, false), this.store.getSetting<TrustedKey[]>("trustedKeys", []));
+  }
+
+  async loadSource(source: SourceSpec, options: { includeSecrets?: boolean; includeFiles?: boolean } = {}): Promise<LoadedAgent & { label: string; unpack?: UnpackResult; signer?: SignerStatus }> {
     switch (source.kind) {
       case "location": {
         const r = await this.readLocation(source.adapter, source.root, source.nativeId, options);
@@ -238,9 +243,11 @@ export class Nomad {
       }
       case "package": {
         const bytes = source.bytes ?? new Uint8Array(await fsp.readFile(source.path!));
-        const u = unpackAgent(bytes, { includeSecrets: options.includeSecrets });
+        const u = unpackAgent(bytes, { includeSecrets: options.includeSecrets, verifySignature });
         if (!u.ok || !u.doc) throw new NomadError("The package is not valid: " + u.issues.map((i) => `${i.path}: ${i.message}`).join("; "), "invalid-package");
-        return { doc: u.doc, notes: u.warnings.map((w) => ({ level: "warning" as const, message: w })), scan: u.scan!, sanitize: u.sanitize!, sourceFiles: [], sourceAdapter: null, label: source.path ? basename(source.path) : "uploaded package", unpack: u };
+        const who = this.signerOf(u);
+        const notes: Note[] = [{ level: who.state === "unknown" ? "warning" : "info", message: describeSigner(who) }, ...u.warnings.map((w) => ({ level: "warning" as const, message: w }))];
+        return { doc: u.doc, notes, scan: u.scan!, sanitize: u.sanitize!, sourceFiles: [], sourceAdapter: null, label: source.path ? basename(source.path) : "uploaded package", unpack: u, signer: who };
       }
     }
   }
@@ -532,18 +539,19 @@ export class Nomad {
   /* Export and import                                                    */
   /* ------------------------------------------------------------------ */
 
-  async exportAgent(source: SourceSpec, options: { outPath?: string; includeSecrets?: boolean; includeSensitiveFiles?: boolean; includeFiles?: boolean; components?: ComponentCategory[]; format?: "agentpack" | "interchange" } = {}) {
+  async exportAgent(source: SourceSpec, options: { outPath?: string; includeSecrets?: boolean; includeSensitiveFiles?: boolean; includeFiles?: boolean; components?: ComponentCategory[]; format?: "nomad" | "agentpack" | "interchange"; sign?: boolean } = {}) {
     const loaded = await this.loadSource(source, { includeSecrets: options.includeSecrets, includeFiles: options.includeFiles });
     const doc = options.components?.length ? filterComponents(loaded.doc, options.components) : loaded.doc;
     const operationId = shortId("op");
     const withHistory: AgentDocument = { ...doc, history: [...doc.history, { operationId, kind: "export", from: loaded.label, at: new Date().toISOString() }] };
-    const packOpts = { includeSecrets: options.includeSecrets, includeSensitiveFiles: options.includeSensitiveFiles, includeFiles: options.includeFiles };
+    const packOpts = { includeSecrets: options.includeSecrets, includeSensitiveFiles: options.includeSensitiveFiles, includeFiles: options.includeFiles, sign: options.sign ? signer(this.store.home) : undefined };
+    if (options.sign && (options.format === "interchange" || options.outPath?.endsWith(INTERCHANGE_EXTENSION))) throw new NomadError("Interchange archives (.jetpack) cannot be signed.", "usage", "Sign a .nomad package instead.");
     const interchange = options.format === "interchange" || options.outPath?.endsWith(INTERCHANGE_EXTENSION);
     const pack = interchange ? { ...packInterchange(withHistory, packOpts), manifest: null } : { ...packAgent(withHistory, packOpts), carried: [] as string[], dropped: [] as string[] };
     const ext = interchange ? INTERCHANGE_EXTENSION : PACKAGE_EXTENSION;
     let path: string | null = null;
     if (options.outPath !== undefined) {
-      path = options.outPath.endsWith(ext) ? options.outPath : join(options.outPath, `${doc.name.replace(/[^A-Za-z0-9._-]+/g, "-")}${ext}`);
+      path = /\.(nomad|agentpack|jetpack)$/.test(options.outPath) ? options.outPath : join(options.outPath, `${doc.name.replace(/[^A-Za-z0-9._-]+/g, "-")}${ext}`);
       await atomicWrite(path, pack.bytes, 0o600);
     }
     const receipt = {
@@ -559,7 +567,8 @@ export class Nomad {
       strippedEnv: pack.sanitize.strippedEnvValues.length,
       removedFiles: pack.sanitize.removedFiles,
       findings: pack.scan.findings.map((f) => ({ ruleName: f.ruleName, file: f.file, line: f.line })),
-      format: interchange ? "interchange" : "agentpack",
+      format: interchange ? "interchange" : "nomad",
+      signedBy: "manifest" in pack && pack.manifest?.signature ? pack.manifest.signature.fingerprint : null,
       carriedInExtension: pack.carried,
       notIncluded: pack.dropped,
       at: new Date().toISOString()
@@ -569,22 +578,56 @@ export class Nomad {
   }
 
   /** Validate a package without importing it. */
-  validatePackage(bytes: Uint8Array): UnpackResult {
-    return unpackAgent(bytes);
+  validatePackage(bytes: Uint8Array): UnpackResult & { signer: SignerStatus } {
+    const u = unpackAgent(bytes, { verifySignature });
+    return { ...u, signer: this.signerOf(u) };
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Signing keys                                                         */
+  /* ------------------------------------------------------------------ */
+
+  /** This install's signing key (created on first use). */
+  signingKey(create = true) {
+    return signingIdentity(this.store.home, create);
+  }
+
+  trustedKeys(): TrustedKey[] {
+    return this.store.getSetting<TrustedKey[]>("trustedKeys", []);
+  }
+
+  /** Trust the key that signed a package, under a name you choose. */
+  trustPackageSigner(bytes: Uint8Array, name: string): TrustedKey {
+    const u = unpackAgent(bytes, { verifySignature });
+    const sig = u.info?.signature;
+    if (!sig) throw new NomadError("This package is not signed.", "unsigned");
+    if (sig.verified !== true) throw new NomadError("The signature does not match the package, so its key cannot be trusted.", "invalid-signature");
+    const keys = this.trustedKeys().filter((k) => k.key !== sig.key);
+    const entry = { fingerprint: sig.fingerprint, key: sig.key, name };
+    this.store.setSetting("trustedKeys", [...keys, entry]);
+    return entry;
+  }
+
+  untrust(fingerprint: string) {
+    const keys = this.trustedKeys();
+    const left = keys.filter((k) => k.fingerprint.replace(/\s/g, "") !== fingerprint.replace(/\s/g, ""));
+    if (left.length === keys.length) throw new NomadError(`No trusted key ${fingerprint}.`, "not-found");
+    this.store.setSetting("trustedKeys", left);
   }
 
   /** Import a package into the local library. Use plan() with a package source to also write it to a platform. */
   async importPackage(input: { path?: string; bytes?: Uint8Array }) {
     const bytes = input.bytes ?? new Uint8Array(await fsp.readFile(input.path!));
-    const u = unpackAgent(bytes);
+    const u = unpackAgent(bytes, { verifySignature });
     if (!u.ok || !u.doc) return { ok: false as const, issues: u.issues, warnings: u.warnings };
+    const who = this.signerOf(u);
     const known = this.store.getAgent(u.doc.id);
     const operationId = shortId("op");
     const doc: AgentDocument = { ...u.doc, history: [...u.doc.history, { operationId, kind: "import", from: input.path ? basename(input.path) : "package", at: new Date().toISOString() }] };
     const saved = this.store.saveAgent(doc, { reason: "Imported package", operationId, platform: doc.source.platform });
     const receipt = { operationId, kind: "import", status: "success", agent: { id: doc.id, name: doc.name }, recognized: !!known, version: saved.version, warnings: u.warnings, findings: u.scan?.findings.length ?? 0, redacted: u.sanitize?.redactedText ?? 0, executableFiles: u.executableFiles, at: new Date().toISOString() };
     this.store.saveOperation({ id: operationId, kind: "import", agentId: doc.id, source: input.path ?? "package", destination: "library", status: "success", createdAt: receipt.at, receipt });
-    return { ok: true as const, agentId: doc.id, name: doc.name, version: saved.version, recognized: !!known, warnings: u.warnings, scan: u.scan, sanitize: u.sanitize, executableFiles: u.executableFiles, receipt };
+    return { ok: true as const, agentId: doc.id, name: doc.name, version: saved.version, recognized: !!known, warnings: u.warnings, scan: u.scan, sanitize: u.sanitize, executableFiles: u.executableFiles, signer: who, signerText: describeSigner(who), receipt };
   }
 
   /* ------------------------------------------------------------------ */

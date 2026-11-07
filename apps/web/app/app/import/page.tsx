@@ -28,7 +28,7 @@ export default function ImportPage() {
 
   return (
     <>
-      <PageHead title="Import a package" sub="Add an agent from an .agentpack to your library. Writing it to a platform is a separate, previewed step." />
+      <PageHead title="Import a package" sub="Add an agent from a .nomad file to your library. Writing it to a platform is a separate, previewed step." />
       <div className="stack" style={{ maxWidth: 760 }}>
         <PackageUpload
           onDone={(r) => {

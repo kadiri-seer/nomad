@@ -1,5 +1,5 @@
 ---
-description: Export this Claude Code agent to a portable .agentpack
+description: Export this Claude Code agent to a portable .nomad file
 argument-hint: [output folder]
 allowed-tools: Bash(nomad export:*), Bash(nomad inspect:*)
 ---

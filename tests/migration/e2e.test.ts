@@ -158,7 +158,14 @@ describe("Generic package folder round trip", () => {
     const original = env.nomad.store.latestDocument(plan.agent.id)!;
     expect(back.doc.instructions).toEqual(original.instructions);
     expect(back.doc.memory).toEqual(original.memory);
-    expect(back.doc.skills).toEqual(original.skills);
+    // Everything round trips, except that local absolute paths are never written into packages.
+    const strip = (x: any) => x.map(({ source, ...rest }: any) => rest);
+    expect(strip(back.doc.skills)).toEqual(strip(original.skills));
+    expect(back.doc.skills[0].source?.path).toBe("skills/weather-brief/SKILL.md");
+    const { readdirSync } = await import("node:fs");
+    const manifestText = read(join(folder, "nomad.json"));
+    expect(manifestText).not.toContain(env.home);
+    expect(readdirSync(folder).sort()).toEqual(["AGENTS.md", "MEMORY.md", "SOUL.md", "memory", "nomad.json", "routines", "skills"]);
   });
 });
 

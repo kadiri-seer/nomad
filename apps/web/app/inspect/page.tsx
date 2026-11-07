@@ -1,7 +1,7 @@
 import { Inspector } from "@/components/Inspector";
 import { SiteFooter } from "@/components/SiteFooter";
 
-export const metadata = { title: "Package inspector", description: "Open an .agentpack in your browser to check its contents, security and compatibility. Nothing is uploaded." };
+export const metadata = { title: "Package inspector", description: "Open a .nomad file in your browser to check its contents, security and compatibility. Nothing is uploaded." };
 
 export default function InspectPage() {
   return (

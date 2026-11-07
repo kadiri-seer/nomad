@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { api } from "@/lib/client";
 import { Notice, Skeleton } from "./ui";
 
-/** Upload an .agentpack to the local Nomad service, which validates it before keeping it. */
+/** Upload a package to the local Nomad service, which validates it before keeping it. */
 export function PackageUpload({ onDone }: { onDone: (r: any) => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
@@ -44,14 +44,14 @@ export function PackageUpload({ onDone }: { onDone: (r: any) => void }) {
           send(e.dataTransfer.files[0]);
         }}
       >
-        <p style={{ fontWeight: 600 }}>Drop an .agentpack or .jetpack here</p>
+        <p style={{ fontWeight: 600 }}>Drop a .nomad file here</p>
         <p className="muted" style={{ marginTop: 4 }}>
           It is validated before anything is read: structure, integrity hashes and safety checks.
         </p>
         <button className="btn" style={{ marginTop: 14 }} onClick={() => input.current?.click()} disabled={busy}>
           {busy ? "Checking..." : "Choose a file"}
         </button>
-        <input ref={input} type="file" accept=".agentpack,.jetpack,.zip" className="visually-hidden" aria-label="Choose an agent package" onChange={(e) => send(e.target.files?.[0])} />
+        <input ref={input} type="file" accept=".nomad,.agentpack,.jetpack,.zip" className="visually-hidden" aria-label="Choose an agent package" onChange={(e) => send(e.target.files?.[0])} />
       </div>
       {busy && <Skeleton rows={2} />}
       {error && <Notice tone="bad">{error}</Notice>}

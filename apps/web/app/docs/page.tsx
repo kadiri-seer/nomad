@@ -29,24 +29,25 @@ alias nomad="node $PWD/apps/cli/dist/nomad.js"`}
         This starts the web interface on <code>127.0.0.1</code> with a one time session token and opens it in your browser. Only your machine can reach it. Everything the CLI does is available there, including the migration wizard.
       </p>
 
-      <h2>Your first migration</h2>
-      <ol>
-        <li>
-          Find agents: <code>nomad scan</code>
-        </li>
-        <li>
-          Look inside one: <code>nomad inspect openclaw --against claude-code</code>
-        </li>
-        <li>
-          Preview the move: <code>nomad migrate --from openclaw --to claude-code --dry-run</code>
-        </li>
-        <li>
-          Apply it: run the same command without <code>--dry-run</code>. Nomad asks before writing, or pass <code>--yes</code> in scripts.
-        </li>
-        <li>
-          Undo it if needed: <code>nomad restore &lt;backup-id&gt;</code> (the id is printed after every migration).
-        </li>
-      </ol>
+      <h2>Your first move</h2>
+      <p>
+        Run <code>nomad</code> with nothing after it. It finds the agents on this computer, asks which one and where it should go, shows a short summary of what will move and asks once. That is the whole flow.
+      </p>
+      <p>The same thing in one line:</p>
+      <pre className="code">
+        {`nomad move openclaw claude-code      move, with a summary and one question
+nomad move openclaw ./kestrel.nomad  save to a file you can share or keep
+nomad move ./kestrel.nomad codex     open that file somewhere else
+nomad restore <backup-id>            undo (the command is printed after every move)`}
+      </pre>
+      <p>
+        Add <code>--dry-run</code> to only see the summary, <code>--details</code> for every file and diff, and <code>--yes</code> in scripts. A backup is always taken before anything is written.
+      </p>
+
+      <h2>Signed packages</h2>
+      <p>
+        <code>nomad move openclaw ./kestrel.nomad --sign</code> signs the file with a key Nomad creates for you. Anyone opening it sees who signed it: you, someone they trust, or an unknown key. If a single byte changed after signing, Nomad reports a broken signature. <code>nomad keys</code> shows your fingerprint, and <code>nomad trust kestrel.nomad --name Ada</code> trusts the key that signed a file you received.
+      </p>
 
       <h2>Sources and destinations</h2>
       <p>Wherever a command takes a source you can pass:</p>
@@ -58,14 +59,14 @@ alias nomad="node $PWD/apps/cli/dist/nomad.js"`}
           a platform folder and agent: <code>claude-code:~/work/app#subagent:reviewer</code>, <code>hermes:~/.hermes#profile:research</code>
         </li>
         <li>
-          a package: <code>./kestrel.agentpack</code>
+          a package: <code>./kestrel.nomad</code> (older <code>.agentpack</code> and <code>.jetpack</code> files work too)
         </li>
         <li>
           an agent in your library by name or id, optionally a version: <code>Kestrel@3</code>
         </li>
       </ul>
       <p>
-        Destinations are a platform id plus <code>--dest-dir</code> when the platform has no default location (project based tools such as Cursor, or a folder for a guided kit).
+        Destinations for <code>nomad move</code> are a platform (<code>codex</code>), a platform with a folder (<code>claude-code:~/work/app</code>) or a file ending in <code>.nomad</code>. Platforms without a default location, such as Cursor, use the current folder.
       </p>
 
       <h2>Conflict modes</h2>
@@ -87,9 +88,12 @@ alias nomad="node $PWD/apps/cli/dist/nomad.js"`}
 nomad adapters [--platform id]  capabilities per platform
 nomad list                      agents in your library
 nomad inspect <source>          what an agent contains
-nomad export <source> -o dir    write a .agentpack
+nomad                           guided move
+nomad move <from> <to>          move to a platform or a .nomad file
+nomad export <source> [--sign]  write a .nomad file
 nomad import <pack> [--to id]   import, optionally into a platform
-nomad migrate --from --to       preview and apply a migration
+nomad migrate --from --to       the long form of move, every option
+nomad keys | trust | untrust    signing keys
 nomad validate <pack>           check a package
 nomad versions <agent>          version history
 nomad compare <agent> 1 3       compare versions

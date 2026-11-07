@@ -4,7 +4,7 @@ Report per phase of the product specification. Tests: `pnpm test` (84 tests).
 
 ## Phase 1: Core portability engine (done)
 
-Implemented: UAF schema with Zod and generated JSON Schema, versioning and upgrade hook, ULID identity, `.agentpack` layout with SHA-256 integrity, hardened ZIP reader, secret scanning and redaction, adapter contract, generic folder adapter, export, import, validation, migration reports.
+Implemented: UAF schema with Zod and generated JSON Schema, versioning and upgrade hook, ULID identity, `.nomad` format 2 (compact Markdown layout) with SHA-256 integrity and Ed25519 signing, legacy `.agentpack` reading, guided `nomad` and one-line `nomad move`, hardened ZIP reader, secret scanning and redaction, adapter contract, generic folder adapter, export, import, validation, migration reports.
 
 Tested: exact round trips, tampering, traversal, absolute paths, backslashes, symlinks, duplicates, decompression bombs, unknown file types, malformed manifests, newer schema versions, unknown extensions, secret detection and redaction, no empty files.
 

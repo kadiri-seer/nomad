@@ -1,6 +1,6 @@
 import { join, basename } from "node:path";
 import { promises as fsp } from "node:fs";
-import { documentToFiles, filesToDocument } from "@nomad/archive";
+import { unpackFiles, writeNomadPack } from "@nomad/archive";
 import { createDocument, firstHeading, parseFrontmatter, type Adapter, type Note, type DesiredFile } from "@nomad/core";
 import { readTextIfExists, walkFiles, pathExists } from "@nomad/core/node";
 import { PACKAGE_FORMAT, type AgentDocument, type Instruction } from "@nomad/schema";
@@ -21,7 +21,9 @@ const INSTRUCTION_FILES: Array<{ file: string; kind: Instruction["kind"] }> = [
 
 const PERSONA_FILES = ["SOUL.md", "PERSONA.md", "persona.md"];
 
+/** A folder holding a Nomad package (nomad.json), an older package (manifest.json) or an interchange layout (jetpack.json). */
 async function isPackageFolder(root: string): Promise<boolean> {
+  if ((await pathExists(join(root, "nomad.json"))) || (await pathExists(join(root, "jetpack.json")))) return true;
   const text = await readTextIfExists(join(root, "manifest.json"));
   if (!text) return false;
   try {
@@ -31,12 +33,27 @@ async function isPackageFolder(root: string): Promise<boolean> {
   }
 }
 
+async function packageName(root: string): Promise<{ name: string; description?: string }> {
+  for (const f of ["nomad.json", "manifest.json", "jetpack.json"]) {
+    const t = await readTextIfExists(join(root, f));
+    if (t) {
+      try {
+        const m = JSON.parse(t);
+        return { name: m.name ?? basename(root), description: m.description };
+      } catch {
+        /* fall through */
+      }
+    }
+  }
+  return { name: basename(root) };
+}
+
 async function readPackageFolder(root: string) {
   const files = new Map<string, Uint8Array>();
   for (const rel of await walkFiles(root, { maxFiles: 10000 })) {
     files.set(rel, new Uint8Array(await fsp.readFile(join(root, rel))));
   }
-  return { files, read: filesToDocument(files) };
+  return { files, read: unpackFiles(files, { includeSecrets: true }) };
 }
 
 export const genericAdapter: Adapter = {
@@ -53,7 +70,7 @@ export const genericAdapter: Adapter = {
 
   async discover(root) {
     if (await isPackageFolder(root)) {
-      const m = JSON.parse((await readTextIfExists(join(root, "manifest.json")))!);
+      const m = await packageName(root);
       return [{ nativeId: "package", name: m.name, description: m.description, location: root, kind: "package" }];
     }
     const d = await this.detect(root);
@@ -65,7 +82,7 @@ export const genericAdapter: Adapter = {
     const notes: Note[] = [];
     if (await isPackageFolder(root)) {
       const { files, read } = await readPackageFolder(root);
-      if (!read.doc) {
+      if (!read.ok || !read.doc) {
         throw new Error("Package folder is invalid: " + read.issues.map((i) => `${i.path}: ${i.message}`).join("; "));
       }
       for (const w of read.warnings) notes.push({ level: "warning", message: w });
@@ -128,13 +145,13 @@ export const genericAdapter: Adapter = {
 
   async plan(doc, ctx) {
     // Deterministic output: the same agent always produces the same files.
-    const { files } = documentToFiles(doc, { exportedAt: doc.updatedAt });
+    const { files } = writeNomadPack(doc, { exportedAt: doc.updatedAt });
     const out: DesiredFile[] = [...files.entries()].map(([path, content]) => ({
       path,
       content,
       strategy: "replace",
       component: componentOf(path),
-      description: path === "manifest.json" ? "Package manifest" : `Package file ${path}`,
+      description: path === "nomad.json" ? "Package manifest" : `Package file ${path}`,
       agentOwned: true
     }));
     return {

@@ -189,12 +189,12 @@ export default function Home() {
               </p>
             </div>
             <pre className="code" aria-label="Command line example">
-              <span className="c"># find agents on this machine</span>
-              {"\nnomad scan\n\n"}
-              <span className="c"># preview moving OpenClaw to Claude Code</span>
-              {"\nnomad migrate --from openclaw --to claude-code --dry-run\n\n"}
-              <span className="c"># apply it, then undo if you change your mind</span>
-              {"\nnomad migrate --from openclaw --to claude-code --yes\nnomad restore <backup-id>"}
+              <span className="c"># guided: pick an agent, pick where it goes</span>
+              {"\nnomad\n\n"}
+              <span className="c"># or in one line, with a short preview first</span>
+              {"\nnomad move openclaw claude-code\n\n"}
+              <span className="c"># save it to a file, open it anywhere</span>
+              {"\nnomad move openclaw ./kestrel.nomad\nnomad move ./kestrel.nomad codex"}
             </pre>
           </div>
         </section>
