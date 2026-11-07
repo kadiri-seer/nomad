@@ -1,0 +1,50 @@
+{
+  "name": "nomad-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Nomad: move, preserve and manage AI agents across platforms.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@10.18.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "nomad": "tsx apps/cli/src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build:cli": "pnpm --filter @nomad/cli build",
+    "build:web": "pnpm --filter @nomad/web build",
+    "dev:web": "pnpm --filter @nomad/web dev",
+    "schema:json": "tsx packages/schema/scripts/emit-json-schema.ts"
+  },
+  "devDependencies": {
+    "@nomad/adapters": "workspace:*",
+    "@nomad/archive": "workspace:*",
+    "@nomad/compatibility": "workspace:*",
+    "@nomad/core": "workspace:*",
+    "@nomad/mcp": "workspace:*",
+    "@nomad/migration": "workspace:*",
+    "@nomad/schema": "workspace:*",
+    "@nomad/sdk": "workspace:*",
+    "@nomad/security": "workspace:*",
+    "@nomad/storage": "workspace:*",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.10.0",
+    "fflate": "^0.8.3",
+    "json5": "^2.2.3",
+    "smol-toml": "^1.9.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.0",
+    "yaml": "^2.9.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild",
+      "sharp"
+    ]
+  }
+}

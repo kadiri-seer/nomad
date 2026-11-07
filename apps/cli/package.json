@@ -1,0 +1,25 @@
+{
+  "name": "@nomad/cli",
+  "version": "0.1.0",
+  "description": "Nomad command line: export, import, migrate and manage AI agents.",
+  "type": "module",
+  "license": "MIT",
+  "bin": { "nomad": "./dist/nomad.js" },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@nomad/core": "workspace:*",
+    "@nomad/schema": "workspace:*",
+    "@nomad/security": "workspace:*",
+    "@nomad/archive": "workspace:*",
+    "@nomad/compatibility": "workspace:*",
+    "@nomad/adapters": "workspace:*",
+    "@nomad/storage": "workspace:*",
+    "@nomad/migration": "workspace:*",
+    "@nomad/mcp": "workspace:*",
+    "commander": "^14.0.0"
+  },
+  "devDependencies": { "tsup": "^8.5.0" }
+}
