@@ -33,7 +33,8 @@ describe(".nomad format and signing", () => {
     const { r } = await signedPackage(env.nomad);
     const key = env.nomad.signingKey(false)!;
     expect(r.receipt.signedBy).toBe(key.fingerprint);
-    expect(statSync(join(env.nomadHome, "keys/signing.pem")).mode & 0o777).toBe(0o600);
+    // Windows has no POSIX permission bits.
+    if (process.platform !== "win32") expect(statSync(join(env.nomadHome, "keys/signing.pem")).mode & 0o777).toBe(0o600);
     const again = await signedPackage(env.nomad, "k2.nomad");
     expect(again.r.receipt.signedBy).toBe(key.fingerprint);
   });

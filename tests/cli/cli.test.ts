@@ -8,7 +8,8 @@ import { createMcpServer } from "@nomad/mcp";
 import { setup, type Env } from "../helpers";
 
 const CLI = resolve(__dirname, "../../apps/cli/src/index.ts");
-const TSX = resolve(__dirname, "../../node_modules/.bin/tsx");
+// Run tsx through node directly: .bin shims are shell scripts on macOS/Linux and .cmd files on Windows.
+const TSX_CLI = resolve(__dirname, "../../node_modules/tsx/dist/cli.mjs");
 
 let env: Env;
 beforeEach(() => {
@@ -17,7 +18,7 @@ beforeEach(() => {
 afterEach(() => env.cleanup());
 
 function nomad(...args: string[]) {
-  const r = spawnSync(TSX, [CLI, "--json", ...args], { env: { ...process.env, NOMAD_FAKE_HOME: env.home, NOMAD_HOME: env.nomadHome }, encoding: "utf8", timeout: 60000 });
+  const r = spawnSync(process.execPath, [TSX_CLI, CLI, "--json", ...args], { env: { ...process.env, NOMAD_FAKE_HOME: env.home, NOMAD_HOME: env.nomadHome }, encoding: "utf8", timeout: 60000 });
   let json: any = null;
   try {
     json = JSON.parse(r.stdout);
@@ -105,7 +106,7 @@ describe("CLI", () => {
   });
 
   it("prints help instead of prompting when not in a terminal", () => {
-    const r = spawnSync(TSX, [CLI], { env: { ...process.env, NOMAD_FAKE_HOME: env.home, NOMAD_HOME: env.nomadHome }, encoding: "utf8", timeout: 60000 });
+    const r = spawnSync(process.execPath, [TSX_CLI, CLI], { env: { ...process.env, NOMAD_FAKE_HOME: env.home, NOMAD_HOME: env.nomadHome }, encoding: "utf8", timeout: 60000 });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("Start here");
   });
