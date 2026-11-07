@@ -33,7 +33,7 @@ const pkg = {
   homepage: "https://github.com/kadiri-seer/nomad",
   repository: { type: "git", url: "git+https://github.com/kadiri-seer/nomad.git" },
   bugs: "https://github.com/kadiri-seer/nomad/issues",
-  author: "kadiri-seer <kadiriseer@gmail.com>",
+  author: "kadiri-seer (https://github.com/kadiri-seer)",
   license: cli.license,
   type: "module",
   // "nomad" after a global install; the package name too, so npx always finds it.
