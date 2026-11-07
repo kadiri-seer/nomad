@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Builds a clean folder for publishing the CLI to npm: release/npm
-// Usage: node scripts/prepare-npm.mjs [package-name]   (default: nomad)
+// Usage: node scripts/prepare-npm.mjs [package-name]   (default: thenomad)
 // Then:  cd release/npm && npm publish --access public
 import { execSync } from "node:child_process";
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const name = process.argv[2] ?? "nomad";
+const name = process.argv[2] ?? "thenomad";
 const cli = JSON.parse(readFileSync(join(root, "apps/cli/package.json"), "utf8"));
 const out = join(root, "release/npm");
 
@@ -36,7 +36,8 @@ const pkg = {
   author: "kadiri-seer <kadiriseer@gmail.com>",
   license: cli.license,
   type: "module",
-  bin: { nomad: "dist/nomad.js" },
+  // "nomad" after a global install; the package name too, so npx always finds it.
+  bin: { nomad: "dist/nomad.js", ...(name !== "nomad" ? { [name]: "dist/nomad.js" } : {}) },
   files: ["dist", "web", "LICENSE", "README.md"],
   engines: cli.engines,
   dependencies

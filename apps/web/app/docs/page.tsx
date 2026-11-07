@@ -12,13 +12,13 @@ export default function Docs() {
       </p>
 
       <h2>Start</h2>
-      <pre className="code">npx nomad</pre>
+      <pre className="code">npx thenomad</pre>
       <p>
-        Nothing to install first. If you use Nomad often, install it once with <code>npm install -g nomad</code> and type <code>nomad</code> instead. Nomad keeps its library, backups and receipts in <code>~/.nomad</code>. Set <code>NOMAD_HOME</code> to use another folder.
+        Nothing to install first. If you use Nomad often, install it once with <code>npm install -g thenomad</code> and type <code>nomad</code> instead. Nomad keeps its library, backups and receipts in <code>~/.nomad</code>. Set <code>NOMAD_HOME</code> to use another folder.
       </p>
 
       <h2>Open the dashboard</h2>
-      <pre className="code">npx nomad ui</pre>
+      <pre className="code">npx thenomad ui</pre>
       <p>
         This opens the dashboard in your browser, served from <code>127.0.0.1</code> with a one time session token. Only your machine can reach it. Everything the command line does is available there, including the migration wizard.
       </p>

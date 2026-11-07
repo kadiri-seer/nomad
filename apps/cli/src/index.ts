@@ -12,7 +12,7 @@ import { Nomad, parseSource, type Approvals, type MigrationPlan } from "@nomad/m
 import { analyzeCompatibility } from "@nomad/compatibility";
 import { findAdapter, getAdapter, listAdapters } from "@nomad/adapters";
 import type { SourceSpec } from "@nomad/migration";
-import { approvalQuestion, bold, comparisonText, compatibilityText, dim, docText, green, planText, print, receiptText, red, restoreText, summaryText, table, yellow, type Output } from "./format";
+import { approvalQuestion, CMD, bold, comparisonText, compatibilityText, dim, docText, green, planText, print, receiptText, red, restoreText, summaryText, table, yellow, type Output } from "./format";
 import { remoteMigrate } from "./remote";
 import { findSite, startUi } from "./ui";
 
@@ -20,7 +20,7 @@ export const EXIT = { ok: 0, error: 1, usage: 2, approval: 3, invalid: 4, verifi
 
 const program = new Command();
 program
-  .name("nomad")
+  .name(CMD)
   .description("Move, preserve and manage AI agents across platforms.")
   .version(NOMAD_VERSION)
   .option("--json", "machine readable output")
@@ -29,12 +29,16 @@ program
   .option("--home <dir>", "Nomad data directory (default ~/.nomad)");
 program.addHelpText(
   "after",
-  `
+  () => {
+    const pad = (s: string) => s.padEnd(CMD.length + 33);
+    return `
 Start here:
-  nomad                              guided: pick an agent and where it goes
-  nomad move openclaw codex          the same in one line, with a short preview first
-  nomad move openclaw ./me.nomad     save to a file you can share or keep
-  nomad move ./me.nomad claude-code  open that file somewhere else`
+  ${pad(CMD)}guided: pick an agent and where it goes
+  ${pad(`${CMD} move openclaw codex`)}the same in one line, with a short preview first
+  ${pad(`${CMD} move openclaw ./me.nomad`)}save to a file you can share or keep
+  ${pad(`${CMD} move ./me.nomad claude-code`)}open that file somewhere else
+  ${pad(`${CMD} ui`)}the dashboard, in your browser`;
+  }
 );
 
 function out(): Output {
@@ -126,7 +130,7 @@ function shortReceipt(r: import("@nomad/migration").MigrationReceipt): string[] 
     "",
     green("Done.") + ` ${r.agent.name} is in ${findAdapter(r.destination.adapter)?.info.displayName ?? r.destination.adapter} and checked (${r.verification.length} checks passed).`,
     ...(r.manualSteps.length ? ["", bold("Your turn:"), ...r.manualSteps.map((s, i) => `  ${i + 1}. ${s}`)] : []),
-    ...(r.backupId ? ["", dim(`Changed your mind? nomad restore ${r.backupId}`)] : [])
+    ...(r.backupId ? ["", dim(`Changed your mind? ${CMD} restore ${r.backupId}`)] : [])
   ];
 }
 
@@ -322,7 +326,7 @@ export function parseDestination(spec: string): Destination {
 async function moveTo(nomad: Nomad, source: SourceSpec, dest: Destination, o: Record<string, unknown>): Promise<number> {
   if (dest.kind === "file") {
     const r = await nomad.exportAgent(source, { outPath: dest.path, includeFiles: o.includeFiles as boolean, sign: o.sign as boolean, components: components(o.components as string) });
-    print(out(), () => [green("Saved") + `  ${displayPath(r.path!)}`, `${r.files.size} files, ${(r.bytes.length / 1024).toFixed(1)} KB${r.receipt.signedBy ? `, signed ${r.receipt.signedBy}` : ""}.`, ...(r.sanitize.redactedText || r.sanitize.strippedEnvValues.length ? [dim("Secrets were left out. You will reconnect them where you open it.")] : []), dim(`Open it anywhere with: nomad move ${displayPath(r.path!)} <platform>`)], r.receipt);
+    print(out(), () => [green("Saved") + `  ${displayPath(r.path!)}`, `${r.files.size} files, ${(r.bytes.length / 1024).toFixed(1)} KB${r.receipt.signedBy ? `, signed ${r.receipt.signedBy}` : ""}.`, ...(r.sanitize.redactedText || r.sanitize.strippedEnvValues.length ? [dim("Secrets were left out. You will reconnect them where you open it.")] : []), dim(`Open it anywhere with: ${CMD} move ${displayPath(r.path!)} <platform>`)], r.receipt);
     return EXIT.ok;
   }
   const mode = o.copy ? "copy" : o.replace ? "replace" : "merge";
@@ -358,7 +362,7 @@ program
         (own.created ? green("Created your signing key") : bold("Your signing key")) + `  ${own.fingerprint}`,
         dim("Share this fingerprint so people can check packages you sign with --sign."),
         "",
-        trusted.length ? bold("Trusted keys") : "You do not trust anyone else's key yet. Use: nomad trust <package> --name <who>",
+        trusted.length ? bold("Trusted keys") : `You do not trust anyone else's key yet. Use: ${CMD} trust <package> --name <who>`,
         ...trusted.map((k) => `  ${k.fingerprint}  ${k.name}`)
       ], { key: own, trusted });
     })
@@ -641,7 +645,7 @@ program
     } catch (e) {
       nomad.close();
       const busy = (e as NodeJS.ErrnoException).code === "EADDRINUSE";
-      process.stderr.write(red(busy ? `Port ${port} is in use.` : (e as Error).message) + "\n" + (busy ? dim(`Try another: nomad ui --port ${port + 1}\n`) : ""));
+      process.stderr.write(red(busy ? `Port ${port} is in use.` : (e as Error).message) + "\n" + (busy ? dim(`Try another: ${CMD} ui --port ${port + 1}\n`) : ""));
       process.exitCode = 1;
       return;
     }

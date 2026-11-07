@@ -35,9 +35,9 @@ Packages: a `.nomad` file is a small ZIP of plain Markdown and JSON (`nomad.json
 Requires Node.js 22 or newer.
 
 ```
-npx nomad          # start, nothing to install first
-npx nomad ui       # the dashboard in your browser
-npm install -g nomad   # optional: then just type nomad
+npx thenomad          # start, nothing to install first
+npx thenomad ui       # the dashboard in your browser
+npm install -g thenomad   # optional: then just type nomad
 ```
 
 `nomad ui` serves the dashboard from 127.0.0.1 with a one time session token; only your machine can reach it. Data lives in `~/.nomad` (override with `NOMAD_HOME`).
@@ -62,7 +62,7 @@ From GitHub, no terminal needed: add an npm access token as the repository secre
 From a terminal:
 
 ```
-pnpm release:npm              # builds release/npm with a clean package.json (name: nomad)
+pnpm release:npm              # builds release/npm with a clean package.json (name: thenomad)
 cd release/npm
 npm publish --access public
 ```

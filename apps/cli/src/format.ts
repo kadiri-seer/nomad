@@ -2,6 +2,11 @@ import type { MigrationPlan, MigrationReceipt, Comparison, RestorePreview } from
 import type { CompatibilityReport } from "@nomad/compatibility";
 import type { AgentDocument } from "@nomad/schema";
 
+/** The name of the package on npm. */
+export const NPM_NAME = "thenomad";
+/** How to run Nomad again in hints: "npx thenomad" when started through npx, otherwise "nomad". */
+export const CMD = process.env.npm_command === "exec" ? `npx ${NPM_NAME}` : "nomad";
+
 const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
 const c = (code: string) => (s: string) => (useColor ? `\x1b[${code}m${s}\x1b[0m` : s);
 export const bold = c("1");
@@ -89,7 +94,7 @@ export function receiptText(r: MigrationReceipt): string[] {
   if (r.error) lines.push(red(r.error));
   lines.push("", bold("Verification"), ...r.verification.map((v) => `  ${v.ok ? green("ok") : red("fail")}  ${v.name}${v.detail ? dim(" " + v.detail) : ""}`));
   if (r.files.length) lines.push("", `${r.files.filter((f) => f.action === "create" || f.action === "update").length} file(s) written`);
-  if (r.backupId) lines.push(`Backup ${r.backupId}. Undo with: nomad restore ${r.backupId}`);
+  if (r.backupId) lines.push(`Backup ${r.backupId}. Undo with: ${CMD} restore ${r.backupId}`);
   if (r.manualSteps.length) lines.push("", bold("Next steps"), ...r.manualSteps.map((s, i) => `  ${i + 1}. ${s}`));
   if (r.disabledRoutines.length) lines.push("", `Routines imported disabled: ${r.disabledRoutines.join(", ")}`);
   return lines;

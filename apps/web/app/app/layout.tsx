@@ -30,7 +30,7 @@ function LocalOnly({ expired }: { expired: boolean }) {
           <div className="stack">
             <pre className="code" aria-label="Start the local app">
               <span className="c"># start the dashboard on 127.0.0.1</span>
-              {"\nnpx nomad ui"}
+              {"\nnpx thenomad ui"}
             </pre>
             <p className="muted">
               It opens in your browser with a one time session token. Requests from any other site or machine are refused.

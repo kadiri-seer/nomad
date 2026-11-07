@@ -8,7 +8,7 @@ on:
     inputs:
       name:
         description: "Package name on npm"
-        default: "nomad"
+        default: "thenomad"
         required: true
 permissions:
   contents: read

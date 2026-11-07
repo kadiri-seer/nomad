@@ -37,7 +37,7 @@ jobs:
           cd release/npm && npm pack
           mkdir -p "$RUNNER_TEMP/try" && cd "$RUNNER_TEMP/try"
           npm init -y > /dev/null
-          npm install "$GITHUB_WORKSPACE/release/npm/nomad-"*.tgz
-          npx nomad --version
-          npx nomad adapters --json > /dev/null
-          npx nomad scan --json
+          npm install "$GITHUB_WORKSPACE/release/npm/thenomad-"*.tgz
+          npx thenomad --version
+          npx thenomad adapters --json > /dev/null
+          npx thenomad scan --json
