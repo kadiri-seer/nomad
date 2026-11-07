@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { createZip, extractEntries as readZip, unpackAgent } from "@nomad/archive";
+import { createZip, extractEntries as readZip, packAgent, unpackAgent } from "@nomad/archive";
 import { Nomad, verifySignature } from "@nomad/migration";
-import { utf8 } from "@nomad/core";
+import { createDocument, utf8 } from "@nomad/core";
 import { setup, type Env } from "../helpers";
 
 let env: Env;
@@ -27,6 +27,15 @@ describe(".nomad format and signing", () => {
     expect(names.length).toBeLessThan(15);
     // no absolute local paths in the manifest
     expect(new TextDecoder().decode(r.files.get("nomad.json")!)).not.toContain(env.home);
+  });
+
+  it("never writes absolute local paths, even for folders outside home", () => {
+    const d = createDocument({ name: "Ada", platform: "codex" });
+    d.history.push({ operationId: "op1", kind: "migrate", from: "Codex CLI (/srv/work/.codex)", at: "2026-11-07T00:00:00Z" } as never, { operationId: "op2", kind: "migrate", from: "Codex CLI (C:\\Users\\ada\\.codex)", at: "2026-11-07T00:00:00Z" } as never);
+    const text = new TextDecoder().decode(packAgent(d).files.get("nomad.json")!);
+    expect(text).not.toContain("/srv/work");
+    expect(text).not.toContain("Users");
+    expect(text).toContain("Codex CLI");
   });
 
   it("creates a private key once and signs with it", async () => {

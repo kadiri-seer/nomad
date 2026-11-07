@@ -325,7 +325,7 @@ export function writeNomadPack(doc: AgentDocument, options: { exportedAt?: strin
     integrations: doc.integrations.length ? doc.integrations.map((i) => ({ ...i, source: fromOut(i.source) as any })) : undefined,
     policy,
     knowledge: doc.knowledge.length ? doc.knowledge : undefined,
-    history: doc.history.length ? doc.history.slice(-20) : undefined,
+    history: doc.history.length ? doc.history.slice(-20).map(scrubHistory) : undefined,
     extensions: Object.keys(doc.extensions).length ? doc.extensions : undefined,
     secrets: options.secrets,
     files: integrity
@@ -350,6 +350,14 @@ export function compactJson(value: unknown, indent = ""): string {
 }
 
 /** Never ship local absolute paths (they reveal usernames and folders). Keep the part inside the agent. */
+/** Labels such as "OpenClaw (/Users/ada/.openclaw)" lose the absolute local path; "~/" paths stay. */
+const ABSOLUTE_IN_PARENS = /\s*\((?:\/|[A-Za-z]:[\\/]|\\\\)[^)]*\)/g;
+function scrubHistory<T extends Record<string, unknown>>(h: T): T {
+  const out: Record<string, unknown> = { ...h };
+  for (const [k, v] of Object.entries(out)) if (typeof v === "string") out[k] = v.replace(ABSOLUTE_IN_PARENS, "");
+  return out as T;
+}
+
 function portablePath(p: unknown): unknown {
   if (typeof p !== "string" || !(/^([A-Za-z]:[\\/]|\/|~)/.test(p))) return p;
   const unix = p.replace(/\\/g, "/");

@@ -204,6 +204,15 @@ export function toPosix(p: string): string {
 }
 
 export function displayPath(p: string): string {
-  const h = home();
-  return p.startsWith(h + sep) ? "~/" + toPosix(relative(h, p)) : p;
+  // Compare against the real home path too: on macOS /var is a link to /private/var.
+  for (const h of new Set([home(), realHome()])) if (p === h || p.startsWith(h + sep)) return p === h ? "~" : "~/" + toPosix(relative(h, p));
+  return p;
+}
+
+function realHome(): string {
+  try {
+    return realpathSync(home());
+  } catch {
+    return home();
+  }
 }
