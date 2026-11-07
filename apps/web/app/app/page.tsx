@@ -104,7 +104,7 @@ export default function Overview() {
                       </td>
                       <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                         {a.agentId ? (
-                          <Link className="btn btn-quiet btn-sm" href={`/app/agents/${a.agentId}`}>
+                          <Link className="btn btn-quiet btn-sm" href={`/app/agents/view?id=${a.agentId}`}>
                             Open
                           </Link>
                         ) : (

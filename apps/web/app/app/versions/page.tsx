@@ -40,7 +40,7 @@ export default function VersionsPage() {
             <>
               <VersionCompare key={agentId} agentId={agentId} versions={detail.data.versions} current={detail.data.agent.currentVersion} onRestored={detail.reload} />
               <p>
-                <Link href={`/app/agents/${agentId}`}>Open {detail.data.agent.name}</Link>
+                <Link href={`/app/agents/view?id=${agentId}`}>Open {detail.data.agent.name}</Link>
               </p>
             </>
           )}

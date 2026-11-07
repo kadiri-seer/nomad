@@ -1,14 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { use, useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api, useApi } from "@/lib/client";
 import { VersionCompare } from "@/components/VersionCompare";
 import { Badge, Notice, PageHead, Skeleton, formatDate } from "@/components/ui";
 
-export default function AgentDetail({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const { data, error, loading, reload } = useApi(`agents/${id}`);
+// A query parameter instead of a dynamic segment, so the page can be exported as static HTML.
+export default function AgentPage() {
+  return (
+    <Suspense fallback={<Skeleton rows={8} />}>
+      <AgentDetail />
+    </Suspense>
+  );
+}
+
+function AgentDetail() {
+  const id = useSearchParams().get("id") ?? "";
+  const { data, error, loading, reload } = useApi(id ? `agents/${encodeURIComponent(id)}` : null);
   const [msg, setMsg] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -69,7 +79,7 @@ export default function AgentDetail({ params }: { params: Promise<{ id: string }
               <>
                 <dt>Duplicated from</dt>
                 <dd>
-                  <Link href={`/app/agents/${agent.duplicatedFrom}`}>{agent.duplicatedFrom}</Link>
+                  <Link href={`/app/agents/view?id=${agent.duplicatedFrom}`}>{agent.duplicatedFrom}</Link>
                 </dd>
               </>
             )}

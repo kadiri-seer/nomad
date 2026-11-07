@@ -11,3 +11,5 @@ coverage/
 .nomad-test-*/
 next-env.d.ts
 release/
+.next-export/
+out/

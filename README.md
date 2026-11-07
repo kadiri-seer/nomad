@@ -32,19 +32,15 @@ Packages: a `.nomad` file is a small ZIP of plain Markdown and JSON (`nomad.json
 
 ## Install
 
-Requires Node.js 22 or newer and pnpm.
+Requires Node.js 22 or newer.
 
 ```
-git clone https://github.com/kadiri-seer/nomad
-cd nomad
-pnpm install
-pnpm --filter @nomad/cli build
-pnpm --filter @nomad/web build
-alias nomad="node $PWD/apps/cli/dist/nomad.js"
-nomad ui
+npx nomad          # start, nothing to install first
+npx nomad ui       # the dashboard in your browser
+npm install -g nomad   # optional: then just type nomad
 ```
 
-`nomad ui` serves the dashboard on 127.0.0.1 with a one time session token. Data lives in `~/.nomad` (override with `NOMAD_HOME`).
+`nomad ui` serves the dashboard from 127.0.0.1 with a one time session token; only your machine can reach it. Data lives in `~/.nomad` (override with `NOMAD_HOME`).
 
 ## How a migration works
 
@@ -95,7 +91,8 @@ tests               fixtures, unit, integration, end to end and CLI/MCP tests
 pnpm test          # tests: schema, security, archive safety, adapters, migrations, CLI, MCP, SDK contract
 pnpm typecheck
 pnpm nomad scan    # run the CLI from source
-pnpm dev:web       # web app in development
+pnpm build:ui      # export the dashboard, then: pnpm nomad ui
+pnpm nomad ui --dev   # dashboard with live reload
 scripts/verify-real-apps.sh   # check output with real Codex / Claude Code binaries
 ```
 

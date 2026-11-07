@@ -18,3 +18,4 @@ jobs:
       - run: pnpm test
       - run: pnpm --filter @nomad/cli build
       - run: pnpm --filter @nomad/web build
+      - run: pnpm build:ui

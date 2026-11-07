@@ -780,7 +780,7 @@ export function ReceiptView({ receipt }: { receipt: any }) {
       {restored && <Notice tone="ok">{restored}</Notice>}
       {err && <Notice tone="bad">{err}</Notice>}
       <div className="row">
-        <Link href={`/app/agents/${receipt.agent.id}`} className="btn">
+        <Link href={`/app/agents/view?id=${receipt.agent.id}`} className="btn">
           Open the agent
         </Link>
         {receipt.backupId && !restored && receipt.status !== "failed-rolled-back" && (

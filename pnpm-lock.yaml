@@ -23,6 +23,9 @@ importers:
       '@nomad/core':
         specifier: workspace:*
         version: link:packages/core
+      '@nomad/local':
+        specifier: workspace:*
+        version: link:packages/local
       '@nomad/mcp':
         specifier: workspace:*
         version: link:packages/mcp
@@ -89,6 +92,9 @@ importers:
       '@nomad/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@nomad/local':
+        specifier: workspace:*
+        version: link:../../packages/local
       '@nomad/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
@@ -156,6 +162,9 @@ importers:
       '@nomad/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@nomad/local':
+        specifier: workspace:*
+        version: link:../../packages/local
       '@nomad/migration':
         specifier: workspace:*
         version: link:../../packages/migration
@@ -244,6 +253,21 @@ importers:
       yaml:
         specifier: ^2.8.0
         version: 2.9.1
+
+  packages/local:
+    dependencies:
+      '@nomad/adapters':
+        specifier: workspace:*
+        version: link:../adapters
+      '@nomad/compatibility':
+        specifier: workspace:*
+        version: link:../compatibility
+      '@nomad/core':
+        specifier: workspace:*
+        version: link:../core
+      '@nomad/migration':
+        specifier: workspace:*
+        version: link:../migration
 
   packages/mcp:
     dependencies:

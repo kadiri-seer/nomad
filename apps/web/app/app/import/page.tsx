@@ -65,7 +65,7 @@ export default function ImportPage() {
           <Notice tone="ok" title={result.recognized ? `${result.name} was already in your library` : `${result.name} was imported`}>
             {result.recognized ? `Its identity matched, so this became version ${result.version} instead of a duplicate.` : `Saved as version ${result.version}.`} Routines in the package are paused.
             <div className="row" style={{ marginTop: 12 }}>
-              <Link href={`/app/agents/${result.agentId}`} className="btn btn-sm">
+              <Link href={`/app/agents/view?id=${result.agentId}`} className="btn btn-sm">
                 Open agent
               </Link>
               <Link href={`/app/migrate?agent=${result.agentId}`} className="btn btn-quiet btn-sm">

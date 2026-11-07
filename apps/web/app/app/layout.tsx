@@ -1,10 +1,8 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { localEnabled, SESSION_COOKIE, tokenMatches } from "@/lib/server/local";
 import { SiteFooter } from "@/components/SiteFooter";
 import { AppNav } from "./AppNav";
+import { Gate } from "./Gate";
 
-export const dynamic = "force-dynamic";
 export const metadata = { title: { default: "Dashboard", template: "%s | Nomad" }, robots: { index: false } };
 
 function LocalOnly({ expired }: { expired: boolean }) {
@@ -32,7 +30,7 @@ function LocalOnly({ expired }: { expired: boolean }) {
           <div className="stack">
             <pre className="code" aria-label="Start the local app">
               <span className="c"># start the dashboard on 127.0.0.1</span>
-              {"\nnomad ui"}
+              {"\nnpx nomad ui"}
             </pre>
             <p className="muted">
               It opens in your browser with a one time session token. Requests from any other site or machine are refused.
@@ -45,16 +43,15 @@ function LocalOnly({ expired }: { expired: boolean }) {
   );
 }
 
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  if (!localEnabled()) return <LocalOnly expired={false} />;
-  const jar = await cookies();
-  if (!tokenMatches(jar.get(SESSION_COOKIE)?.value)) return <LocalOnly expired />;
+export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="app-shell">
-      <AppNav />
-      <main id="main" className="app-main">
-        {children}
-      </main>
-    </div>
+    <Gate offline={<LocalOnly expired={false} />} expired={<LocalOnly expired />}>
+      <div className="app-shell">
+        <AppNav />
+        <main id="main" className="app-main">
+          {children}
+        </main>
+      </div>
+    </Gate>
   );
 }

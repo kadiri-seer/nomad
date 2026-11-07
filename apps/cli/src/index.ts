@@ -14,6 +14,7 @@ import { findAdapter, getAdapter, listAdapters } from "@nomad/adapters";
 import type { SourceSpec } from "@nomad/migration";
 import { approvalQuestion, bold, comparisonText, compatibilityText, dim, docText, green, planText, print, receiptText, red, restoreText, summaryText, table, yellow, type Output } from "./format";
 import { remoteMigrate } from "./remote";
+import { findSite, startUi } from "./ui";
 
 export const EXIT = { ok: 0, error: 1, usage: 2, approval: 3, invalid: 4, verification: 5, rolledBack: 6 } as const;
 
@@ -598,30 +599,60 @@ program
 
 program
   .command("ui")
-  .description("open the local web interface (bound to 127.0.0.1)")
+  .description("open the dashboard in your browser (only this computer can reach it)")
   .option("-p, --port <port>", "port", "4317")
   .option("--no-open", "do not open a browser")
-  .option("--dev", "run the web app in development mode")
+  .option("--dev", "developers: run the Next.js app from the repository with live reload")
   .action(async (o) => {
     const here = dirname(fileURLToPath(import.meta.url));
-    const webDir = [resolve(here, "../../web"), resolve(here, "../web"), resolve(process.cwd(), "apps/web")].find((d) => existsSync(join(d, "package.json")));
-    if (!webDir) {
-      process.stderr.write(red("The web interface is not part of this install.\n") + dim("It ships with the repository: git clone https://github.com/kadiri-seer/nomad, then pnpm install and pnpm nomad ui. Every feature is also available from the command line.\n"));
+    const token = randomBytes(24).toString("base64url");
+    const port = Number(o.port);
+    const url = `http://127.0.0.1:${port}/app/session?token=${token}`;
+    const openBrowser = () => {
+      if (!o.open) return;
+      const [cmd, args] = process.platform === "darwin" ? ["open", [url]] : process.platform === "win32" ? ["cmd", ["/c", "start", "", url]] : ["xdg-open", [url]];
+      spawn(cmd as string, args as string[], { stdio: "ignore", detached: true }).on("error", () => undefined).unref();
+    };
+
+    if (o.dev) {
+      const webDir = [resolve(here, "../../web"), resolve(process.cwd(), "apps/web")].find((d) => existsSync(join(d, "package.json")));
+      if (!webDir) {
+        process.stderr.write(red("--dev needs the repository checkout.\n"));
+        process.exitCode = 1;
+        return;
+      }
+      const env = { ...process.env, NOMAD_LOCAL: "1", NOMAD_LOCAL_TOKEN: token, NOMAD_HOME: program.opts().home ? resolve(program.opts().home) : nomadHome(), PORT: String(port) };
+      process.stderr.write(`${bold("Nomad")} dev server at ${url}\n`);
+      const child = spawn(process.execPath, [join(webDir, "node_modules", "next", "dist", "bin", "next"), "dev", "-H", "127.0.0.1", "-p", String(port)], { cwd: webDir, env, stdio: ["ignore", "inherit", "inherit"] });
+      setTimeout(openBrowser, 2500);
+      child.on("exit", (code) => (process.exitCode = code ?? 0));
+      return;
+    }
+
+    const site = findSite(here);
+    if (!site) {
+      process.stderr.write(red("The dashboard files are missing from this install.\n") + dim("In a repository checkout, build them once with: pnpm build:ui\n"));
       process.exitCode = 1;
       return;
     }
-    const built = existsSync(join(webDir, ".next", "BUILD_ID"));
-    const token = randomBytes(24).toString("base64url");
-    const env = { ...process.env, NOMAD_LOCAL: "1", NOMAD_LOCAL_TOKEN: token, NOMAD_HOME: program.opts().home ? resolve(program.opts().home) : nomadHome(), PORT: o.port };
-    const mode = built && !o.dev ? "start" : "dev";
-    const url = `http://127.0.0.1:${o.port}/app/session?token=${token}`;
-    process.stderr.write(`${bold("Nomad")} running locally (${mode}) at ${url}\n${dim("Only this machine can reach it. Press Ctrl+C to stop.")}\n`);
-    const child = spawn(process.execPath, [join(webDir, "node_modules", "next", "dist", "bin", "next"), mode, "-H", "127.0.0.1", "-p", o.port], { cwd: webDir, env, stdio: ["ignore", "inherit", "inherit"] });
-    if (o.open) setTimeout(() => {
-      const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-      spawn(opener, [url], { stdio: "ignore", detached: true }).on("error", () => undefined).unref();
-    }, 2500);
-    child.on("exit", (code) => (process.exitCode = code ?? 0));
+    const nomad = engine();
+    try {
+      await startUi({ nomad, site, port, token });
+    } catch (e) {
+      nomad.close();
+      const busy = (e as NodeJS.ErrnoException).code === "EADDRINUSE";
+      process.stderr.write(red(busy ? `Port ${port} is in use.` : (e as Error).message) + "\n" + (busy ? dim(`Try another: nomad ui --port ${port + 1}\n`) : ""));
+      process.exitCode = 1;
+      return;
+    }
+    process.stderr.write(`${bold("Nomad")} is open at ${url}\n${dim("Only this computer can reach it. Press Ctrl+C to stop.")}\n`);
+    openBrowser();
+    const stop = () => {
+      nomad.close();
+      process.exit(0);
+    };
+    process.on("SIGINT", stop);
+    process.on("SIGTERM", stop);
   });
 
 /* ------------------------------ guided mode ------------------------------ */

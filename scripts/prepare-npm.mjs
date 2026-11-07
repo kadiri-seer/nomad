@@ -13,11 +13,14 @@ const cli = JSON.parse(readFileSync(join(root, "apps/cli/package.json"), "utf8")
 const out = join(root, "release/npm");
 
 execSync("pnpm --filter @nomad/cli build", { cwd: root, stdio: "inherit" });
+// The dashboard ships as static files that `nomad ui` serves itself.
+execSync("pnpm --filter @nomad/web build:export", { cwd: root, stdio: "inherit" });
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, "dist"), { recursive: true });
 cpSync(join(root, "apps/cli/dist/nomad.js"), join(out, "dist/nomad.js"));
 cpSync(join(root, "LICENSE"), join(out, "LICENSE"));
+cpSync(join(root, "apps/web/.next-export"), join(out, "web"), { recursive: true });
 
 // Workspace packages are bundled into dist/nomad.js, so only third-party packages stay.
 const dependencies = Object.fromEntries(Object.entries(cli.dependencies).filter(([dep]) => !dep.startsWith("@nomad/")));
@@ -34,7 +37,7 @@ const pkg = {
   license: cli.license,
   type: "module",
   bin: { nomad: "dist/nomad.js" },
-  files: ["dist", "LICENSE", "README.md"],
+  files: ["dist", "web", "LICENSE", "README.md"],
   engines: cli.engines,
   dependencies
 };
@@ -57,6 +60,7 @@ npx ${name} move openclaw codex          one line, same summary and question
 npx ${name} move openclaw ./kestrel.nomad save to a file you can share or keep
 npx ${name} move ./kestrel.nomad hermes   open that file somewhere else
 npx ${name} restore <backup-id>          undo
+npx ${name} ui                           the dashboard, in your browser
 \`\`\`
 
 Install it to type \`nomad\` instead: \`npm install -g ${name}\`. Requires Node.js ${cli.engines.node.replace(">=", "")} or newer.

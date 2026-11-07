@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev -H 127.0.0.1 -p 4317",
     "build": "next build",
+    "build:export": "NOMAD_EXPORT=1 next build",
     "start": "next start -H 127.0.0.1 -p 4317"
   },
   "dependencies": {
@@ -15,6 +16,7 @@
     "@nomad/archive": "workspace:*",
     "@nomad/compatibility": "workspace:*",
     "@nomad/core": "workspace:*",
+    "@nomad/local": "workspace:*",
     "@nomad/migration": "workspace:*",
     "@nomad/schema": "workspace:*",
     "@nomad/security": "workspace:*",

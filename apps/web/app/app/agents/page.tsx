@@ -38,7 +38,7 @@ export default function Agents() {
               {data.map((a) => (
                 <tr key={a.id}>
                   <td>
-                    <Link href={`/app/agents/${a.id}`} style={{ fontWeight: 600 }}>
+                    <Link href={`/app/agents/view?id=${a.id}`} style={{ fontWeight: 600 }}>
                       {a.name}
                     </Link>
                     {a.description && (

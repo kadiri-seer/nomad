@@ -30,7 +30,8 @@
     "diff": "^8.0.0",
     "better-sqlite3": "^12.4.0",
     "drizzle-orm": "^0.45.0",
-    "@modelcontextprotocol/sdk": "^1.20.0"
+    "@modelcontextprotocol/sdk": "^1.20.0",
+    "@nomad/local": "workspace:*"
   },
   "devDependencies": {
     "tsup": "^8.5.0"

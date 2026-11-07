@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { REPO_URL } from "@/components/SiteFooter";
 
 export const metadata = { title: "Getting started", description: "Install Nomad, find your agents and run your first previewed migration." };
 
@@ -12,21 +11,16 @@ export default function Docs() {
         Nomad runs on your own machine. It needs Node.js 22 or newer and reads agents from the folders their platforms already use, such as <code>~/.openclaw</code>, <code>~/.claude</code>, <code>~/.codex</code> and <code>~/.hermes</code>.
       </p>
 
-      <h2>Install</h2>
-      <pre className="code">
-        {`git clone ${REPO_URL}
-cd nomad
-pnpm install
-pnpm --filter @nomad/cli build
-pnpm --filter @nomad/web build
-alias nomad="node $PWD/apps/cli/dist/nomad.js"`}
-      </pre>
-      <p>Nomad keeps its library, backups and receipts in <code>~/.nomad</code>. Set <code>NOMAD_HOME</code> to use another folder.</p>
-
-      <h2>Open the app</h2>
-      <pre className="code">nomad ui</pre>
+      <h2>Start</h2>
+      <pre className="code">npx nomad</pre>
       <p>
-        This starts the web interface on <code>127.0.0.1</code> with a one time session token and opens it in your browser. Only your machine can reach it. Everything the CLI does is available there, including the migration wizard.
+        Nothing to install first. If you use Nomad often, install it once with <code>npm install -g nomad</code> and type <code>nomad</code> instead. Nomad keeps its library, backups and receipts in <code>~/.nomad</code>. Set <code>NOMAD_HOME</code> to use another folder.
+      </p>
+
+      <h2>Open the dashboard</h2>
+      <pre className="code">npx nomad ui</pre>
+      <p>
+        This opens the dashboard in your browser, served from <code>127.0.0.1</code> with a one time session token. Only your machine can reach it. Everything the command line does is available there, including the migration wizard.
       </p>
 
       <h2>Your first move</h2>

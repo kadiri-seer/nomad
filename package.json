@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "build:cli": "pnpm --filter @nomad/cli build",
     "release:npm": "node scripts/prepare-npm.mjs",
+    "build:ui": "pnpm --filter @nomad/web build:export",
     "build:web": "pnpm --filter @nomad/web build",
     "dev:web": "pnpm --filter @nomad/web dev",
     "schema:json": "tsx packages/schema/scripts/emit-json-schema.ts"
@@ -26,6 +27,7 @@
     "@nomad/archive": "workspace:*",
     "@nomad/compatibility": "workspace:*",
     "@nomad/core": "workspace:*",
+    "@nomad/local": "workspace:*",
     "@nomad/mcp": "workspace:*",
     "@nomad/migration": "workspace:*",
     "@nomad/schema": "workspace:*",
