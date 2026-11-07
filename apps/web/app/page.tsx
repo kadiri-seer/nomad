@@ -190,11 +190,11 @@ export default function Home() {
             </div>
             <pre className="code" aria-label="Command line example">
               <span className="c"># guided: pick an agent, pick where it goes</span>
-              {"\nnomad\n\n"}
+              {"\nnpx thenomad\n\n"}
               <span className="c"># or in one line, with a short preview first</span>
-              {"\nnomad move openclaw claude-code\n\n"}
+              {"\nnpx thenomad move openclaw claude-code\n\n"}
               <span className="c"># save it to a file, open it anywhere</span>
-              {"\nnomad move openclaw ./kestrel.nomad\nnomad move ./kestrel.nomad codex"}
+              {"\nnpx thenomad move openclaw ./kestrel.nomad\nnpx thenomad move ./kestrel.nomad codex"}
             </pre>
           </div>
         </section>
@@ -205,7 +205,7 @@ export default function Home() {
               <h2>Your agent, wherever you work next.</h2>
               <div className="row">
                 <Link href="/docs" className="btn btn-lime">
-                  Install Nomad
+                  Get started
                 </Link>
                 <Link href="/inspect" className="btn btn-ghost" style={{ color: "var(--paper)" }}>
                   Try the inspector
