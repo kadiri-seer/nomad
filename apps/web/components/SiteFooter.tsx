@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { Logo } from "./Logo";
 
-export const CONTACT_EMAIL = "kadiriseer@gmail.com";
 export const REPO_URL = "https://github.com/kadiri-seer/nomad";
 
 export function SiteFooter() {
@@ -53,7 +52,7 @@ export function SiteFooter() {
                 <a href={REPO_URL}>Source code</a>
               </li>
               <li>
-                <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+                <a href={`${REPO_URL}/issues`}>Questions and issues</a>
               </li>
               <li>
                 <Link href="/terms">Terms</Link>

@@ -1,4 +1,4 @@
-import { SiteFooter, CONTACT_EMAIL } from "@/components/SiteFooter";
+import { SiteFooter, REPO_URL } from "@/components/SiteFooter";
 
 export const metadata = { title: "Terms of Service", description: "Terms for using the Nomad software and website." };
 
@@ -35,7 +35,7 @@ export default function Terms() {
 
           <h2>Contact</h2>
           <p>
-            Questions: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+            Questions: <a href={`${REPO_URL}/issues`}>open an issue on GitHub</a>.
           </p>
         </div>
       </main>

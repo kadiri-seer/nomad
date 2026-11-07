@@ -32,4 +32,4 @@ Read only by default. `--allow-writes` lets an assistant apply a preview only wi
 
 `nomad remote push` uses the system `ssh` and `scp` with `StrictHostKeyChecking=yes` and `BatchMode=yes`. Unknown hosts fail with instructions; private keys are never read by Nomad.
 
-Report vulnerabilities privately to kadiriseer@gmail.com.
+Report vulnerabilities privately through GitHub security advisories: https://github.com/kadiri-seer/nomad/security/advisories/new

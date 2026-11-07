@@ -1,4 +1,4 @@
-import { SiteFooter, CONTACT_EMAIL } from "@/components/SiteFooter";
+import { SiteFooter, REPO_URL } from "@/components/SiteFooter";
 
 export const metadata = { title: "Privacy Policy", description: "Nomad does not collect your agents or personal data." };
 
@@ -29,7 +29,7 @@ export default function Privacy() {
 
           <h2>Contact</h2>
           <p>
-            <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+            Questions: <a href={`${REPO_URL}/issues`}>open an issue on GitHub</a>.
           </p>
         </div>
       </main>

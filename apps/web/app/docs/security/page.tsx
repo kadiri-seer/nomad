@@ -1,3 +1,4 @@
+import { REPO_URL } from "@/components/SiteFooter";
 export const metadata = { title: "Security", description: "How Nomad protects credentials, permissions and your files during a migration." };
 
 export default function Security() {
@@ -55,7 +56,7 @@ export default function Security() {
 
       <h2>Reporting a problem</h2>
       <p>
-        Please report security issues privately to <a href="mailto:kadiriseer@gmail.com">kadiriseer@gmail.com</a>.
+        Please report security issues privately through <a href={`${REPO_URL}/security/advisories/new`}>GitHub security advisories</a>, not in public issues.
       </p>
     </>
   );
