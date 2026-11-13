@@ -62,6 +62,38 @@ export interface ContractFixture {
   nativeId: string;
   /** Minimum counts the read must produce. */
   expect?: Partial<Record<"instructions" | "memory" | "skills" | "tools" | "workflows", number>>;
+  /**
+   * Secret values planted in the fixture (keys, key file contents). None may
+   * appear in a plan, a receipt or any file written at the destination when the
+   * fixture agent is migrated.
+   */
+  secrets?: string[];
+}
+
+function filesUnder(dir: string): string[] {
+  const out: string[] = [];
+  const walk = (d: string) => {
+    let names: string[] = [];
+    try {
+      names = readdirSync(d);
+    } catch {
+      return;
+    }
+    for (const n of names) {
+      const p = join(d, n);
+      if (statSync(p).isDirectory()) walk(p);
+      else out.push(readFileSync(p, "utf8"));
+    }
+  };
+  walk(dir);
+  return out;
+}
+
+/** Planted values found in any text, plus anything shaped like an "sk-" API key. Reported by length only. */
+function leakedSecrets(texts: string[], secrets: string[]): string[] {
+  const found = secrets.filter((s) => s && texts.some((t) => t.includes(s))).map((s) => `${s.length} character secret`);
+  if (texts.some((t) => /\bsk-[A-Za-z0-9_-]{20,}/.test(t))) found.push("an sk- API key");
+  return found;
 }
 
 export interface ContractResult {
@@ -129,6 +161,15 @@ export async function runAdapterContract(adapter: Adapter, fixture?: ContractFix
       check("read returns a valid document", validateDocument(read.doc).ok);
       for (const [k, n] of Object.entries(fixture.expect ?? {})) check(`reads at least ${n} ${k}`, ((read.doc as any)[k]?.length ?? 0) >= n!);
       check("reading does not modify the source", tree(root) === before);
+      if (fixture.secrets?.length && adapter.plan) {
+        // Move the fixture agent itself and look for planted secrets everywhere it could land.
+        const dest = join(home, "destination-fixture");
+        const plan = await nomad.plan({ source: { kind: "location", adapter: adapter.info.id, root, nativeId: fixture.nativeId }, destination: { adapter: adapter.info.id, root: dest }, mode: "copy" });
+        const receipt = plan.blocked.length ? null : await nomad.execute(plan.id, { broaderPermissions: true, replace: true, overwriteModified: true });
+        const leaks = [...leakedSecrets([JSON.stringify(plan), JSON.stringify(receipt), ...filesUnder(dest)], fixture.secrets), ...leakedSecrets([JSON.stringify(read)], fixture.secrets).filter((l) => !l.startsWith("an sk-")).map((l) => `${l} in the read`)];
+        check("never writes secret values", leaks.length === 0, leaks.join(", "));
+        check("reading does not modify the source", tree(root) === before);
+      }
     }
     if (adapter.plan) {
       registerAdapter(adapter);
@@ -143,7 +184,8 @@ export async function runAdapterContract(adapter: Adapter, fixture?: ContractFix
       check("imports routines disabled", plan.disabledRoutines.includes("Daily check") || plan.unsupported.some((u) => u.category === "workflows"));
       const receipt = await nomad.execute(plan.id, { broaderPermissions: true });
       check("migration succeeds and verifies", receipt.status === "success", receipt.verification.filter((v) => !v.ok).map((v) => `${v.name}: ${v.detail ?? ""}`).join("; ") || receipt.error);
-      check("never writes secret values", !JSON.stringify(receipt).includes("sk-") );
+      const leaks = leakedSecrets([JSON.stringify(receipt), ...filesUnder(dest)], fixture?.secrets ?? []);
+      check("never writes secret values", leaks.length === 0, leaks.join(", "));
       const again = await nomad.plan({ source: { kind: "package", path: pkg + ".agentpack" }, destination: { adapter: adapter.info.id, root: dest } });
       check("re-writing the same agent changes nothing", again.summary.create === 0 && again.summary.update === 0 && again.approvalsRequired.length === 0, `${again.summary.create} new, ${again.summary.update} modified`);
     }

@@ -1,5 +1,13 @@
 import type { AgentDocument, EnvValue } from "@nomad/schema";
-import { redactText, scanText, isSensitiveEnvKey, looksLikeSecretValue, isSensitiveFile, type SecretFinding } from "./secrets";
+import { redactText, redactLaunchField, scanText, scanMcpLaunchFields, isSensitiveEnvKey, isRpcEnvKey, isPublicRpcUrl, looksLikeSecretValue, isSensitiveFile, type SecretFinding } from "./secrets";
+
+const EVM_KEY_VALUE = /\b0x[0-9a-fA-F]{64}\b/;
+
+/** True when an env or header value must not be copied: a credential by name or shape, a wallet key, or a private RPC URL. */
+export function isSecretEnvEntry(key: string, value: string): boolean {
+  if (isSensitiveEnvKey(key) || looksLikeSecretValue(value) || EVM_KEY_VALUE.test(value)) return true;
+  return isRpcEnvKey(key) && !isPublicRpcUrl(value);
+}
 
 export interface SensitiveFileFinding {
   file: string;
@@ -28,10 +36,7 @@ export function visitText(doc: AgentDocument, fn: (path: string, text: string) =
   for (const w of doc.workflows) {
     for (const a of w.actions) if (a.kind === "prompt") fn(`workflows/${w.id}.prompt`, a.text);
   }
-  for (const t of doc.tools) {
-    if (t.mcp?.args?.length) fn(`tools/${t.name}/args`, t.mcp.args.join(" "));
-    if (t.mcp?.url) fn(`tools/${t.name}/url`, t.mcp.url);
-  }
+  // Tool launch fields (args, url, headers) are scanned without context in scanDocument.
   for (const it of doc.integrations) fn(`integrations/${it.name}.json`, JSON.stringify(it.config));
   for (const f of doc.files) if (f.encoding === "utf8") fn(`files/${f.path}`, f.content);
 }
@@ -44,6 +49,12 @@ export function scanDocument(doc: AgentDocument): DocumentScan {
   for (const s of doc.skills)
     for (const f of s.files)
       if (isSensitiveFile(f.path)) sensitiveFiles.push({ file: `skills/${s.name}/${f.path}`, reason: "Credential or key file" });
+  for (const t of doc.tools) {
+    if (!t.mcp) continue;
+    const literal = (rec: Record<string, EnvValue>) => Object.fromEntries(Object.entries(rec).flatMap(([k, v]) => ("value" in v ? [[k, v.value]] : [])));
+    // env values are reported below as inline secrets, so only launch text is scanned here.
+    findings.push(...scanMcpLaunchFields(t.name, { args: t.mcp.args, url: t.mcp.url, headers: literal(t.mcp.headers) }).filter((f) => !f.file.includes("/headers/")));
+  }
   const inlineSecretValues: DocumentScan["inlineSecretValues"] = [];
   for (const t of doc.tools) {
     for (const [loc, rec] of [
@@ -51,7 +62,7 @@ export function scanDocument(doc: AgentDocument): DocumentScan {
       ["headers", t.mcp?.headers ?? {}]
     ] as const) {
       for (const [k, v] of Object.entries(rec)) {
-        if ("value" in v && (isSensitiveEnvKey(k) || looksLikeSecretValue(v.value))) {
+        if ("value" in v && isSecretEnvEntry(k, v.value)) {
           inlineSecretValues.push({ tool: t.name, key: k, location: loc });
         }
       }
@@ -82,7 +93,7 @@ export interface SanitizeReport {
 function stripRecord(tool: string, rec: Record<string, EnvValue>, report: SanitizeReport): Record<string, EnvValue> {
   const out: Record<string, EnvValue> = {};
   for (const [k, v] of Object.entries(rec)) {
-    if ("value" in v && (isSensitiveEnvKey(k) || looksLikeSecretValue(v.value))) {
+    if ("value" in v && isSecretEnvEntry(k, v.value)) {
       out[k] = { secretRef: k, redacted: true };
       report.strippedEnvValues.push({ tool, key: k });
     } else out[k] = v;
@@ -103,6 +114,12 @@ export function sanitizeDocument(doc: AgentDocument, options: SanitizeOptions = 
   const red = (s: string) => {
     if (options.includeSecrets) return s;
     const r = redactText(s);
+    report.redactedText += r.count;
+    return r.text;
+  };
+  // Launch fields: a wallet key is removed even without surrounding words.
+  const launch = (s: string) => {
+    const r = redactLaunchField(s);
     report.redactedText += r.count;
     return r.text;
   };
@@ -138,8 +155,8 @@ export function sanitizeDocument(doc: AgentDocument, options: SanitizeOptions = 
             ...t,
             mcp: {
               ...t.mcp,
-              args: t.mcp.args.map(red),
-              url: t.mcp.url === undefined ? undefined : red(t.mcp.url),
+              args: t.mcp.args.map(launch),
+              url: t.mcp.url === undefined ? undefined : launch(t.mcp.url),
               env: stripRecord(t.name, t.mcp.env, report),
               headers: stripRecord(t.name, t.mcp.headers, report)
             }

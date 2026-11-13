@@ -8,6 +8,14 @@
 - Credential files (`.env`, keys, `auth.json`, `.netrc`, ...) are skipped. Platform secret stores are never read.
 - `--include-secrets` keeps values, prints a warning and is recorded in the manifest.
 
+## Keys and wallets: never read, never copied, listed as skipped
+
+- Folders that can hold wallet keys or wallet state are never read, never followed through a symlink and never written: `~/.config/priors/`, `~/.local/state/priors-mcp/`, `~/.priors/`, `.agent001/`, and any file named `agent.key` or `agent-<id>.key`. This holds with `--include-secrets` and `--include-files` too. The list lives in `packages/core/src/node/keymaterial.ts`.
+- After a read, the preview lists the refused paths (paths only, never content), for example "Skipped 2 path(s) that can hold wallet keys (not read, not copied)".
+- Wallet private keys (`0x` and 64 hex characters) are detected when the text around them names a key, signer, wallet or secret, and always in an MCP server's command-line arguments, URL or headers. Recovery phrases (12 to 24 words from the BIP-39 English list) are detected anywhere.
+- Env values named like keys, wallets, seeds or passphrases become references, and so does any RPC URL that is not one of the known public endpoints, since provider URLs can embed a key.
+- Backups never copy key-material paths.
+
 ## Permissions
 
 The destination policy is computed before and after (by applying the planned files to a temporary overlay and asking the adapter to read it). Any broader mode, capability, new allow pattern or removed restriction requires the `broader-permissions` approval. Restrictions the destination cannot enforce are listed. Mappings choose the stricter option when inexact.

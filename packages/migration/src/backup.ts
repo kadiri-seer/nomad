@@ -2,7 +2,7 @@ import { promises as fsp } from "node:fs";
 import { join } from "node:path";
 import { createTwoFilesPatch } from "diff";
 import { fromUtf8, sha256, shortId } from "@nomad/core";
-import { assertNoSymlinks, atomicWrite, displayPath, ensureDir } from "@nomad/core/node";
+import { assertNoSymlinks, atomicWrite, displayPath, ensureDir, isKeyMaterialPath } from "@nomad/core/node";
 import type { NomadStore } from "@nomad/storage";
 
 export interface BackupFileEntry {
@@ -39,6 +39,7 @@ export async function createBackup(
   for (const f of files) {
     if (seen.has(f.abs)) continue;
     seen.add(f.abs);
+    if (isKeyMaterialPath(f.abs)) continue; // never copy wallet keys, even into a backup
     try {
       const st = await fsp.lstat(f.abs);
       if (!st.isFile()) continue;

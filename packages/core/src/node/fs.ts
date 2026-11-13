@@ -2,6 +2,7 @@ import { constants, promises as fsp, lstatSync, existsSync, realpathSync } from 
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep, posix } from "node:path";
 import { randomBytes } from "node:crypto";
+import { isKeyMaterialPath, recordSkippedKeyMaterial } from "./keymaterial";
 
 export class UnsafePathError extends Error {
   constructor(message: string) {
@@ -52,7 +53,13 @@ export function safeJoin(root: string, rel: string): string {
   const abs = resolve(root, ...rel.split("/"));
   const r = relative(root, abs);
   if (r.startsWith("..") || isAbsolute(r)) throw new UnsafePathError(`Path escapes its root: "${rel}"`);
+  assertNotKeyMaterial(abs);
   return abs;
+}
+
+/** Writing into a folder that can hold wallet keys is always refused. */
+export function assertNotKeyMaterial(abs: string): void {
+  if (isKeyMaterialPath(abs)) throw new UnsafePathError(`Refusing to touch ${abs}: it can hold wallet keys.`);
 }
 
 /**
@@ -108,6 +115,10 @@ export async function isFile(p: string): Promise<boolean> {
 
 /** Read a text file. Returns null when missing. Refuses symlinks unless allowed. */
 export async function readTextIfExists(p: string, maxBytes = 10 * 1024 * 1024): Promise<string | null> {
+  if (isKeyMaterialPath(p)) {
+    if (await pathExists(p)) recordSkippedKeyMaterial(p);
+    return null;
+  }
   try {
     const st = await fsp.lstat(p);
     if (st.isSymbolicLink()) {
@@ -123,6 +134,10 @@ export async function readTextIfExists(p: string, maxBytes = 10 * 1024 * 1024): 
 }
 
 export async function readBytesIfExists(p: string): Promise<Uint8Array | null> {
+  if (isKeyMaterialPath(p)) {
+    if (await pathExists(p)) recordSkippedKeyMaterial(p);
+    return null;
+  }
   try {
     return new Uint8Array(await fsp.readFile(p));
   } catch (e) {
@@ -158,6 +173,10 @@ export async function walkFiles(root: string, options: WalkOptions = {}): Promis
     for (const e of await listDir(dir)) {
       if (e.symlink) continue;
       const r = rel ? `${rel}/${e.name}` : e.name;
+      if (isKeyMaterialPath(join(dir, e.name))) {
+        recordSkippedKeyMaterial(join(dir, e.name));
+        continue;
+      }
       if (options.skip?.(r, e.dir)) continue;
       if (e.dir) await rec(join(dir, e.name), r, depth + 1);
       else if (e.file) {
@@ -172,6 +191,7 @@ export async function walkFiles(root: string, options: WalkOptions = {}): Promis
 
 /** Write atomically: temp file in the same directory, fsync, rename. */
 export async function atomicWrite(abs: string, data: string | Uint8Array, mode?: number): Promise<void> {
+  assertNotKeyMaterial(abs);
   await fsp.mkdir(dirname(abs), { recursive: true });
   const tmp = join(dirname(abs), `.${posix.basename(abs.split(sep).join("/"))}.nomad-tmp-${randomBytes(6).toString("hex")}`);
   const fh = await fsp.open(tmp, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, mode ?? 0o644);
