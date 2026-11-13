@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "./Logo";
+import { XLink } from "./Social";
 
 export const REPO_URL = "https://github.com/kadiri-seer/nomad";
 
@@ -15,6 +16,9 @@ export function SiteFooter() {
             </Link>
             <p className="muted" style={{ marginTop: 14, maxWidth: "34ch" }}>
               Portable AI agents. Local first, previewed before every change, backed up after.
+            </p>
+            <p style={{ marginTop: 14 }}>
+              <XLink label />
             </p>
           </div>
           <div>

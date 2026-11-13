@@ -4,6 +4,8 @@ Nomad moves AI agents between platforms without losing who they are. It reads an
 
 It runs entirely on your machine. There is no account and nothing is uploaded.
 
+Website: [nomad-iota-six.vercel.app](https://nomad-iota-six.vercel.app) · X: [@thenomadlabs](https://x.com/thenomadlabs)
+
 ```
 nomad                                guided: pick an agent, pick where it goes, confirm once
 nomad move openclaw claude-code      the same in one line

@@ -253,6 +253,9 @@ pre {
 .nav a[aria-current="page"] {
   color: var(--blue);
 }
+.nav a.nav-social {
+  padding: 10px 2px;
+}
 .nav a.nav-cta {
   padding: 0 16px;
   min-height: 38px;

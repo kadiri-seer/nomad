@@ -18,7 +18,8 @@ export const metadata: Metadata = {
     title: "Nomad: move AI agents between platforms",
     description: "Portable AI agents with previews, backups and honest compatibility reports.",
     type: "website"
-  }
+  },
+  twitter: { card: "summary", site: "@thenomadlabs", creator: "@thenomadlabs" }
 };
 
 export const viewport: Viewport = {

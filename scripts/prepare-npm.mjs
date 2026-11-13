@@ -66,7 +66,7 @@ npx ${name} ui                           the dashboard, in your browser
 
 Install it to type \`nomad\` instead: \`npm install -g ${name}\`. Requires Node.js ${cli.engines.node.replace(">=", "")} or newer.
 
-Everything runs on your machine. There is no account and nothing is uploaded. Documentation and source: https://github.com/kadiri-seer/nomad
+Everything runs on your machine. There is no account and nothing is uploaded. Documentation and source: https://github.com/kadiri-seer/nomad. Follow along on X: https://x.com/thenomadlabs
 `
 );
 
