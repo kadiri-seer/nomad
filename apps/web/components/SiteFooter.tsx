@@ -18,7 +18,7 @@ export function SiteFooter() {
               Portable AI agents. Local first, previewed before every change, backed up after.
             </p>
             <p style={{ marginTop: 14 }}>
-              <XLink label />
+              <XLink />
             </p>
           </div>
           <div>

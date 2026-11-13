@@ -10,12 +10,11 @@ export function XIcon({ size = 16 }: { size?: number }) {
   );
 }
 
-/** A link to Nomad on X. With `label`, the handle is shown next to the logo. */
-export function XLink({ label = false, className }: { label?: boolean; className?: string }) {
+/** A link to Nomad on X: the logo alone, named for screen readers. */
+export function XLink({ className, size = 18 }: { className?: string; size?: number }) {
   return (
-    <a href={X_URL} target="_blank" rel="me noopener noreferrer" className={className} aria-label={label ? undefined : `Nomad on X (${X_HANDLE})`} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-      <XIcon />
-      {label && <span>{X_HANDLE}</span>}
+    <a href={X_URL} target="_blank" rel="me noopener noreferrer" className={className} aria-label={`Nomad on X (${X_HANDLE})`} title={`Nomad on X (${X_HANDLE})`} style={{ display: "inline-flex", alignItems: "center" }}>
+      <XIcon size={size} />
     </a>
   );
 }

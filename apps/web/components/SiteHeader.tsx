@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Logo } from "./Logo";
-import { XLink, X_HANDLE, X_URL } from "./Social";
+import { XLink } from "./Social";
 
 const LINKS = [
   { href: "/#how", label: "How it works" },
@@ -51,9 +51,7 @@ export function SiteHeader() {
               {l.label}
             </Link>
           ))}
-          <a href={X_URL} target="_blank" rel="me noopener noreferrer">
-            X {X_HANDLE}
-          </a>
+          <XLink />
           <Link href="/app" className="btn">
             Open the app
           </Link>
