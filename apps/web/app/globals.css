@@ -253,6 +253,23 @@ pre {
 .nav a[aria-current="page"] {
   color: var(--blue);
 }
+/* Token page: the flywheel as a numbered loop. */
+.prose ol.flywheel {
+  list-style: none;
+  counter-reset: fw;
+  padding-left: 0;
+  border-left: 2px solid var(--blue);
+}
+.prose ol.flywheel li {
+  counter-increment: fw;
+  padding: 8px 0 8px 18px;
+}
+.prose ol.flywheel li::before {
+  content: counter(fw, decimal-leading-zero) "  ";
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--blue);
+}
 .nav a.nav-social {
   padding: 10px 2px;
 }

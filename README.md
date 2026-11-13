@@ -113,6 +113,7 @@ scripts/verify-real-apps.sh   # check output with real Codex / Claude Code binar
 - [Security model](docs/security/model.md)
 - [Migration guide](docs/guides/migrating.md)
 - [Implementation status](docs/STATUS.md)
+- [Token and builder bounties](docs/token.md)
 
 ## License
 

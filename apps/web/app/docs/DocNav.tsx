@@ -7,7 +7,8 @@ const LINKS = [
   { href: "/docs", label: "Getting started" },
   { href: "/docs/format", label: "Agent format" },
   { href: "/docs/adapters", label: "Platforms" },
-  { href: "/docs/security", label: "Security" }
+  { href: "/docs/security", label: "Security" },
+  { href: "/docs/token", label: "Token and bounties" }
 ];
 
 export function DocNav() {

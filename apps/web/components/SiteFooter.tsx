@@ -47,6 +47,9 @@ export function SiteFooter() {
               <li>
                 <Link href="/docs/security">Security</Link>
               </li>
+              <li>
+                <Link href="/docs/token">Token and bounties</Link>
+              </li>
             </ul>
           </div>
           <div>
