@@ -16,6 +16,9 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm Trusted Publishing exchanges this for a short-lived publish token
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -28,8 +31,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: node scripts/prepare-npm.mjs "${{ inputs.name }}"
+      - name: Check Trusted Publishing is available
+        run: |
+          echo "npm $(npm --version)"
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "::error::GitHub did not provide an OIDC token (id-token permission missing)."
+            exit 1
+          fi
+          echo "GitHub OIDC token available"
       - name: Publish
         working-directory: release/npm
+        # With Trusted Publishing set up on npmjs.com, npm exchanges the GitHub OIDC token itself.
+        # NPM_TOKEN is only a fallback for accounts without it.
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
