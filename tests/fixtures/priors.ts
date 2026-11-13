@@ -52,6 +52,16 @@ and the local priors-mcp command for payments with a dedicated agent wallet.
 Every payment and loan is real money on Robinhood Chain.
 `;
 
+/** Symlinks need extra rights on Windows; tests that rely on one check canSymlink(). */
+export function trySymlink(target: string, path: string): boolean {
+  try {
+    symlinkSync(target, path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Wallet keys and wallet state that must never appear in any output. */
 export function plantKeyMaterial(home: string) {
   put(home, ".config/priors/agent.key", FAKE_KEY_FILE_CONTENTS, 0o600);
@@ -83,7 +93,7 @@ export function buildClaudeCodePriors(home: string) {
   put(install, "priors/SKILL.md", PRIORS_SKILL);
   // A skill folder whose notes file is a symlink to the wallet key. It must not be followed.
   put(r, "skills/notes/SKILL.md", "---\nname: notes\ndescription: Personal notes.\n---\n\nKeep notes short.\n");
-  symlinkSync(join(home, ".config/priors/agent.key"), join(r, "skills/notes/NOTES.md"));
+  trySymlink(join(home, ".config/priors/agent.key"), join(r, "skills/notes/NOTES.md"));
   return r;
 }
 
@@ -179,4 +189,68 @@ export function buildGeminiPriors(home: string) {
   put(g, "GEMINI.md", "# Rules\n\nUse priors tools only for agent #7311.\n");
   put(g, "settings.json", JSON.stringify({ mcpServers: { "priors-hosted": { httpUrl: "https://mcp.priors.trade/mcp" }, "priors-wallet": { command: "npx", args: ["-y", "@priors/mcp@0.20.0"], env: { PRIORS_KEY: "$PRIORS_KEY", PRIORS_AGENT_ID: "7311" } } } }, null, 2));
   return g;
+}
+
+export const FAKE_ELIZA_OPENROUTER_KEY = "sk-or-v1-" + "fedcba9876543210".repeat(4);
+/** Values that were under `secrets` in the ElizaOS fixtures. None may appear anywhere. */
+export const ELIZA_SECRET_VALUES = [FAKE_PRIORS_KEY, "/home/agent/.config/priors/agent-7311.key", FAKE_ELIZA_OPENROUTER_KEY, "entity-1234", "api.priors.trade"];
+
+const elizaCharacter = (secretsAt: "settings" | "top") => {
+  const secrets = {
+    PRIORS_KEY_FILE: "/home/agent/.config/priors/agent-7311.key",
+    PRIORS_KEY: FAKE_PRIORS_KEY,
+    PRIORS_AGENT_ID: "7311",
+    PRIORS_OWNER_ENTITY_IDS: "entity-1234",
+    PRIORS_PAY_HOSTS: "api.priors.trade",
+    OPENROUTER_API_KEY: FAKE_ELIZA_OPENROUTER_KEY
+  };
+  return {
+    name: "PriorsAgent",
+    username: "priors_agent",
+    plugins: ["@elizaos/plugin-sql", "@elizaos/plugin-bootstrap", "@elizaos/plugin-openrouter", "@priors/plugin-elizaos"],
+    bio: ["Pays x402 APIs for its operator.", "Checks a seller's record before paying.", "Repays on time."],
+    system: "You are PriorsAgent. Confirm every payment with your operator.",
+    adjectives: ["careful", "precise", "brief"],
+    topics: ["x402", "credit records"],
+    style: { all: ["Short sentences."], chat: ["Answer the question first."], post: ["No hashtags."] },
+    messageExamples: [
+      [{ name: "{{user1}}", content: { text: "Check agent #1234." } }, { name: "PriorsAgent", content: { text: "Agent #1234 has repaid 2 loans." } }],
+      [{ name: "{{user1}}", content: { text: "Pay that API." } }, { name: "PriorsAgent", content: { text: "At most how much?" } }]
+    ],
+    postExamples: ["Paid on credit, repaid on time."],
+    knowledge: ["Agent #7311 is this agent.", "Payments are in USDG.", { path: "./knowledge/priors.md", shared: false }],
+    ...(secretsAt === "top" ? { secrets, settings: { model: "openrouter/auto" } } : { settings: { model: "openrouter/auto", secrets } })
+  };
+};
+
+export function buildElizaOSPriors(home: string) {
+  const p = join(home, "eliza-project");
+  plantKeyMaterial(home);
+  put(p, "package.json", JSON.stringify({ name: "my-eliza", dependencies: { "@elizaos/core": "^1.7.0" } }, null, 2));
+  put(p, "characters/priors-agent.json", JSON.stringify(elizaCharacter("settings"), null, 2));
+  put(p, "characters/priors-top-secrets.character.json", JSON.stringify(elizaCharacter("top"), null, 2));
+  put(p, "characters/priors-mcp.json", JSON.stringify({
+    name: "PriorsMcp",
+    bio: "Uses Priors through MCP.",
+    system: "Use priors tools only for agent #7311.",
+    plugins: ["@elizaos/plugin-mcp"],
+    settings: {
+      mcp: {
+        maxRetries: 2,
+        servers: {
+          "priors-wallet": {
+            type: "stdio",
+            command: "npx",
+            args: ["-y", "@priors/mcp@0.20.0"],
+            env: { PRIORS_KEY_FILE: "/home/agent/.config/priors/agent-7311.key", PRIORS_AGENT_ID: "7311", PRIORS_MAX_BORROW_USD: "0", PRIORS_MAX_BORROW_DAY_USD: "0", PRIORS_MAX_SPEND_DAY_USD: "1", PRIORS_MAX_PRICE_USD: "0.10", PRIORS_PAY_HOSTS: "api.example.com" }
+          },
+          priors: { type: "streamable-http", url: "https://mcp.priors.trade/mcp" }
+        }
+      }
+    }
+  }, null, 2));
+  // A TypeScript character that would write a marker file if it were ever executed.
+  put(p, "src/character.ts", 'import { writeFileSync } from "node:fs";\nwriteFileSync(process.env.NOMAD_TEST_MARKER!, "ran");\nexport const character = { name: "FromTs", bio: "never imported" };\n');
+  put(p, "knowledge/priors.md", "# Priors\n\nA credit service for agents on Robinhood Chain.\n");
+  return p;
 }

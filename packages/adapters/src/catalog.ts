@@ -235,7 +235,7 @@ function guidedInfo(id: string, displayName: string, category: "hosted" | "frame
     category,
     support: "GUIDED",
     adapterVersion: "0.1.0",
-    supportedVersions: category === "hosted" ? "Official settings screens" : "Current public SDK",
+    supportedVersions: category === "hosted" ? "Published settings screens" : "Current public SDK",
     description,
     defaultLocations: [],
     multiAgent: false,
@@ -281,12 +281,45 @@ export const GUIDED_INFOS: AdapterInfo[] = [
   guidedInfo("letta", "Letta", "framework", "A Letta agent with persona and human memory blocks.", "Persona and user memory become memory blocks.")
 ];
 
+export const ELIZAOS_INFO: AdapterInfo = {
+  id: "elizaos",
+  displayName: "ElizaOS",
+  category: "framework",
+  support: "PARTIAL",
+  adapterVersion: "0.1.0",
+  supportedVersions: "ElizaOS 1.x JSON character files",
+  description: "Character files (characters/*.json, *.character.json): bio, system prompt, style, knowledge, plugins and MCP servers under settings.mcp.",
+  docsUrl: "https://docs.elizaos.ai/agents/character-interface",
+  defaultLocations: [],
+  multiAgent: true,
+  configFormats: ["JSON"],
+  capabilities: capabilityMatrix({
+    identity: { read: "convert", write: "convert", notes: "bio becomes the persona; adjectives the tone." },
+    instructions: { read: "convert", write: "convert", notes: "system and style; other instructions are folded into system with a heading." },
+    memory: { read: "convert", write: "convert", notes: "Knowledge strings in the character. Runtime memory in ElizaOS's database is not read." },
+    skills: { read: "unsupported", write: "unsupported" },
+    tools: { read: "convert", write: "convert", notes: "MCP servers under settings.mcp.servers (needs @elizaos/plugin-mcp). References are not written." },
+    integrations: { read: "manual", write: "manual", notes: "Plugins are listed; Nomad never installs them." },
+    models: { read: "manual", write: "manual" },
+    permissions: { read: "unsupported", write: "unsupported" },
+    workflows: { read: "unsupported", write: "unsupported" },
+    knowledge: { read: "convert", write: "manual", notes: "Knowledge file paths are listed, copied only with --include-files." },
+    project: { read: "convert", write: "convert" }
+  }),
+  limitations: [
+    "JSON characters only; TypeScript characters are reported, never run.",
+    "Secrets (secrets and settings.secrets) are never read or written; only their names are listed.",
+    "Runtime memory and conversations are not migrated."
+  ]
+};
+
 export const ALL_INFOS: AdapterInfo[] = [
   OPENCLAW_INFO,
   CLAUDE_CODE_INFO,
   CODEX_INFO,
   HERMES_INFO,
   GENERIC_INFO,
+  ELIZAOS_INFO,
   CURSOR_INFO,
   WINDSURF_INFO,
   CLINE_INFO,

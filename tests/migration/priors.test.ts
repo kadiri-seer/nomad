@@ -72,7 +72,8 @@ describe("Priors setups", () => {
     expect(existsSync(join(dest, "skills/priors/SKILL.md"))).toBe(true);
     expect(steps(plan)).toContain("installed plugin read, not installed");
     // The symlink into the wallet folder was not followed, and the read says so.
-    expect(plan.notes.some((n) => /can hold wallet keys/.test(n.message))).toBe(true);
+    // (Windows runners may not allow creating the symlink; then there is nothing to skip.)
+    if (existsSync(join(src, "skills/notes/NOTES.md"))) expect(plan.notes.some((n) => /can hold wallet keys/.test(n.message))).toBe(true);
     expect(existsSync(join(dest, "skills/notes/NOTES.md"))).toBe(false);
     expect(plan.notes.some((n) => /stay with the wallet/.test(n.message))).toBe(true);
     expectNoLeak(JSON.stringify(plan), JSON.stringify(receipt), allText(dest));

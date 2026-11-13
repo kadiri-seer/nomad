@@ -14,7 +14,7 @@ OpenClaw, Claude Code, Codex and Hermes read and write, each with a capability m
 
 Verified with real applications (`scripts/verify-real-apps.sh`): Codex CLI accepts the generated `config.toml` and lists migrated MCP servers; Claude Code shows migrated MCP servers from `~/.claude.json`.
 
-Not verified with the real application: OpenClaw (its current release needs Node 24.16+, not available in the build environment) and Hermes (Python). Their file formats follow the official documentation; field level details of cron job stores may differ between releases, which is why they are labelled partial.
+Not verified with the real application: OpenClaw (its current release needs Node 24.16+, not available in the build environment) and Hermes (Python). Their file formats follow the published documentation; field level details of cron job stores may differ between releases, which is why they are labelled partial.
 
 ## Phase 3: Web application (done)
 
@@ -50,3 +50,26 @@ CLI with JSON, quiet and verbose output, dry runs, non interactive mode, approva
 - Session transcripts and platform internal search indexes are not migrated.
 - TOML comments in Codex `config.toml` and comments in `openclaw.json` are not preserved on merge (backups are taken). YAML comments are preserved.
 - Claude Code rewrites `~/.claude.json` while running; close it before migrating user level MCP servers.
+
+## Priors setups and ElizaOS
+
+Written Nov 13, 2026. Priors is a credit service for agents on Robinhood Chain; Priors and its team have not been contacted and have not reviewed this work.
+
+Tested (automated, every push):
+- Key safety: wallet keys, recovery phrases and private RPC URLs are detected; folders that can hold wallet keys are never read, followed through symlinks, backed up or written; planted fake keys never appear in plans, receipts, destinations, backups or `.nomad` exports (`tests/security`, `tests/core/keymaterial.test.ts`, `tests/migration/priors.test.ts`, contract runs with `secrets`).
+- Priors setups moving between Claude Code, Codex, Hermes, Cursor and Gemini CLI, including Claude Code and Hermes plugins (`tests/migration/priors.test.ts`).
+- ElizaOS JSON characters: read, write, round trip, secrets dropped on parse, TypeScript characters never executed (`tests/adapters/elizaos.test.ts`, `tests/migration/elizaos.test.ts`).
+
+Checked with real applications on Nov 13, 2026 (`scripts/verify-real-apps.sh`, read-only, no key, no funds):
+- Codex CLI 0.169.0 lists the Priors servers Nomad wrote from Claude Code (`codex mcp list`), including `env_vars` forwarding and the hosted URL.
+- Claude Code 2.1.323 shows the Priors servers Nomad wrote from Hermes (`claude mcp get`); the local wallet server started and connected without a key.
+- `@priors/mcp` 0.20.0 starts without a key and reports "read-only tools only".
+- ElizaOS 1.7.2: every character Nomad wrote (ElizaOS to ElizaOS, Claude Code to ElizaOS, the MCP character) passes `validateCharacter` from `@elizaos/core` 1.7.2.
+
+Not verified:
+- The hosted server's tool list could not be loaded from the test machine (outbound access to mcp.priors.trade was blocked), so "the hosted tool list loads" is not checked.
+- ElizaOS characters were not loaded by a running agent (`elizaos start --character`); only the schema check above was done.
+- Cursor and Gemini CLI were not run with the moved Priors setups. Gemini CLI's `${VAR}` expansion in settings.json is assumed.
+- Claude Code plugin layout (`installed_plugins.json` shape, `enabledPlugins`) and Hermes plugin layout beyond the documented files are modeled on documentation, not on a real install.
+- Whether Claude Code accepts `${VAR:-}` for every variable (only `PRIORS_AGENT_ID` is written that way), whether ElizaOS's MCP plugin expands `${VAR}`, and whether it ignores the `settings.nomadAgentId` key.
+- OpenClaw (Phase 1B) is not done.

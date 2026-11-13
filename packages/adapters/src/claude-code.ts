@@ -37,6 +37,7 @@ import {
   skillToFiles,
   toolsFromMcpServers,
   pluginOf,
+  integrationStep,
   wants,
   workflowManualSteps
 } from "./util";
@@ -536,7 +537,7 @@ async function planMain(doc: AgentDocument, ctx: WriteContext, L: Layout): Promi
     for (const w of doc.workflows) unsupported.push({ category: "workflows", item: w.name, reason: "Claude Code has no local scheduler.", alternative: "Use a system scheduler or another platform for this routine." });
     manualSteps.push(...workflowManualSteps(doc, "Claude Code"));
   }
-  if (wants(ctx, "integrations")) for (const i of doc.integrations.filter((x) => !(x.kind === "claude-code-plugin" && fromPlugins.has(x.name)))) manualSteps.push(i.kind.endsWith("-plugin") ? `The ${i.name} plugin was installed on the source. Reinstall it, or its equivalent, if you want it here; Nomad never installs plugins.` : `Reconnect the ${i.name} integration in Claude Code.`);
+  if (wants(ctx, "integrations")) for (const i of doc.integrations.filter((x) => !(x.kind === "claude-code-plugin" && fromPlugins.has(x.name)))) manualSteps.push(integrationStep(i, "Claude Code", `Reconnect the ${i.name} integration in Claude Code.`));
   if (wants(ctx, "knowledge") && (doc.knowledge.length || doc.files.length)) manualSteps.push(`Copy ${doc.knowledge.length + doc.files.length} knowledge file(s) into your project and reference them from CLAUDE.md.`);
   return { nativeId: "main", files, notes, manualSteps, conversions, unsupported };
 }

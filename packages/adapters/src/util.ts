@@ -15,6 +15,7 @@ import {
   type WriteContext
 } from "@nomad/core";
 import { applyKnownServerProfile } from "./known-servers";
+import { elizaosPluginHint } from "./elizaos-known-plugins";
 import type { ComponentCategory } from "@nomad/schema";
 import { listDir, readTextIfExists, walkFiles, isDirectory } from "@nomad/core/node";
 import { isSensitiveFile } from "@nomad/security";
@@ -457,7 +458,10 @@ export function pluginOf(item: { source?: Record<string, unknown> | undefined },
 }
 
 /** The setup step for an integration; plugins read from the source get their own wording. */
-export function integrationStep(i: { name: string; kind: string }, platformName: string, otherwise: string): string {
+export function integrationStep(i: { name: string; kind: string; notes?: string }, platformName: string, otherwise: string): string {
+  if (i.kind === "elizaos-plugin") {
+    return `${i.name} was an ElizaOS plugin. ${elizaosPluginHint(i.name)}`;
+  }
   if (i.kind === "claude-code-plugin" || i.kind === "hermes-plugin") {
     return `${i.name} was an installed ${i.kind === "hermes-plugin" ? "Hermes" : "Claude Code"} plugin (installed plugin read, not installed). Its servers and skills are written to ${platformName} as ordinary entries where ${platformName} has a place for them.`;
   }

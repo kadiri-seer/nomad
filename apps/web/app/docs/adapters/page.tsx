@@ -6,6 +6,11 @@ import { Badge } from "@/components/ui";
 
 export const metadata = { title: "Platforms", description: "What Nomad can read and write on each platform, category by category." };
 
+// Adapters that ship but have not yet been run against the real application.
+const IN_PROGRESS: Record<string, string> = {
+  elizaos: "ElizaOS adapter: in progress, nothing is labelled supported until it ships and has been tested. Characters it writes pass ElizaOS 1.7.2's own character schema; they have not been loaded by a running ElizaOS agent yet."
+};
+
 const SHORT: Record<string, string> = { full: "Full", convert: "Converts", manual: "Manual", unsupported: "No" };
 
 export default function Adapters() {
@@ -67,6 +72,7 @@ export default function Adapters() {
             {a.displayName} <Badge kind={a.support}>{a.support.toLowerCase()}</Badge>
           </h3>
           <p>{a.description}</p>
+          {IN_PROGRESS[a.id] && <p>{IN_PROGRESS[a.id]}</p>}
           <p className="muted">
             Built for: {a.supportedVersions}. {a.defaultLocations.length ? `Default location ${a.defaultLocations.join(", ")}.` : "Point Nomad at the project folder."} Id <code>{a.id}</code>.
           </p>
@@ -82,6 +88,10 @@ export default function Adapters() {
           </ul>
         </section>
       ))}
+      <h2>Priors setups</h2>
+      <p>
+        We are exploring Priors setups: moving the Priors MCP servers and Hermes plugin settings between agents, with keys and limits shown as things you set again. Priors is a credit service for agents on Robinhood Chain. Wallet keys, key files and on-chain state are never read or moved. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/priors-setups.md">Priors setups guide</a>.
+      </p>
       <h3>Guided platforms</h3>
       <p>
         Hosted products (ChatGPT, Claude, Gemini, Grok, Perplexity) do not offer an agent import, and frameworks (CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n, Letta) define agents in code or in their own apps. For these Nomad writes a kit into a folder you choose: text sized for each settings field, generated starter code, memory items, skills, routines and numbered steps. Nothing is sent to those services.

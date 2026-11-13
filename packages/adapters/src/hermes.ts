@@ -31,6 +31,7 @@ import {
   skillToFiles,
   toolsFromMcpServers,
   pluginOf,
+  integrationStep,
   wants,
   workflowPrompt
 } from "./util";
@@ -429,7 +430,7 @@ async function planHome(doc: AgentDocument, ctx: WriteContext): Promise<PlannedW
       manualSteps.push(`Review the imported routines and resume them with "hermes cron resume <id>". Results are delivered locally until you change the target.`);
     }
   }
-  if (wants(ctx, "integrations")) for (const i of doc.integrations.filter((x) => !(x.kind === "hermes-plugin" && fromPlugins.has(x.name)))) manualSteps.push(i.kind.endsWith("-plugin") ? `Reinstall the ${i.name} plugin if you want it here; plugins are never installed by Nomad.` : `Reconnect ${i.name} in Hermes ("hermes gateway setup"). Credentials are never migrated.`);
+  if (wants(ctx, "integrations")) for (const i of doc.integrations.filter((x) => !(x.kind === "hermes-plugin" && fromPlugins.has(x.name)))) manualSteps.push(integrationStep(i, "Hermes", `Reconnect ${i.name} in Hermes ("hermes gateway setup"). Credentials are never migrated.`));
   if (wants(ctx, "knowledge") && (doc.knowledge.length || doc.files.length)) manualSteps.push(`Copy ${doc.knowledge.length + doc.files.length} knowledge file(s) somewhere Hermes can read them.`);
   return { nativeId, files, notes, manualSteps, conversions, unsupported };
 }

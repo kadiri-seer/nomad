@@ -6,6 +6,7 @@ import { claudeCodeAdapter } from "./claude-code";
 import { codexAdapter } from "./codex";
 import { openclawAdapter } from "./openclaw";
 import { hermesAdapter } from "./hermes";
+import { elizaosAdapter } from "./elizaos";
 import { FILE_ADAPTERS } from "./file-based";
 import { GUIDED_ADAPTERS } from "./guided";
 
@@ -16,7 +17,7 @@ export function registerAdapter(adapter: Adapter): void {
   registry.set(adapter.info.id, adapter);
 }
 
-for (const a of [openclawAdapter, claudeCodeAdapter, codexAdapter, hermesAdapter, genericAdapter, ...FILE_ADAPTERS, ...GUIDED_ADAPTERS]) registerAdapter(a);
+for (const a of [openclawAdapter, claudeCodeAdapter, codexAdapter, hermesAdapter, genericAdapter, elizaosAdapter, ...FILE_ADAPTERS, ...GUIDED_ADAPTERS]) registerAdapter(a);
 
 export function getAdapter(id: string): Adapter {
   const a = registry.get(id);

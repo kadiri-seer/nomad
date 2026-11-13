@@ -23,10 +23,13 @@ Every move shows a short summary first (`--details` for every file and diff, `--
 | Codex CLI | Partial | AGENTS.md, config.toml (model, approval policy, sandbox, network, MCP), skills, custom prompts. One agent per home. |
 | Hermes Agent | Partial | SOUL.md, MEMORY.md and USER.md entries, skills, config.yaml (model, MCP, command allowlist), cron jobs, profiles. |
 | Agent folder | Full | Unpacked `.nomad` (lossless) or any folder of Markdown agent files. |
+| ElizaOS | Partial (in progress) | JSON character files: bio, system, style, knowledge, plugins by name, MCP servers under `settings.mcp`. Secrets are never read. ElizaOS adapter: in progress, nothing is labelled supported until it ships and has been tested. |
 | Cursor, Windsurf, Cline, Roo Code, Continue, OpenCode, Goose, Aider, Gemini CLI | Partial | Rules files and MCP configuration where the platform has one. Routines, model choice and permissions stay in the application. |
 | ChatGPT, Claude, Gemini, Grok, Perplexity, CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n, Letta | Guided | Nomad writes a setup kit (text sized for each field, starter code, memory items, steps). Nothing is sent to those services. |
 
 `nomad adapters --platform <id>` prints the per category capability matrix. Nothing is labelled full unless it is.
+
+We are exploring Priors setups: moving the Priors MCP servers and Hermes plugin settings between agents, with keys and limits shown as things you set again. Priors is a credit service for agents on Robinhood Chain. See [docs/guides/priors-setups.md](docs/guides/priors-setups.md). Wallet keys, key files and wallet state are never read or copied ([security model](docs/security/model.md)).
 
 Packages: a `.nomad` file is a small ZIP of plain Markdown and JSON (`nomad.json`, `AGENTS.md`, `SOUL.md`, `MEMORY.md`, `skills/`, `routines/`, `tools.json`) with a SHA-256 for every file. Add `--sign` to sign it with your own Ed25519 key; whoever opens it sees whether it came from you, someone they trust or an unknown key, and any change after signing is reported (`nomad keys`, `nomad trust <file> --name <who>`). Older `.agentpack` files still open. Nomad also reads and writes `.jetpack` interchange archives, the flat layout other agent portability tools use (`nomad export <agent> --format jetpack`, and any `.jetpack` works wherever a package is accepted). Parts that layout has no place for, such as MCP tools, travel in a namespaced manifest key that other readers ignore.
 
