@@ -30,8 +30,10 @@ import {
   safeName,
   skillToFiles,
   toolsFromMcpServers,
+  integrationStep,
   wants,
-  workflowManualSteps
+  workflowManualSteps,
+  pluginOf
 } from "./util";
 
 const P = "codex";
@@ -291,7 +293,7 @@ export const codexAdapter: Adapter = {
       for (const w of doc.workflows) unsupported.push({ category: "workflows", item: w.name, reason: "Codex has no scheduler." });
       manualSteps.push(...workflowManualSteps(doc, "Codex"));
     }
-    if (wants(ctx, "integrations")) for (const i of doc.integrations) manualSteps.push(`Reconnect the ${i.name} integration for Codex.`);
+    if (wants(ctx, "integrations")) for (const i of doc.integrations) manualSteps.push(integrationStep(i, "Codex", `Reconnect the ${i.name} integration for Codex.`));
     if (wants(ctx, "knowledge") && (doc.knowledge.length || doc.files.length)) manualSteps.push(`Copy ${doc.knowledge.length + doc.files.length} knowledge file(s) into the project and mention them in AGENTS.md.`);
     return { nativeId: "main", files, notes, manualSteps, conversions, unsupported };
   },
@@ -325,12 +327,12 @@ export const codexAdapter: Adapter = {
     }
     if (wants(ctx, "skills") && doc.skills.length) {
       const names = new Set(got.skills.map((s) => s.name));
-      const missing = doc.skills.filter((s) => !names.has(s.name) && !names.has(safeName(s.name)));
+      const missing = doc.skills.filter((s) => !pluginOf(s, this.info.id) && !names.has(s.name) && !names.has(safeName(s.name)));
       checks.push({ name: "Skills written", ok: !missing.length, detail: missing.length ? `Missing: ${missing.map((s) => s.name).join(", ")}` : undefined });
     }
     if (wants(ctx, "tools") && doc.tools.some((t) => t.kind === "mcp")) {
       const names = new Set(got.tools.map((t) => t.name));
-      const missing = doc.tools.filter((t) => t.kind === "mcp" && !names.has(t.name));
+      const missing = doc.tools.filter((t) => t.kind === "mcp" && t.enabled !== false && !pluginOf(t, this.info.id) && !names.has(t.name));
       checks.push({ name: "MCP servers configured", ok: !missing.length, detail: missing.length ? `Missing: ${missing.map((t) => t.name).join(", ")}` : undefined });
     }
     return checks;

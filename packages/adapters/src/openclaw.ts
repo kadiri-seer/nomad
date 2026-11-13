@@ -30,7 +30,9 @@ import {
   safeName,
   skillToFiles,
   wants,
-  workflowPrompt
+  workflowPrompt,
+  integrationStep,
+  pluginOf
 } from "./util";
 
 const P = "openclaw";
@@ -503,7 +505,7 @@ async function planAgent(doc: AgentDocument, ctx: WriteContext): Promise<Planned
       if (t.mcp) manualSteps.push(`Add the "${t.name}" MCP server (${t.mcp.command ?? t.mcp.url ?? ""} ${t.mcp.args.join(" ")}) through your OpenClaw MCP plugin.`.replace(/\s+\)/, ")"));
     }
   }
-  if (wants(ctx, "integrations")) for (const i of doc.integrations) manualSteps.push(`Reconnect ${i.name} in OpenClaw (credentials are never migrated).`);
+  if (wants(ctx, "integrations")) for (const i of doc.integrations) manualSteps.push(integrationStep(i, "OpenClaw", `Reconnect ${i.name} in OpenClaw (credentials are never migrated).`));
   if (wants(ctx, "knowledge") && (doc.knowledge.length || doc.files.length)) manualSteps.push(`Copy ${doc.knowledge.length + doc.files.length} knowledge file(s) into the workspace.`);
   if (newEntry) notes.push({ level: "info", message: `A new agent "${agentId}" with its own workspace will be created. Restart the gateway to load it.` });
   return { nativeId: agentId, files, notes, manualSteps, conversions, unsupported };
@@ -567,7 +569,7 @@ export const openclawAdapter: Adapter = {
     }
     if (wants(ctx, "skills") && doc.skills.length) {
       const names = new Set(got.skills.map((s) => s.name));
-      const missing = doc.skills.filter((s) => !names.has(s.name));
+      const missing = doc.skills.filter((s) => !pluginOf(s, this.info.id) && !names.has(s.name));
       checks.push({ name: "Skills written", ok: !missing.length, detail: missing.length ? `Missing: ${missing.map((s) => s.name).join(", ")}` : undefined });
     }
     if (wants(ctx, "workflows") && doc.workflows.length) {

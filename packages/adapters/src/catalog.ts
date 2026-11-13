@@ -54,7 +54,8 @@ export const CLAUDE_CODE_INFO: AdapterInfo = {
   }),
   limitations: [
     "User level MCP servers live in ~/.claude.json, which Claude Code also rewrites. Close Claude Code before migrating.",
-    "Scheduled routines cannot be imported."
+    "Scheduled routines cannot be imported.",
+    "Reads installed plugins (servers and skills of enabled user-level plugins), never installs them."
   ]
 };
 
@@ -142,7 +143,10 @@ export const HERMES_INFO: AdapterInfo = {
     knowledge: manual(),
     project: convert()
   }),
-  limitations: ["Hermes memory has character limits (2,200 for MEMORY.md and 1,375 for USER.md by default). Larger imports are reported."]
+  limitations: [
+    "Hermes memory has character limits (2,200 for MEMORY.md and 1,375 for USER.md by default). Larger imports are reported.",
+    "Reads installed plugins (portable plugin servers and skills), never installs or enables them. ~/.hermes/.env is never read."
+  ]
 };
 
 /** Phase 4 adapters: direct file integrations with limited testing. */

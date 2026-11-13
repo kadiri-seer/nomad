@@ -450,6 +450,20 @@ export function toolsFromMcpServers(raw: unknown, platform: string, path: string
   return tools;
 }
 
+/** A server or skill that came from an installed plugin, rather than from the platform's own config (host is the platform id). */
+export function pluginOf(item: { source?: Record<string, unknown> | undefined }, host: string): string | null {
+  const src = item.source;
+  return src?.pluginHost === host && typeof src.plugin === "string" ? src.plugin : null;
+}
+
+/** The setup step for an integration; plugins read from the source get their own wording. */
+export function integrationStep(i: { name: string; kind: string }, platformName: string, otherwise: string): string {
+  if (i.kind === "claude-code-plugin" || i.kind === "hermes-plugin") {
+    return `${i.name} was an installed ${i.kind === "hermes-plugin" ? "Hermes" : "Claude Code"} plugin (installed plugin read, not installed). Its servers and skills are written to ${platformName} as ordinary entries where ${platformName} has a place for them.`;
+  }
+  return otherwise;
+}
+
 export interface McpRefs {
   /** Env entries kept as references (names of the env keys). */
   env: string[];
@@ -500,6 +514,10 @@ export function mcpServersFromTools(tools: Tool[], opts: McpWriteOptions): McpWr
     out.manualSteps.push(...profile.manualSteps);
     out.unsupported.push(...profile.unsupported);
     for (const n of profile.notes) if (!seenNotes.has(n.message)) (seenNotes.add(n.message), out.notes.push(n));
+    const trust = ((t as Record<string, unknown>).extensions as Record<string, { trust?: unknown }> | undefined)?.["x-hermes"]?.trust;
+    if (trust === "untrusted") {
+      out.unsupported.push({ category: "permissions", item: `${t.name}: Hermes asked before every call that is not read-only (trust: untrusted)`, reason: "Destination approvals are not copied.", alternative: `Set ${opts.platformName} to ask before using "${t.name}" tools, before using real funds.` });
+    }
     const mcp = t.mcp!;
     const s: Record<string, unknown> = {};
     if (mcp.transport === "stdio") {

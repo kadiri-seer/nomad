@@ -1,5 +1,6 @@
-import { basename, dirname, join } from "node:path";
-import type { AgentDocument, PermissionPolicy, PermissionRule, Capability, Skill } from "@nomad/schema";
+import { realpathSync } from "node:fs";
+import { basename, dirname, join, resolve, sep } from "node:path";
+import type { AgentDocument, PermissionPolicy, PermissionRule, Capability, Skill, Tool, Integration } from "@nomad/schema";
 import {
   createDocument,
   extractBlock,
@@ -35,6 +36,7 @@ import {
   safeName,
   skillToFiles,
   toolsFromMcpServers,
+  pluginOf,
   wants,
   workflowManualSteps
 } from "./util";
@@ -206,6 +208,85 @@ function subagentModel(doc: AgentDocument): string | undefined {
 
 /* ------------------------------ adapter ------------------------------ */
 
+/**
+ * Enabled Claude Code plugins at the user level: enabledPlugins in
+ * settings.json says which are on, installed_plugins.json says where they are.
+ * Their servers and skills are read; plugins are never installed by Nomad.
+ */
+async function readInstalledPlugins(root: string, settings: any, notes: Note[]): Promise<{ tools: Tool[]; skills: Skill[]; integrations: Integration[]; sourceFiles: string[] }> {
+  const out = { tools: [] as Tool[], skills: [] as Skill[], integrations: [] as Integration[], sourceFiles: [] as string[] };
+  const enabled = Object.entries((settings?.enabledPlugins ?? {}) as Record<string, unknown>).filter(([, v]) => v === true).map(([k]) => k);
+  if (!enabled.length) return out;
+  const pluginsRoot = join(root, "plugins");
+  const roots = [pluginsRoot, process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR].filter((x): x is string => !!x).map((r) => {
+    try {
+      return realpathSync(r);
+    } catch {
+      return r;
+    }
+  });
+  const installedPath = join(pluginsRoot, "installed_plugins.json");
+  const installed = await readJson(installedPath, notes);
+  if (installed) out.sourceFiles.push(installedPath);
+  // Accept a flat map or a { plugins: {...} } wrapper.
+  const map: Record<string, unknown> = installed?.plugins && typeof installed.plugins === "object" && !Array.isArray(installed.plugins) ? installed.plugins : (installed ?? {});
+  const marketplaces = (await readJson(join(pluginsRoot, "known_marketplaces.json"), [])) ?? {};
+  for (const id of enabled) {
+    const raw = map[id];
+    const entry = (Array.isArray(raw) ? raw.find((e: any) => e?.scope === "user") ?? raw[0] : raw) as { installPath?: unknown; version?: unknown } | undefined;
+    if (!entry || typeof entry.installPath !== "string") {
+      notes.push({ level: "warning", category: "integrations", message: `Plugin ${id} is enabled but its install location was not found, so it was not read.` });
+      continue;
+    }
+    let dir: string;
+    try {
+      dir = realpathSync(entry.installPath);
+    } catch {
+      notes.push({ level: "warning", category: "integrations", message: `Plugin ${id} is enabled but its folder is missing.` });
+      continue;
+    }
+    if (!roots.some((r) => dir === r || dir.startsWith(r + sep))) {
+      notes.push({ level: "warning", category: "integrations", message: `Plugin ${id} is installed outside the plugins folder, so it was not read.` });
+      continue;
+    }
+    const [pluginName, marketplace] = id.split("@");
+    const provenance = { note: `plugin ${id}`, extra: { plugin: id, pluginHost: P } };
+    const manifestPath = join(dir, ".claude-plugin", "plugin.json");
+    const manifest = (await readJson(manifestPath, notes)) ?? {};
+    if (await pathExists(manifestPath)) out.sourceFiles.push(manifestPath);
+    const servers: Record<string, unknown> = {};
+    if (manifest.mcpServers && typeof manifest.mcpServers === "object") Object.assign(servers, manifest.mcpServers);
+    const mcpPath = join(dir, typeof manifest.mcpServers === "string" ? manifest.mcpServers : ".mcp.json");
+    const mcpFile = await readJson(mcpPath, notes);
+    if (mcpFile?.mcpServers) {
+      out.sourceFiles.push(mcpPath);
+      Object.assign(servers, mcpFile.mcpServers);
+    }
+    out.tools.push(...toolsFromMcpServers(servers, P, `plugins/${id}`, { notes, ...provenance }));
+    const skillDirs = Array.isArray(manifest.skills) ? manifest.skills : typeof manifest.skills === "string" ? [manifest.skills] : ["skills"];
+    for (const rel of skillDirs) {
+      if (typeof rel !== "string") continue;
+      const abs = resolve(dir, rel);
+      if (abs !== dir && !abs.startsWith(dir + sep)) continue;
+      for (const sk of await readSkillsTree(abs, P, notes, 1)) {
+        sk.source = { ...(sk.source ?? { platform: P }), note: provenance.note, ...provenance.extra };
+        out.skills.push(sk);
+      }
+    }
+    const repo = (marketplaces as any)?.[marketplace ?? ""]?.source?.repo;
+    out.integrations.push({
+      name: id,
+      kind: "claude-code-plugin",
+      requiresAuth: false,
+      config: { ...(typeof entry.version === "string" ? { version: entry.version } : {}), ...(marketplace ? { marketplace } : {}), ...(typeof repo === "string" ? { marketplaceRepo: repo } : {}), plugin: pluginName },
+      notes: "Installed Claude Code plugin",
+      source: { platform: P, path: `plugins/${id}` }
+    });
+    notes.push({ level: "info", category: "integrations", message: `Read installed plugin ${id} (installed plugin read, not installed anywhere by Nomad).` });
+  }
+  return out;
+}
+
 async function readMain(root: string, notes: Note[], includeSecrets: boolean | undefined, agentId?: string) {
   const L = await layoutOf(root);
   const sourceFiles: string[] = [];
@@ -301,6 +382,22 @@ async function readMain(root: string, notes: Note[], includeSecrets: boolean | u
     sourceFiles.push(mcpFile);
     doc.tools.push(...toolsFromMcpServers(mcp.mcpServers, P, L.mcpPath, { notes }));
   }
+
+  if (L.user) {
+    const plugins = await readInstalledPlugins(root, settings, notes);
+    for (const t of plugins.tools) {
+      const same = doc.tools.find((d) => d.mcp && t.mcp && d.mcp.transport === t.mcp.transport && !!d.mcp.url && d.mcp.url === t.mcp.url);
+      if (same) {
+        notes.push({ level: "info", category: "tools", message: `"${t.name}" from plugin ${String(t.source?.plugin)} points at the same server as "${same.name}", so it is read once.` });
+        continue;
+      }
+      if (doc.tools.some((d) => d.name === t.name)) t.name = `${t.name}-plugin`;
+      doc.tools.push(t);
+    }
+    doc.skills.push(...plugins.skills.filter((sk) => !doc.skills.some((d) => d.name === sk.name)));
+    doc.integrations.push(...plugins.integrations);
+    sourceFiles.push(...plugins.sourceFiles);
+  }
   void includeSecrets;
   return { doc, sourceFiles };
 }
@@ -368,8 +465,15 @@ async function planMain(doc: AgentDocument, ctx: WriteContext, L: Layout): Promi
   });
   if (doc.identity.persona) conversions.push({ category: "identity", item: "persona", from: "persona", to: "Persona section in CLAUDE.md" });
 
+  // Items from a Claude Code plugin come back by installing the plugin, not by copying them.
+  const fromPlugins = new Set<string>([...doc.tools, ...doc.skills].map((x) => pluginOf(x, P)).filter((x): x is string => !!x));
+  for (const id of fromPlugins) {
+    const info = doc.integrations.find((i) => i.kind === "claude-code-plugin" && i.name === id)?.config as Record<string, unknown> | undefined;
+    const market = typeof info?.marketplaceRepo === "string" ? info.marketplaceRepo : (id.split("@")[1] ?? "<marketplace>");
+    manualSteps.push(`Install the plugin ${id} in Claude Code: /plugin marketplace add ${market}, then /plugin install ${id}. Nomad does not copy plugin servers or skills.`);
+  }
   if (wants(ctx, "skills")) {
-    for (const s of doc.skills) {
+    for (const s of doc.skills.filter((x) => !pluginOf(x, P))) {
       if (s.frontmatter["x-claude-code-command"] === true || s.frontmatter["x-codex-prompt"] === true) {
         const { "x-claude-code-command": _c, "x-codex-prompt": _p, ...fm } = s.frontmatter;
         if (_p) conversions.push({ category: "skills", item: s.name, from: "Codex custom prompt", to: "Claude Code slash command" });
@@ -404,7 +508,7 @@ async function planMain(doc: AgentDocument, ctx: WriteContext, L: Layout): Promi
   }
 
   if (wants(ctx, "tools")) {
-    const mcpTools = doc.tools.filter((t) => t.kind === "mcp" && t.mcp);
+    const mcpTools = doc.tools.filter((t) => t.kind === "mcp" && t.mcp && !pluginOf(t, P));
     if (mcpTools.length) {
       // Claude Code fails on an unset ${VAR}; ${VAR:-} is used only where the server accepts an empty value.
       const r = mcpServersFromTools(mcpTools, {
@@ -432,7 +536,7 @@ async function planMain(doc: AgentDocument, ctx: WriteContext, L: Layout): Promi
     for (const w of doc.workflows) unsupported.push({ category: "workflows", item: w.name, reason: "Claude Code has no local scheduler.", alternative: "Use a system scheduler or another platform for this routine." });
     manualSteps.push(...workflowManualSteps(doc, "Claude Code"));
   }
-  if (wants(ctx, "integrations")) for (const i of doc.integrations) manualSteps.push(`Reconnect the ${i.name} integration in Claude Code.`);
+  if (wants(ctx, "integrations")) for (const i of doc.integrations.filter((x) => !(x.kind === "claude-code-plugin" && fromPlugins.has(x.name)))) manualSteps.push(i.kind.endsWith("-plugin") ? `The ${i.name} plugin was installed on the source. Reinstall it, or its equivalent, if you want it here; Nomad never installs plugins.` : `Reconnect the ${i.name} integration in Claude Code.`);
   if (wants(ctx, "knowledge") && (doc.knowledge.length || doc.files.length)) manualSteps.push(`Copy ${doc.knowledge.length + doc.files.length} knowledge file(s) into your project and reference them from CLAUDE.md.`);
   return { nativeId: "main", files, notes, manualSteps, conversions, unsupported };
 }
@@ -548,12 +652,12 @@ export const claudeCodeAdapter: Adapter = {
     }
     if (wants(ctx, "skills") && doc.skills.length && !nativeId.startsWith("subagent:")) {
       const names = new Set(got.skills.map((s) => s.name));
-      const missing = doc.skills.filter((s) => !names.has(s.name));
+      const missing = doc.skills.filter((s) => !pluginOf(s, this.info.id) && !names.has(s.name));
       checks.push({ name: "Skills written", ok: missing.length === 0, detail: missing.length ? `Missing: ${missing.map((s) => s.name).join(", ")}` : undefined });
     }
     if (wants(ctx, "tools") && doc.tools.some((t) => t.kind === "mcp") && !nativeId.startsWith("subagent:")) {
       const names = new Set(got.tools.map((t) => t.name));
-      const missing = doc.tools.filter((t) => t.kind === "mcp" && !names.has(t.name));
+      const missing = doc.tools.filter((t) => t.kind === "mcp" && t.enabled !== false && !pluginOf(t, this.info.id) && !names.has(t.name));
       checks.push({ name: "MCP servers configured", ok: missing.length === 0, detail: missing.length ? `Missing: ${missing.map((t) => t.name).join(", ")}` : undefined });
     }
     return checks;

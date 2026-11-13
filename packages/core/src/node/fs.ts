@@ -171,12 +171,12 @@ export async function walkFiles(root: string, options: WalkOptions = {}): Promis
   async function rec(dir: string, rel: string, depth: number) {
     if (depth > maxDepth || out.length >= maxFiles) return;
     for (const e of await listDir(dir)) {
-      if (e.symlink) continue;
-      const r = rel ? `${rel}/${e.name}` : e.name;
       if (isKeyMaterialPath(join(dir, e.name))) {
         recordSkippedKeyMaterial(join(dir, e.name));
         continue;
       }
+      if (e.symlink) continue;
+      const r = rel ? `${rel}/${e.name}` : e.name;
       if (options.skip?.(r, e.dir)) continue;
       if (e.dir) await rec(join(dir, e.name), r, depth + 1);
       else if (e.file) {

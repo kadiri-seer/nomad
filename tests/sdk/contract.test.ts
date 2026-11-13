@@ -5,6 +5,7 @@ import { runAdapterContract } from "@nomad/sdk";
 import { getAdapter } from "@nomad/adapters";
 import { jsonAgentAdapter } from "../../packages/sdk/examples/json-agent";
 import { buildClaudeCode, buildCodex, buildHermes, buildOpenClaw } from "../fixtures/platforms";
+import { FAKE_PRIORS_SECRETS, buildClaudeCodePriors, buildCodexPriors, buildCursorPriors, buildGeminiPriors, buildHermesPriors } from "../fixtures/priors";
 
 const failures = (r: Awaited<ReturnType<typeof runAdapterContract>>) => r.filter((x) => !x.ok);
 
@@ -33,6 +34,23 @@ describe("adapter contract", () => {
     it(`${id} passes the contract`, async () => {
       const r = await runAdapterContract(getAdapter(id), { build, nativeId, expect: expectCounts });
       expect(failures(r)).toEqual([]);
+    });
+  }
+
+  // Priors setups with planted wallet keys: the read, the plan, the receipt and every
+  // written file are checked for them.
+  const priors: Array<[string, (h: string) => string, string, Record<string, number>]> = [
+    ["claude-code", buildClaudeCodePriors, "main", { tools: 3, skills: 1 }],
+    ["codex", buildCodexPriors, "main", { instructions: 1, tools: 2 }],
+    ["hermes", buildHermesPriors, "default", { memory: 6, tools: 3, skills: 2 }],
+    ["cursor", buildCursorPriors, "main", { instructions: 1, tools: 2 }],
+    ["gemini-cli", buildGeminiPriors, "main", { instructions: 1, tools: 2 }]
+  ];
+  for (const [id, build, nativeId, expectCounts] of priors) {
+    it(`${id} passes the contract with a Priors setup and planted keys`, async () => {
+      const r = await runAdapterContract(getAdapter(id), { build, nativeId, expect: expectCounts, secrets: FAKE_PRIORS_SECRETS });
+      expect(failures(r)).toEqual([]);
+      expect(r.some((x) => x.name === "never writes secret values")).toBe(true);
     });
   }
 

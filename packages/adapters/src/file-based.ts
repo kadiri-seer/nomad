@@ -41,8 +41,10 @@ import {
   safeName,
   skillToFiles,
   toolsFromMcpServers,
+  integrationStep,
   wants,
-  workflowManualSteps
+  workflowManualSteps,
+  pluginOf
 } from "./util";
 
 /**
@@ -339,7 +341,7 @@ export function defineFileAdapter(spec: FileAdapterSpec): Adapter {
         for (const w of doc.workflows) unsupported.push({ category: "workflows", item: w.name, reason: `${name} has no scheduler.` });
         manualSteps.push(...workflowManualSteps(doc, name));
       }
-      if (wants(ctx, "integrations")) for (const i of doc.integrations) manualSteps.push(`Reconnect ${i.name} in ${name}.`);
+      if (wants(ctx, "integrations")) for (const i of doc.integrations) manualSteps.push(integrationStep(i, name, `Reconnect ${i.name} in ${name}.`));
       if (wants(ctx, "knowledge") && (doc.knowledge.length || doc.files.length)) manualSteps.push(`Copy ${doc.knowledge.length + doc.files.length} knowledge file(s) into the project.`);
       notes.push({ level: "info", message: `Open the project in ${name} after migrating to confirm the rules load.` });
       return { nativeId, files, notes, manualSteps, conversions, unsupported };
@@ -360,7 +362,7 @@ export function defineFileAdapter(spec: FileAdapterSpec): Adapter {
       }
       if (spec.mcp?.writable && wants(ctx, "tools") && doc.tools.some((t) => t.kind === "mcp") && !nativeId.startsWith("agent:")) {
         const names = new Set(got.tools.map((t) => t.name));
-        const missing = doc.tools.filter((t) => t.kind === "mcp" && !names.has(t.name));
+        const missing = doc.tools.filter((t) => t.kind === "mcp" && t.enabled !== false && !pluginOf(t, this.info.id) && !names.has(t.name));
         checks.push({ name: "MCP servers configured", ok: !missing.length, detail: missing.length ? `Missing: ${missing.map((t) => t.name).join(", ")}` : undefined });
       }
       return checks;

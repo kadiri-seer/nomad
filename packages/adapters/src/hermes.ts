@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import type { AgentDocument, MemoryEntry, PermissionPolicy, Workflow } from "@nomad/schema";
+import type { AgentDocument, Integration, MemoryEntry, PermissionPolicy, Skill, Tool, Workflow } from "@nomad/schema";
 import {
   createDocument,
   extractBlock,
@@ -30,6 +30,7 @@ import {
   safeName,
   skillToFiles,
   toolsFromMcpServers,
+  pluginOf,
   wants,
   workflowPrompt
 } from "./util";
@@ -110,6 +111,80 @@ function memoryEntriesFrom(text: string, kind: MemoryEntry["kind"], scope: Memor
   }));
 }
 
+/**
+ * Installed Hermes plugins. Portable plugins (plugin.json, mcp.json, skills/)
+ * are read; native Python plugins are listed but their code is never read or
+ * run. ~/.hermes/.env is never read. A plugin that is not in plugins.enabled
+ * has its servers read as disabled.
+ */
+export async function readPlugins(h: string, cfg: any, notes: Note[]): Promise<{ tools: Tool[]; skills: Skill[]; integrations: Integration[]; sourceFiles: string[] }> {
+  const out = { tools: [] as Tool[], skills: [] as Skill[], integrations: [] as Integration[], sourceFiles: [] as string[] };
+  const enabled = new Set<string>(Array.isArray(cfg?.plugins?.enabled) ? cfg.plugins.enabled.map(String) : []);
+  const disabled = new Set<string>(Array.isArray(cfg?.plugins?.disabled) ? cfg.plugins.disabled.map(String) : []);
+  const base = join(h, "plugins");
+  // Flat (plugins/<name>) or one category level (plugins/<category>/<name>).
+  const dirs: Array<{ rel: string; abs: string }> = [];
+  for (const e of await listDir(base)) {
+    if (!e.dir || e.name.startsWith(".")) continue;
+    const abs = join(base, e.name);
+    if ((await pathExists(join(abs, "plugin.json"))) || (await pathExists(join(abs, "plugin.yaml")))) dirs.push({ rel: e.name, abs });
+    else for (const c of await listDir(abs)) if (c.dir && !c.name.startsWith(".") && ((await pathExists(join(abs, c.name, "plugin.json"))) || (await pathExists(join(abs, c.name, "plugin.yaml"))))) dirs.push({ rel: `${e.name}/${c.name}`, abs: join(abs, c.name) });
+  }
+  for (const d of dirs) {
+    const manifestText = await readTextIfExists(join(d.abs, "plugin.json"));
+    if (manifestText === null) {
+      // Native plugin: Python code. Listed, never imported or run.
+      out.integrations.push({ name: d.rel.split("/").pop()!, kind: "hermes-plugin", requiresAuth: false, config: { native: true }, notes: "Native Hermes plugin (Python). Its code was not read or copied.", source: { platform: P, path: `plugins/${d.rel}` } });
+      notes.push({ level: "info", category: "integrations", message: `Hermes plugin ${d.rel} is a native plugin: code not read or copied.` });
+      continue;
+    }
+    let manifest: any;
+    try {
+      manifest = JSON.parse(manifestText);
+    } catch {
+      notes.push({ level: "warning", category: "integrations", message: `plugins/${d.rel}/plugin.json could not be parsed and was skipped.` });
+      continue;
+    }
+    out.sourceFiles.push(join(d.abs, "plugin.json"));
+    const name = typeof manifest.name === "string" && manifest.name ? manifest.name : d.rel.split("/").pop()!;
+    const on = enabled.has(name) && !disabled.has(name);
+    const provenance = { note: `plugin ${name}`, extra: { plugin: name, pluginHost: P } };
+    const trust: Record<string, unknown> = manifest.extensions?.["com.nousresearch.hermes"]?.servers ?? {};
+    const mcpText = await readTextIfExists(join(d.abs, "mcp.json"));
+    const requiredEnv: string[] = [];
+    if (mcpText !== null) {
+      out.sourceFiles.push(join(d.abs, "mcp.json"));
+      try {
+        const servers = JSON.parse(mcpText).mcpServers ?? {};
+        const tools = toolsFromMcpServers(servers, P, `plugins/${d.rel}/mcp.json`, { notes, refsOptional: true, ...provenance });
+        for (const t of tools) {
+          if (!on) t.enabled = false;
+          const tr = (trust[t.name] as { trust?: unknown } | undefined)?.trust;
+          if (typeof tr === "string") (t as Record<string, unknown>).extensions = { "x-hermes": { trust: tr } };
+          for (const [k, v] of Object.entries(t.mcp!.env)) if (!("value" in v)) requiredEnv.push(k);
+        }
+        out.tools.push(...tools);
+      } catch {
+        notes.push({ level: "warning", category: "tools", message: `plugins/${d.rel}/mcp.json could not be parsed and was skipped.` });
+      }
+    }
+    // Skills of a plugin that is not enabled are not read: copying them elsewhere would switch them on.
+    const skills = on ? await readSkillsTree(join(d.abs, "skills"), P, notes, 2) : [];
+    for (const sk of skills) sk.source = { ...(sk.source ?? { platform: P }), note: provenance.note, ...provenance.extra };
+    out.skills.push(...skills);
+    out.integrations.push({
+      name,
+      kind: "hermes-plugin",
+      requiresAuth: requiredEnv.length > 0,
+      config: { ...(typeof manifest.version === "string" ? { version: manifest.version } : {}), enabled: on, ...(requiredEnv.length ? { requiredEnv: [...new Set(requiredEnv)] } : {}) },
+      notes: on ? "Installed and enabled Hermes plugin" : "Installed Hermes plugin, not enabled",
+      source: { platform: P, path: `plugins/${d.rel}/plugin.json` }
+    });
+    notes.push({ level: "info", category: "integrations", message: `Read installed Hermes plugin ${name}${on ? "" : " (not enabled, so its servers stay off)"}. Nomad never installs or enables plugins.` });
+  }
+  return out;
+}
+
 async function readHome(root: string, nativeId: string, notes: Note[], agentId?: string) {
   const h = homeFor(root, nativeId);
   const sourceFiles: string[] = [];
@@ -168,6 +243,16 @@ async function readHome(root: string, nativeId: string, notes: Note[], agentId?:
   if (await pathExists(join(h, ".env"))) notes.push({ level: "info", category: "integrations", message: "~/.hermes/.env holds secrets. It is never read or migrated." });
 
   doc.skills.push(...(await readSkillsTree(join(h, "skills"), P, notes, 3)));
+
+  const plugins = await readPlugins(h, cfg, notes);
+  for (const t of plugins.tools) {
+    // A plugin server with the same name as one in config.yaml is kept apart, not merged.
+    if (doc.tools.some((d) => d.name === t.name)) t.name = `${t.name}-plugin`;
+    doc.tools.push(t);
+  }
+  doc.skills.push(...plugins.skills.filter((s) => !doc.skills.some((d) => d.name === s.name)));
+  doc.integrations.push(...plugins.integrations);
+  sourceFiles.push(...plugins.sourceFiles);
 
   const jobsText = await read("cron/jobs.json");
   if (jobsText) {
@@ -262,8 +347,13 @@ async function planHome(doc: AgentDocument, ctx: WriteContext): Promise<PlannedW
     if (logs.length) conversions.push({ category: "memory", item: `${logs.length} logs`, from: "daily logs", to: "memories/archive (readable on request, not loaded into every prompt)" });
   }
 
+  // Servers and skills from a Hermes plugin come back by reinstalling the plugin, not by copying them.
+  const fromPlugins = new Set<string>([...doc.tools, ...doc.skills].map((x) => pluginOf(x, P)).filter((x): x is string => !!x));
+  for (const name of fromPlugins) {
+    manualSteps.push(`Install and enable the Hermes plugin ${name}: "hermes plugins install ${name}", then "hermes plugins enable ${name}" (portable plugins install disabled). Nomad does not copy plugin servers or skills into config.yaml or skills/.`);
+  }
   if (wants(ctx, "skills")) {
-    for (const s of doc.skills) {
+    for (const s of doc.skills.filter((x) => !pluginOf(x, P))) {
       const { "x-claude-code-command": c, "x-codex-prompt": p, ...fm } = s.frontmatter;
       files.push(...skillToFiles({ ...s, frontmatter: fm }, `${prefix}skills/nomad-imports`));
       if (c || p) conversions.push({ category: "skills", item: s.name, from: c ? "Claude Code slash command" : "Codex custom prompt", to: "Hermes skill" });
@@ -278,7 +368,7 @@ async function planHome(doc: AgentDocument, ctx: WriteContext): Promise<PlannedW
     manualSteps.push(`Check that Hermes has a provider for ${model} ("hermes model").`);
   }
   if (wants(ctx, "tools")) {
-    const mcpTools = doc.tools.filter((t) => t.kind === "mcp" && t.mcp);
+    const mcpTools = doc.tools.filter((t) => t.kind === "mcp" && t.mcp && !pluginOf(t, P));
     if (mcpTools.length) {
       // Hermes expands ${VAR} from ~/.hermes/.env and drops entries whose reference is unset.
       const r = mcpServersFromTools(mcpTools, { platformName: "Hermes", envRefStyle: "dollar", optionalRef: (_t, name) => `\${${name}}` });
@@ -339,7 +429,7 @@ async function planHome(doc: AgentDocument, ctx: WriteContext): Promise<PlannedW
       manualSteps.push(`Review the imported routines and resume them with "hermes cron resume <id>". Results are delivered locally until you change the target.`);
     }
   }
-  if (wants(ctx, "integrations")) for (const i of doc.integrations) manualSteps.push(`Reconnect ${i.name} in Hermes ("hermes gateway setup"). Credentials are never migrated.`);
+  if (wants(ctx, "integrations")) for (const i of doc.integrations.filter((x) => !(x.kind === "hermes-plugin" && fromPlugins.has(x.name)))) manualSteps.push(i.kind.endsWith("-plugin") ? `Reinstall the ${i.name} plugin if you want it here; plugins are never installed by Nomad.` : `Reconnect ${i.name} in Hermes ("hermes gateway setup"). Credentials are never migrated.`);
   if (wants(ctx, "knowledge") && (doc.knowledge.length || doc.files.length)) manualSteps.push(`Copy ${doc.knowledge.length + doc.files.length} knowledge file(s) somewhere Hermes can read them.`);
   return { nativeId, files, notes, manualSteps, conversions, unsupported };
 }
@@ -405,7 +495,7 @@ export const hermesAdapter: Adapter = {
     }
     if (wants(ctx, "skills") && doc.skills.length) {
       const names = new Set(got.skills.map((s) => s.name));
-      const missing = doc.skills.filter((s) => !names.has(s.name));
+      const missing = doc.skills.filter((s) => !pluginOf(s, this.info.id) && !names.has(s.name));
       checks.push({ name: "Skills written", ok: !missing.length, detail: missing.length ? `Missing: ${missing.map((s) => s.name).join(", ")}` : undefined });
     }
     if (wants(ctx, "workflows") && doc.workflows.length) {

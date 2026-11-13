@@ -164,8 +164,12 @@ export async function runAdapterContract(adapter: Adapter, fixture?: ContractFix
       if (fixture.secrets?.length && adapter.plan) {
         // Move the fixture agent itself and look for planted secrets everywhere it could land.
         const dest = join(home, "destination-fixture");
-        const plan = await nomad.plan({ source: { kind: "location", adapter: adapter.info.id, root, nativeId: fixture.nativeId }, destination: { adapter: adapter.info.id, root: dest }, mode: "copy" });
+        const { mkdirSync } = await import("node:fs");
+        mkdirSync(dest, { recursive: true });
+        const plan = await nomad.plan({ source: { kind: "location", adapter: adapter.info.id, root, nativeId: fixture.nativeId }, destination: { adapter: adapter.info.id, root: dest } });
+        check("the fixture agent can be written", plan.blocked.length === 0, plan.blocked.join("; "));
         const receipt = plan.blocked.length ? null : await nomad.execute(plan.id, { broaderPermissions: true, replace: true, overwriteModified: true });
+        check("the fixture agent was written", !receipt || receipt.status === "success", receipt?.verification.filter((v) => !v.ok).map((v) => `${v.name}: ${v.detail ?? ""}`).join("; ") || receipt?.error);
         const leaks = [...leakedSecrets([JSON.stringify(plan), JSON.stringify(receipt), ...filesUnder(dest)], fixture.secrets), ...leakedSecrets([JSON.stringify(read)], fixture.secrets).filter((l) => !l.startsWith("an sk-")).map((l) => `${l} in the read`)];
         check("never writes secret values", leaks.length === 0, leaks.join(", "));
         check("reading does not modify the source", tree(root) === before);
