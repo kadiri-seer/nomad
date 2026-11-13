@@ -169,8 +169,15 @@ export const codexAdapter: Adapter = {
       doc.permissions = policyFromCodexConfig(cfg);
       if (cfg.mcp_servers) {
         const servers: Record<string, any> = {};
-        for (const [name, s] of Object.entries(cfg.mcp_servers as Record<string, any>)) servers[name] = { ...s, headers: s.http_headers };
-        doc.tools.push(...toolsFromMcpServers(servers, P, L.config));
+        for (const [name, s] of Object.entries(cfg.mcp_servers as Record<string, any>)) {
+          // env_vars forwards shell variables: those are references, not values.
+          const env: Record<string, unknown> = { ...(s.env ?? {}) };
+          for (const v of Array.isArray(s.env_vars) ? s.env_vars : []) if (typeof v === "string" && !(v in env)) env[v] = `\${${v}}`;
+          const headers: Record<string, unknown> = { ...(s.http_headers ?? {}) };
+          for (const [h, v] of Object.entries((s.env_http_headers ?? {}) as Record<string, unknown>)) if (typeof v === "string") headers[h] = `\${${v}}`;
+          servers[name] = { ...s, env, headers };
+        }
+        doc.tools.push(...toolsFromMcpServers(servers, P, L.config, { notes }));
       }
       if (cfg.profiles) doc.extensions["x-codex"] = { profiles: cfg.profiles };
     }
@@ -252,14 +259,27 @@ export const codexAdapter: Adapter = {
     if (wants(ctx, "tools")) {
       const mcpTools = doc.tools.filter((t) => t.kind === "mcp" && t.mcp);
       if (mcpTools.length) {
-        const r = mcpServersFromTools(mcpTools, { platformName: "Codex", envExpansion: false });
+        const r = mcpServersFromTools(mcpTools, { platformName: "Codex", envRefStyle: "none" });
         const servers: Record<string, any> = {};
-        for (const [name, s] of Object.entries(r.servers)) {
-          const { headers, ...rest } = s as Record<string, unknown>;
-          servers[name] = { ...rest, ...(headers ? { http_headers: headers } : {}) };
+        for (const [name, s] of Object.entries(r.servers) as Array<[string, Record<string, any>]>) {
+          const refs = r.refs[name];
+          if (s.url) {
+            // Remote servers: Codex accepts a URL and headers, not env or args.
+            servers[name] = {
+              url: s.url,
+              ...(s.headers ? { http_headers: s.headers } : {}),
+              ...(refs?.headers.length ? { env_http_headers: Object.fromEntries(refs.headers) } : {})
+            };
+            continue;
+          }
+          const { headers: _h, ...rest } = s;
+          // Codex forwards shell variables listed in env_vars, so references keep working without values.
+          servers[name] = { ...rest, ...(refs?.env.length ? { env_vars: refs.env } : {}) };
         }
         config.mcp_servers = servers;
-        manualSteps.push(...r.manualSteps);
+        manualSteps.push(...r.manualSteps.map((m) => m.replace(/^Add (.+) for the "(.+)" MCP server in Codex\. Nomad does not write secret values\.$/, 'Set $1 in your shell before starting Codex: the "$2" MCP server forwards them (env_vars). Nomad does not write secret values.')));
+        unsupported.push(...r.unsupported);
+        notes.push(...r.notes);
       }
       for (const t of doc.tools.filter((t) => t.kind !== "mcp")) unsupported.push({ category: "tools", item: t.name, reason: "Only MCP servers can be configured in Codex." });
     }

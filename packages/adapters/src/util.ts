@@ -11,8 +11,10 @@ import {
   slugify,
   type DesiredFile,
   type Note,
+  type UnsupportedItem,
   type WriteContext
 } from "@nomad/core";
+import { applyKnownServerProfile } from "./known-servers";
 import type { ComponentCategory } from "@nomad/schema";
 import { listDir, readTextIfExists, walkFiles, isDirectory } from "@nomad/core/node";
 import { isSensitiveFile } from "@nomad/security";
@@ -373,105 +375,189 @@ export function parseAgentMarkdown(text: string, platform: string, path: string)
 /* MCP servers                                                         */
 /* ------------------------------------------------------------------ */
 
-function envRecord(raw: unknown): McpServer["env"] {
-  const out: McpServer["env"] = {};
+/** Reference syntaxes: ${VAR}, ${env:VAR} (Cursor), ${VAR:-} and ${VAR:-default}. */
+const ENV_REF = /^\$\{(env:)?([A-Za-z_][A-Za-z0-9_]*)(:-([^}]*))?\}$/;
+
+interface EnvParse {
+  rec: McpServer["env"];
+  /** Entries that may be unset on the source (empty default, or a platform that drops unset refs). */
+  optional: string[];
+  /** Non-empty defaults that are not carried. */
+  defaults: Array<[string, string]>;
+}
+
+function envRecord(raw: unknown, refsOptional = false): EnvParse {
+  const out: EnvParse = { rec: {}, optional: [], defaults: [] };
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
     for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
       if (typeof v === "string") {
-        const ref = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/.exec(v);
-        out[k] = ref ? { secretRef: ref[1], redacted: true } : { value: v };
-      } else if (v !== null && v !== undefined) out[k] = { value: String(v) };
+        const ref = ENV_REF.exec(v);
+        if (!ref) {
+          out.rec[k] = { value: v };
+          continue;
+        }
+        out.rec[k] = { secretRef: ref[2], redacted: true };
+        if (ref[3] !== undefined && ref[4]) out.defaults.push([k, ref[4]]);
+        else if (ref[3] !== undefined || refsOptional) out.optional.push(k);
+      } else if (v !== null && v !== undefined) out.rec[k] = { value: String(v) };
     }
   }
   return out;
 }
 
-/** Claude style `mcpServers` object (Claude Code, Cursor, Gemini CLI, Roo, Windsurf). */
-export function toolsFromMcpServers(raw: unknown, platform: string, path: string): Tool[] {
+export interface McpReadOptions {
+  notes?: Note[];
+  /** The source drops stdio env entries whose reference is unset (Hermes), so every reference is optional. */
+  refsOptional?: boolean;
+  /** Provenance note, for example "plugin priors". */
+  note?: string;
+  /** Extra provenance fields (for example the plugin a server came from). */
+  extra?: Record<string, unknown>;
+}
+
+/** Claude style `mcpServers` object (Claude Code, Cursor, Gemini CLI, Roo, Windsurf, Hermes, ElizaOS). */
+export function toolsFromMcpServers(raw: unknown, platform: string, path: string, opts: McpReadOptions = {}): Tool[] {
   if (!raw || typeof raw !== "object") return [];
   const tools: Tool[] = [];
   for (const [name, cfg] of Object.entries(raw as Record<string, any>)) {
     if (!cfg || typeof cfg !== "object") continue;
     const url = cfg.url ?? cfg.httpUrl ?? cfg.serverUrl;
-    const transport = cfg.type === "sse" ? "sse" : url ? "http" : "stdio";
+    const transport = cfg.type === "sse" || cfg.transport === "sse" ? "sse" : url ? "http" : "stdio";
+    const env = envRecord(cfg.env, opts.refsOptional && transport === "stdio");
+    const headers = envRecord(cfg.headers ?? cfg.http_headers);
+    for (const [k, d] of env.defaults) opts.notes?.push({ level: "info", category: "tools", message: `"${name}": ${k} has a default (${d.length > 40 ? `${d.length} characters` : d}) that is not carried. Set ${k} on the destination if you rely on it.` });
+    const mcp: McpServer = {
+      transport,
+      command: typeof cfg.command === "string" ? cfg.command : undefined,
+      args: Array.isArray(cfg.args) ? cfg.args.map(String) : [],
+      url: typeof url === "string" ? url : undefined,
+      env: env.rec,
+      headers: headers.rec,
+      cwd: typeof cfg.cwd === "string" ? cfg.cwd : undefined
+    };
+    if (env.optional.length) (mcp as Record<string, unknown>).optionalEnv = env.optional;
     tools.push({
       name,
       description: typeof cfg.description === "string" ? cfg.description : undefined,
       kind: "mcp",
-      mcp: {
-        transport,
-        command: typeof cfg.command === "string" ? cfg.command : undefined,
-        args: Array.isArray(cfg.args) ? cfg.args.map(String) : [],
-        url: typeof url === "string" ? url : undefined,
-        env: envRecord(cfg.env),
-        headers: envRecord(cfg.headers ?? cfg.http_headers),
-        cwd: typeof cfg.cwd === "string" ? cfg.cwd : undefined
-      },
+      mcp,
       permissions: [],
       platforms: [],
       enabled: cfg.disabled !== true && cfg.enabled !== false,
-      source: { platform, path }
+      source: { platform, path, ...(opts.note ? { note: opts.note } : {}), ...(opts.extra ?? {}) }
     });
   }
   return tools;
 }
 
+export interface McpRefs {
+  /** Env entries kept as references (names of the env keys). */
+  env: string[];
+  headers: Array<[string, string]>;
+  /** Env entries that may be unset. */
+  optional: string[];
+}
+
 export interface McpWriteResult {
   servers: Record<string, Record<string, unknown>>;
   manualSteps: string[];
+  unsupported: UnsupportedItem[];
+  notes: Note[];
+  /** References per server, for writers that map them natively (Codex env_vars). */
+  refs: Record<string, McpRefs>;
+}
+
+export interface McpWriteOptions {
+  platformName: string;
+  /** Legacy switch: true means "dollar", false means "none". */
+  envExpansion?: boolean;
+  /** How references are written: ${NAME}, ${env:NAME} (Cursor), or not at all (manual steps). */
+  envRefStyle?: "dollar" | "env-prefix" | "none";
+  urlKey?: string;
+  typeField?: boolean;
+  /** How an optional reference is written on this destination; null leaves it to a manual step. */
+  optionalRef?: (tool: Tool, name: string) => string | null;
 }
 
 /**
- * Convert tools into a Claude style mcpServers object.
- * Secret values are never written: they become ${VAR} references when the
- * platform expands them, otherwise they are omitted and listed as setup steps.
+ * Convert tools into a Claude style mcpServers object. Disabled servers are
+ * not written, known servers get their profile applied (known-servers.ts),
+ * and references follow the destination's own syntax.
  */
-export function mcpServersFromTools(
-  tools: Tool[],
-  opts: { platformName: string; envExpansion: boolean; urlKey?: string; typeField?: boolean }
-): McpWriteResult {
-  const servers: Record<string, Record<string, unknown>> = {};
-  const manualSteps: string[] = [];
-  for (const t of tools) {
-    if (t.kind !== "mcp" || !t.mcp) continue;
-    const s: Record<string, unknown> = {};
-    if (t.mcp.transport === "stdio") {
-      s.command = t.mcp.command;
-      if (t.mcp.args.length) s.args = t.mcp.args;
-      if (t.mcp.cwd) s.cwd = t.mcp.cwd;
-    } else {
-      s[opts.urlKey ?? "url"] = t.mcp.url;
-      if (opts.typeField) s.type = t.mcp.transport;
+export function mcpServersFromTools(tools: Tool[], opts: McpWriteOptions): McpWriteResult {
+  const style = opts.envRefStyle ?? (opts.envExpansion ? "dollar" : "none");
+  const asRef = (name: string) => (style === "env-prefix" ? `\${env:${name}}` : `\${${name}}`);
+  const out: McpWriteResult = { servers: {}, manualSteps: [], unsupported: [], notes: [], refs: {} };
+  const seenNotes = new Set<string>();
+  for (const original of tools) {
+    if (original.kind !== "mcp" || !original.mcp) continue;
+    if (original.enabled === false) {
+      out.unsupported.push({ category: "tools", item: original.name, reason: "Disabled on the source, so it is not added.", alternative: "Add it yourself if you want it active here." });
+      continue;
     }
+    const profile = applyKnownServerProfile(original, opts.platformName);
+    const t = profile.tool;
+    out.manualSteps.push(...profile.manualSteps);
+    out.unsupported.push(...profile.unsupported);
+    for (const n of profile.notes) if (!seenNotes.has(n.message)) (seenNotes.add(n.message), out.notes.push(n));
+    const mcp = t.mcp!;
+    const s: Record<string, unknown> = {};
+    if (mcp.transport === "stdio") {
+      s.command = mcp.command;
+      if (mcp.args.length) s.args = mcp.args;
+      if (mcp.cwd) s.cwd = mcp.cwd;
+    } else {
+      s[opts.urlKey ?? "url"] = mcp.url;
+      if (opts.typeField) s.type = mcp.transport;
+    }
+    const optionalNames = new Set(((mcp as Record<string, unknown>).optionalEnv as string[] | undefined) ?? []);
+    const refs: McpRefs = { env: [], headers: [], optional: [] };
     const env: Record<string, string> = {};
     const missing: string[] = [];
-    for (const [k, v] of Object.entries(t.mcp.env)) {
-      if ("value" in v) env[k] = v.value;
-      else if (opts.envExpansion) {
-        env[k] = `\${${v.secretRef}}`;
-        missing.push(v.secretRef);
-      } else missing.push(k);
+    const optionalMissing: string[] = [];
+    for (const [k, v] of Object.entries(mcp.env)) {
+      if ("value" in v) {
+        env[k] = v.value;
+        continue;
+      }
+      refs.env.push(k);
+      if (optionalNames.has(k)) {
+        refs.optional.push(k);
+        const written = style === "none" ? null : (opts.optionalRef?.(t, k) ?? null);
+        if (written !== null) env[k] = written;
+        else optionalMissing.push(k);
+        continue;
+      }
+      if (style !== "none") env[k] = asRef(v.secretRef);
+      missing.push(style === "none" ? k : v.secretRef);
     }
     if (Object.keys(env).length) s.env = env;
     const headers: Record<string, string> = {};
-    for (const [k, v] of Object.entries(t.mcp.headers)) {
+    for (const [k, v] of Object.entries(mcp.headers)) {
       if ("value" in v) headers[k] = v.value;
-      else if (opts.envExpansion) {
-        headers[k] = `\${${v.secretRef}}`;
-        missing.push(v.secretRef);
-      } else missing.push(`${k} header`);
+      else {
+        refs.headers.push([k, v.secretRef]);
+        if (style !== "none") {
+          headers[k] = asRef(v.secretRef);
+          missing.push(v.secretRef);
+        } else missing.push(`${k} header`);
+      }
     }
     if (Object.keys(headers).length) s.headers = headers;
-    servers[t.name] = s;
+    out.servers[t.name] = s;
+    out.refs[t.name] = refs;
     if (missing.length) {
-      manualSteps.push(
-        opts.envExpansion
+      out.manualSteps.push(
+        style !== "none"
           ? `Set ${missing.join(", ")} in your environment so the "${t.name}" MCP server can authenticate in ${opts.platformName}.`
           : `Add ${missing.join(", ")} for the "${t.name}" MCP server in ${opts.platformName}. Nomad does not write secret values.`
       );
     }
+    if (optionalMissing.length) {
+      out.manualSteps.push(`If you use them, set ${optionalMissing.join(", ")} for the "${t.name}" MCP server in ${opts.platformName}. They were optional on the source and ${opts.platformName} may not accept an unset reference, so Nomad left them out.`);
+    }
   }
-  return { servers, manualSteps };
+  return out;
 }
 
 /* ------------------------------------------------------------------ */

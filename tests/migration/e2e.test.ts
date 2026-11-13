@@ -357,7 +357,7 @@ describe("file based adapters", () => {
     const { receipt } = await migrate({ adapter: "claude-code", root: env.roots.claude, nativeId: "main" }, { adapter: "cursor", root: proj });
     expect(receipt.status).toBe("success");
     const mcp = JSON.parse(read(join(proj, ".cursor/mcp.json")));
-    expect(mcp.mcpServers.github.env.GITHUB_TOKEN).toBe("${GITHUB_TOKEN}");
+    expect(mcp.mcpServers.github.env.GITHUB_TOKEN).toBe("${env:GITHUB_TOKEN}"); // Cursor documents ${env:NAME}
   });
 
   it("Gemini CLI gets GEMINI.md and settings.json", async () => {

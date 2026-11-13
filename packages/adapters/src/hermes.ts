@@ -159,7 +159,8 @@ async function readHome(root: string, nativeId: string, notes: Note[], agentId?:
     const model = typeof cfg.model === "string" ? cfg.model : cfg.model?.default;
     if (typeof model === "string") doc.models.preferred = model;
     if (typeof cfg.model?.provider === "string") doc.models.provider = cfg.model.provider;
-    if (cfg.mcp_servers) doc.tools.push(...toolsFromMcpServers(cfg.mcp_servers, P, "config.yaml"));
+    // Hermes drops a stdio env entry whose reference is unset, so references there are optional.
+    if (cfg.mcp_servers) doc.tools.push(...toolsFromMcpServers(cfg.mcp_servers, P, "config.yaml", { notes, refsOptional: true }));
     if (Array.isArray(cfg.command_allowlist)) {
       doc.permissions = { mode: "ask", rules: cfg.command_allowlist.map((c: unknown) => rule("shell", "allow", String(c), "hermes:command_allowlist")), notes: ["Hermes command allowlist"] };
     }
@@ -279,9 +280,14 @@ async function planHome(doc: AgentDocument, ctx: WriteContext): Promise<PlannedW
   if (wants(ctx, "tools")) {
     const mcpTools = doc.tools.filter((t) => t.kind === "mcp" && t.mcp);
     if (mcpTools.length) {
-      const r = mcpServersFromTools(mcpTools, { platformName: "Hermes (~/.hermes/.env)", envExpansion: false });
+      // Hermes expands ${VAR} from ~/.hermes/.env and drops entries whose reference is unset.
+      const r = mcpServersFromTools(mcpTools, { platformName: "Hermes", envRefStyle: "dollar", optionalRef: (_t, name) => `\${${name}}` });
       cfg.mcp_servers = r.servers;
-      manualSteps.push(...r.manualSteps);
+      const refNames = [...new Set(Object.values(r.refs).flatMap((x) => [...x.env.filter((k) => Object.values(r.servers).some((sv: any) => sv.env?.[k])), ...x.headers.map(([, v]) => v)]))];
+      if (refNames.length) manualSteps.push(`Add ${refNames.join(", ")} to ~/.hermes/.env (Nomad never reads or writes that file).`);
+      manualSteps.push(...r.manualSteps.filter((m) => !m.startsWith("Set ")));
+      unsupported.push(...r.unsupported);
+      notes.push(...r.notes);
     }
   }
   if (wants(ctx, "permissions")) {

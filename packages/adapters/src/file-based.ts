@@ -59,6 +59,8 @@ interface McpSpec {
   style: McpStyle;
   writable: boolean;
   envExpansion: boolean;
+  /** Reference syntax when it differs from ${NAME} (Cursor uses ${env:NAME}). */
+  envRefStyle?: "dollar" | "env-prefix" | "none";
   urlKey?: string;
 }
 
@@ -131,16 +133,17 @@ function toolsFromStyle(raw: any, style: McpStyle, platform: string, path: strin
 }
 
 function patchForStyle(tools: Tool[], spec: McpSpec, platformName: string) {
-  const r = mcpServersFromTools(tools, { platformName, envExpansion: spec.envExpansion, urlKey: spec.urlKey });
+  const r = mcpServersFromTools(tools, { platformName, envRefStyle: spec.envRefStyle ?? (spec.envExpansion ? "dollar" : "none"), urlKey: spec.urlKey });
+  const extra = { unsupported: r.unsupported, notes: r.notes };
   switch (spec.style) {
     case "claude":
-      return { patch: { mcpServers: r.servers }, steps: r.manualSteps };
+      return { patch: { mcpServers: r.servers }, steps: r.manualSteps, ...extra };
     case "opencode": {
       const mcp: Record<string, unknown> = {};
       for (const [name, s] of Object.entries(r.servers) as Array<[string, any]>) {
         mcp[name] = s.command ? { type: "local", command: [s.command, ...(s.args ?? [])], ...(s.env ? { environment: s.env } : {}), enabled: true } : { type: "remote", url: s.url, ...(s.headers ? { headers: s.headers } : {}), enabled: true };
       }
-      return { patch: { mcp }, steps: r.manualSteps };
+      return { patch: { mcp }, steps: r.manualSteps, ...extra };
     }
     case "goose": {
       const extensions: Record<string, unknown> = {};
@@ -149,10 +152,10 @@ function patchForStyle(tools: Tool[], spec: McpSpec, platformName: string) {
           ? { name, type: "stdio", cmd: s.command, args: s.args ?? [], ...(s.env ? { envs: s.env } : {}), enabled: true, timeout: 300 }
           : { name, type: "streamable_http", uri: s.url, enabled: true, timeout: 300 };
       }
-      return { patch: { extensions }, steps: r.manualSteps };
+      return { patch: { extensions }, steps: r.manualSteps, ...extra };
     }
     case "continue":
-      return { patch: { mcpServers: Object.entries(r.servers).map(([name, s]) => ({ name, ...s })) }, steps: r.manualSteps };
+      return { patch: { mcpServers: Object.entries(r.servers).map(([name, s]) => ({ name, ...s })) }, steps: r.manualSteps, ...extra };
   }
 }
 
@@ -317,7 +320,9 @@ export function defineFileAdapter(spec: FileAdapterSpec): Adapter {
         const mcpTools = doc.tools.filter((t) => t.kind === "mcp" && t.mcp);
         if (spec.mcp?.writable && mcpTools.length && !nativeId.startsWith("agent:")) {
           const p = await spec.mcp.path(ctx.root);
-          const { patch, steps } = patchForStyle(mcpTools, spec.mcp, name);
+          const { patch, steps, unsupported: skipped, notes: mcpNotes } = patchForStyle(mcpTools, spec.mcp, name);
+          unsupported.push(...skipped);
+          notes.push(...mcpNotes);
           files.push({ path: p, content: spec.mcp.format === "json" ? JSON.stringify(patch, null, 2) + "\n" : stringifyYaml(patch), strategy: spec.mcp.format === "json" ? "merge-json" : "merge-yaml", arrayKeys: spec.mcp.style === "continue" ? { mcpServers: "name" } : undefined, component: "tools", description: `${mcpTools.length} MCP server(s) in ${p}` });
           manualSteps.push(...steps);
         } else {
@@ -375,7 +380,7 @@ export const cursorAdapter = defineFileAdapter({
   ],
   rulesDirs: async () => [{ path: ".cursor/rules", exts: [".mdc", ".md"] }],
   write: { kind: "rule-file", path: at(".cursor/rules"), ext: ".mdc", frontmatter: (doc) => ({ description: doc.description ?? `${doc.name} agent instructions (Nomad)`, alwaysApply: true }) },
-  mcp: { path: at(".cursor/mcp.json"), format: "json", style: "claude", writable: true, envExpansion: true }
+  mcp: { path: at(".cursor/mcp.json"), format: "json", style: "claude", writable: true, envExpansion: true, envRefStyle: "env-prefix" }
 });
 
 export const windsurfAdapter = defineFileAdapter({

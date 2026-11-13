@@ -299,7 +299,7 @@ async function readMain(root: string, notes: Note[], includeSecrets: boolean | u
   const mcp = await readJson(mcpFile, notes);
   if (mcp?.mcpServers) {
     sourceFiles.push(mcpFile);
-    doc.tools.push(...toolsFromMcpServers(mcp.mcpServers, P, L.mcpPath));
+    doc.tools.push(...toolsFromMcpServers(mcp.mcpServers, P, L.mcpPath, { notes }));
   }
   void includeSecrets;
   return { doc, sourceFiles };
@@ -406,7 +406,15 @@ async function planMain(doc: AgentDocument, ctx: WriteContext, L: Layout): Promi
   if (wants(ctx, "tools")) {
     const mcpTools = doc.tools.filter((t) => t.kind === "mcp" && t.mcp);
     if (mcpTools.length) {
-      const r = mcpServersFromTools(mcpTools, { platformName: "Claude Code", envExpansion: true, typeField: true });
+      // Claude Code fails on an unset ${VAR}; ${VAR:-} is used only where the server accepts an empty value.
+      const r = mcpServersFromTools(mcpTools, {
+        platformName: "Claude Code",
+        envRefStyle: "dollar",
+        typeField: true,
+        optionalRef: (t, name) => ((((t.mcp as Record<string, unknown>)?.emptyOkEnv as string[] | undefined) ?? []).includes(name) ? `\${${name}:-}` : null)
+      });
+      unsupported.push(...r.unsupported);
+      notes.push(...r.notes);
       files.push({
         path: L.mcpPath,
         root: L.mcpRoot,
