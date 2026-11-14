@@ -1,3 +1,36 @@
 {
-  "items": []
+  "items": [
+    {
+      "issue": 1,
+      "name": "Claude Desktop",
+      "approved": false,
+      "won": false,
+      "thumbs": 0,
+      "source": "site"
+    },
+    {
+      "issue": 2,
+      "name": "GitHub Copilot (VS Code)",
+      "approved": false,
+      "won": false,
+      "thumbs": 0,
+      "source": "site"
+    },
+    {
+      "issue": 3,
+      "name": "Oak Agent Kit OakAgentKit",
+      "approved": true,
+      "won": false,
+      "thumbs": 0,
+      "source": "site"
+    },
+    {
+      "issue": 4,
+      "name": "Hedgehood",
+      "approved": true,
+      "won": false,
+      "thumbs": 0,
+      "source": "site"
+    }
+  ]
 }
