@@ -6,6 +6,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Holders, Round } from "./core";
+import type { PublishedSuggestion } from "./suggest";
 
 export const DEFAULT_GOVERNANCE_URL = "https://raw.githubusercontent.com/kadiri-seer/nomad/main/governance";
 
@@ -57,6 +58,12 @@ export async function loadRound(id: number, source = governanceSource()): Promis
 
 export async function loadHolders(id: number, source = governanceSource()): Promise<Holders> {
   return (await readJson<Holders>(source, `rounds/round-${id}-holders.json`)) ?? {};
+}
+
+/** Suggestions with an open GitHub issue, published by the round job. */
+export async function loadSuggestions(source = governanceSource()): Promise<PublishedSuggestion[]> {
+  const file = await readJson<{ items?: PublishedSuggestion[] }>(source, "suggestions.json");
+  return Array.isArray(file?.items) ? file.items : [];
 }
 
 export function clearRoundCache() {

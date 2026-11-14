@@ -6,7 +6,6 @@ import { REPO_URL } from "@/components/SiteFooter";
 import { X_HANDLE, X_URL } from "@/components/Social";
 
 export const WEBSITE_VOTE_URL = "https://nomad-iota-six.vercel.app/vote";
-const PROPOSAL_URL = `${REPO_URL}/issues/new?template=integration-proposal.yml`;
 
 type Results = { final: boolean; totals: Record<string, string>; voters: Record<string, number>; totalWeight: string; voterCount: number; winner: string | null };
 type PublicRound = {
@@ -231,7 +230,7 @@ export function VotePanel() {
       {!round || (round.status === "closed" && round.results?.final) ? (
         <div className="panel panel-body vote-empty">
           <p>
-            <strong>No vote is open right now.</strong> Rounds open every two weeks. Suggest an app for the next ballot with the <a href={PROPOSAL_URL}>suggestion form</a> or by replying to the pinned post on <a href={X_URL}>{X_HANDLE}</a>.
+            <strong>No vote is open right now.</strong> Rounds open every two weeks. Suggest an app for the next ballot below, or back the suggestions you want. New rounds are announced on <a href={X_URL}>{X_HANDLE}</a>.
           </p>
         </div>
       ) : null}

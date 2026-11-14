@@ -5,7 +5,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
-import { closeRound, ensureLabels, githubApi, openRound, readConfig, runAuto, type JobDeps } from "../../lib/vote/job";
+import { closeRound, ensureLabels, githubApi, importSuggestions, openRound, publishSuggestions, readConfig, runAuto, type JobDeps } from "../../lib/vote/job";
 
 const mode = process.argv[2] ?? "auto";
 const root = resolve(process.env.GITHUB_WORKSPACE ?? process.cwd());
@@ -35,9 +35,12 @@ const deps: JobDeps = {
 const cfg = await readConfig(dir);
 if (mode === "open") {
   await ensureLabels(deps, cfg);
+  await importSuggestions(deps, cfg);
   console.log(JSON.stringify(await openRound(deps, cfg, { force: true })));
+  await publishSuggestions(deps, cfg);
 } else if (mode === "close") {
   console.log(JSON.stringify(await closeRound(deps, cfg)));
+  await publishSuggestions(deps, cfg);
 } else if (mode === "auto") {
   await runAuto(deps, cfg);
 } else {

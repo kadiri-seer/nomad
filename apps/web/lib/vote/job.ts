@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { tally, tallyToJson, formatAmount, type Holders, type Round, type RoundResult, type Vote } from "./core";
 import { fetchBlockscoutHolders, fetchTransferLogs, holdersFromTransferLogs, rpcCall, sumHolders } from "./snapshot";
 import { verifyStoredVote } from "./verify";
+import { cleanName, suggestionIssueBody, suggestionKey, suggestionMarker, type PendingSuggestion, type PublishedSuggestion } from "./suggest";
 
 export type GovernanceConfig = {
   token: { address: string; symbol: string; decimals: number; deployBlock: number };
@@ -27,10 +28,12 @@ export type GovernanceConfig = {
   labels: { approved: string; suggestion: string; won: string; round: string; bounty: string };
 };
 
-export type Issue = { number: number; title: string; labels: { name: string }[]; reactions?: Record<string, number>; pull_request?: unknown; state?: string };
+export type Issue = { number: number; title: string; body?: string | null; labels: { name: string }[]; reactions?: Record<string, number>; pull_request?: unknown; state?: string };
 
 export interface GitHubApi {
   listOpenIssues(label: string): Promise<Issue[]>;
+  /** Open and closed issues with the label, so closed (rejected) suggestions are not created again. */
+  listAllIssues(label: string): Promise<Issue[]>;
   createIssue(title: string, body: string, labels: string[]): Promise<number>;
   comment(issue: number, body: string): Promise<void>;
   addLabels(issue: number, labels: string[]): Promise<void>;
@@ -89,11 +92,29 @@ export function optionLabel(issue: Pick<Issue, "number" | "title">): string {
   return cleaned || `Suggestion #${issue.number}`;
 }
 
-export function pickBallot(issues: Issue[], cfg: GovernanceConfig): Issue[] {
+/** Thumbs-up on GitHub plus backing on the website. */
+export function backing(issue: Issue, support: Record<string, number> = {}): number {
+  return (issue.reactions?.["+1"] ?? 0) + (support[String(issue.number)] ?? 0);
+}
+
+export function pickBallot(issues: Issue[], cfg: GovernanceConfig, support: Record<string, number> = {}): Issue[] {
   return issues
     .filter((i) => !i.pull_request && !i.labels.some((l) => l.name === cfg.labels.won))
-    .sort((a, b) => (b.reactions?.["+1"] ?? 0) - (a.reactions?.["+1"] ?? 0) || a.number - b.number)
+    .sort((a, b) => backing(b, support) - backing(a, support) || a.number - b.number)
     .slice(0, cfg.maxOptions);
+}
+
+/** Website backing per issue number. A failure counts as no backing rather than stopping a round. */
+async function siteSupport(deps: JobDeps, cfg: GovernanceConfig): Promise<Record<string, number>> {
+  try {
+    const res = await deps.fetch(`${cfg.site.replace(/\/$/, "")}/api/suggest`, { headers: { accept: "application/json" } });
+    if (!res.ok) throw new Error(String(res.status));
+    const body = (await res.json()) as { items?: { issue: number; support: number }[] };
+    return Object.fromEntries((body.items ?? []).map((i) => [String(i.issue), Number(i.support) || 0]));
+  } catch (e) {
+    deps.log(`Could not read website backing (${(e as Error).message}); ranking by GitHub reactions only.`);
+    return {};
+  }
 }
 
 async function snapshotHolders(deps: JobDeps, cfg: GovernanceConfig): Promise<{ holders: Holders; source: string; block: number | null }> {
@@ -148,7 +169,7 @@ export async function openRound(deps: JobDeps, cfg: GovernanceConfig, opts: { fo
     const due = Date.parse(latest.opensAt) + cfg.cadenceDays * DAY;
     if (now.getTime() < due) return { skipped: `The next round is due ${new Date(due).toISOString()}.` };
   }
-  const ballot = pickBallot(await deps.gh.listOpenIssues(cfg.labels.approved), cfg);
+  const ballot = pickBallot(await deps.gh.listOpenIssues(cfg.labels.approved), cfg, await siteSupport(deps, cfg));
   if (ballot.length < cfg.minOptions) return { skipped: `Only ${ballot.length} approved suggestion(s); a round needs at least ${cfg.minOptions}.` };
 
   const id = (latest?.id ?? 0) + 1;
@@ -270,13 +291,71 @@ export async function closeRound(deps: JobDeps, cfg: GovernanceConfig): Promise<
   return { closed: round.id, winner: winner?.id ?? null };
 }
 
-/** The hourly run: close a finished round, then open the next one when it is due. */
+/**
+ * Turns new website suggestions into GitHub issues. A suggestion is skipped when an issue
+ * already carries its marker, or when an open suggestion has the same name. At most
+ * `limit` issues are created per run, so a burst of spam cannot flood the repository.
+ */
+export async function importSuggestions(deps: JobDeps, cfg: GovernanceConfig, limit = 20): Promise<number> {
+  let pending: PendingSuggestion[];
+  try {
+    const res = await deps.fetch(`${cfg.site.replace(/\/$/, "")}/api/suggest/pending`, { headers: { accept: "application/json" } });
+    if (!res.ok) throw new Error(String(res.status));
+    const body = (await res.json()) as { suggestions?: PendingSuggestion[] };
+    pending = Array.isArray(body.suggestions) ? body.suggestions : [];
+  } catch (e) {
+    deps.log(`Could not read website suggestions (${(e as Error).message}); will try next run.`);
+    return 0;
+  }
+  if (pending.length === 0) return 0;
+  const existing = await deps.gh.listAllIssues(cfg.labels.suggestion);
+  const markers = new Set(existing.map((i) => suggestionMarker(i.body)).filter((m): m is string => !!m));
+  const openNames = new Set(existing.filter((i) => i.state !== "closed").map((i) => suggestionKey(optionLabel(i))));
+  let created = 0;
+  for (const s of pending) {
+    if (created >= limit) break;
+    const name = cleanName(s.name);
+    if (!name || markers.has(s.id) || openNames.has(suggestionKey(name))) continue;
+    await deps.gh.createIssue(`[Suggestion] ${name}`, suggestionIssueBody({ ...s, name }), [cfg.labels.suggestion]);
+    markers.add(s.id);
+    openNames.add(suggestionKey(name));
+    created += 1;
+  }
+  if (created) deps.log(`Posted ${created} website suggestion(s) on GitHub.`);
+  return created;
+}
+
+/** Publishes open suggestions to governance/suggestions.json, which the website lists. Commits only on change. */
+export async function publishSuggestions(deps: JobDeps, cfg: GovernanceConfig): Promise<boolean> {
+  const open = (await deps.gh.listOpenIssues(cfg.labels.suggestion)).filter((i) => !i.pull_request);
+  const items: PublishedSuggestion[] = open
+    .map((i) => ({
+      issue: i.number,
+      name: optionLabel(i),
+      approved: i.labels.some((l) => l.name === cfg.labels.approved),
+      won: i.labels.some((l) => l.name === cfg.labels.won),
+      thumbs: i.reactions?.["+1"] ?? 0,
+      source: (suggestionMarker(i.body) ? "site" : "github") as PublishedSuggestion["source"]
+    }))
+    .sort((a, b) => a.issue - b.issue);
+  const path = join(deps.dir, "suggestions.json");
+  const next = JSON.stringify({ items }, null, 2) + "\n";
+  const current = await readFile(path, "utf8").catch(() => "");
+  if (current === next) return false;
+  await writeFile(path, next);
+  await deps.commit("chore(vote): update suggestion list", ["governance/suggestions.json"]);
+  return true;
+}
+
+/** The hourly run: post new suggestions, close a finished round, open the next one when due, refresh the list. */
 export async function runAuto(deps: JobDeps, cfg: GovernanceConfig) {
   await ensureLabels(deps, cfg);
+  await importSuggestions(deps, cfg);
   const closed = await closeRound(deps, cfg);
   deps.log("skipped" in closed ? `Close: ${closed.skipped}` : `Closed round ${closed.closed}.`);
   const opened = await openRound(deps, cfg, { force: false });
   deps.log("skipped" in opened ? `Open: ${opened.skipped}` : `Opened round ${opened.opened}.`);
+  await publishSuggestions(deps, cfg);
 }
 
 /** GitHub REST calls with the workflow's own token. Nothing else is needed. */
@@ -296,6 +375,15 @@ export function githubApi(repo: string, token: string, fetchImpl: FetchLike = fe
       const out: Issue[] = [];
       for (let page = 1; page <= 20; page++) {
         const batch = (await call("GET", `/issues?state=open&labels=${encodeURIComponent(label)}&per_page=100&page=${page}`)) as Issue[];
+        out.push(...batch);
+        if (batch.length < 100) break;
+      }
+      return out;
+    },
+    async listAllIssues(label) {
+      const out: Issue[] = [];
+      for (let page = 1; page <= 20; page++) {
+        const batch = (await call("GET", `/issues?state=all&labels=${encodeURIComponent(label)}&per_page=100&page=${page}`)) as Issue[];
         out.push(...batch);
         if (batch.length < 100) break;
       }

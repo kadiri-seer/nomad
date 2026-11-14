@@ -24,10 +24,13 @@ class FakeGitHub implements GitHubApi {
   async listOpenIssues(label: string) {
     return this.issues.filter((i) => i.state !== "closed" && i.labels.some((l) => l.name === label));
   }
+  async listAllIssues(label: string) {
+    return this.issues.filter((i) => i.labels.some((l) => l.name === label));
+  }
   async createIssue(title: string, body: string, labels: string[]) {
     const number = this.next++;
     this.created.push({ number, title, body, labels });
-    this.issues.push({ number, title, labels: labels.map((name) => ({ name })) });
+    this.issues.push({ number, title, body, labels: labels.map((name) => ({ name })) });
     return number;
   }
   async comment(issue: number, body: string) {
@@ -65,6 +68,7 @@ function setup(world: World = {}) {
   const dir = join(repo, "governance");
   mkdirSync(join(dir, "rounds"), { recursive: true });
   cpSync(join(ROOT, "governance", "config.json"), join(dir, "config.json"));
+  cpSync(join(ROOT, "governance", "suggestions.json"), join(dir, "suggestions.json"));
   writeFileSync(join(dir, "rounds", "index.json"), JSON.stringify({ latest: 0 }));
   const gh = new FakeGitHub();
   let now = new Date("2026-12-01T10:00:00Z");
@@ -133,7 +137,7 @@ describe("round job", () => {
     const cfg = await readConfig(t.dir);
     t.gh.issues = [suggestion(12, "[Suggestion] Windsurf", 3), suggestion(15, "[Suggestion] Cline", 1)];
     await runAuto(t.deps, cfg);
-    expect(t.commits).toHaveLength(0);
+    expect(t.commits.map((c) => c.message)).toEqual(["chore(vote): update suggestion list"]);
     expect(t.logs.join("\n")).toMatch(/first round opens/);
     expect(t.gh.labelsEnsured).toEqual(expect.arrayContaining(["approved", "won", "round", "bounty", "integration-suggestion"]));
   });

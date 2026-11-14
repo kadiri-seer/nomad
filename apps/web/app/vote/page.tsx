@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
+import { SuggestPanel } from "@/components/SuggestPanel";
 import { VotePanel } from "@/components/VotePanel";
 
 export const metadata = {
@@ -17,6 +18,7 @@ export default function VotePage() {
           $NOMAD holders vote on the next integration, and the winner gets a builder bounty. Voting is free: connect your wallet, pick an option and sign. Read the <Link href="/docs/token">rules and how bounties work</Link>.
         </p>
         <VotePanel />
+        <SuggestPanel />
       </main>
       <SiteFooter />
     </>
