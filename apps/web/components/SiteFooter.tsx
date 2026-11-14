@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Logo } from "./Logo";
 import { XLink } from "./Social";
+import { TokenCA } from "./TokenCA";
 
 export const REPO_URL = "https://github.com/kadiri-seer/nomad";
 
@@ -20,6 +21,7 @@ export function SiteFooter() {
             <p style={{ marginTop: 14 }}>
               <XLink />
             </p>
+            <TokenCA />
           </div>
           <div>
             <h4>Product</h4>
