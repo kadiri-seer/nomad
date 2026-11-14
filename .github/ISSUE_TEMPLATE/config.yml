@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Token and bounties
+    url: https://github.com/kadiri-seer/nomad/blob/main/docs/token.md
+    about: How $NOMAD holders vote and how builder bounties are paid.

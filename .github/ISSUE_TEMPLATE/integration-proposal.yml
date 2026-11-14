@@ -1,0 +1,38 @@
+name: Suggest an integration
+description: Suggest an agent platform or tool for Nomad to support. Accepted suggestions go to a $NOMAD holder vote.
+title: "[Suggestion] "
+labels: ["integration-suggestion"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Suggest an app or tool Nomad should move agents to and from. The maintainers check that it can be built safely; accepted suggestions go on the next holder vote. See the [token page](https://github.com/kadiri-seer/nomad/blob/main/docs/token.md) for how votes and bounties work.
+  - type: input
+    id: platform
+    attributes:
+      label: Platform or tool
+      description: Its name and website.
+      placeholder: "Example: Windsurf, https://windsurf.com"
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it should be next
+      description: Who uses it, and what moving agents in or out of it would let them do.
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Where it keeps its agent setup
+      description: Config files, folders or settings you know of (instructions, MCP servers, skills). Leave blank if you don't know.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched the existing suggestions and this one isn't there yet.
+          required: true
+        - label: I have not pasted any keys, tokens or private files in this suggestion.
+          required: true

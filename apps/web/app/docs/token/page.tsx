@@ -1,18 +1,23 @@
 import Link from "next/link";
 import { REPO_URL } from "@/components/SiteFooter";
+import { X_HANDLE, X_URL } from "@/components/Social";
+import { REWARD_SAFE, REWARD_SAFE_URL, SNAPSHOT_URL, TOKEN_CA, TOKEN_CHAIN, TOKEN_CHART_URL, TOKEN_EXPLORER_URL, TOKEN_HOLDERS_URL, TOKEN_TICKER } from "@/lib/token";
 
 export const metadata = {
   title: "Token and builder bounties",
-  description: "How Nomad's token coordinates which integrations get built next and funds the builders who make them."
+  description: "How $NOMAD holders choose which integrations Nomad gets next, and how builders are paid for delivering them."
 };
 
+const PROPOSAL_URL = `${REPO_URL}/issues/new?template=integration-proposal.yml`;
+const BOUNTIES_URL = `${REPO_URL}/issues?q=is%3Aissue+in%3Atitle+%22%5BBounty%5D%22`;
+
 const FLYWHEEL = [
-  "The community proposes integrations and token holders vote.",
+  "The community suggests integrations and token holders vote.",
   "The vote selects the next integration.",
-  "The treasury funds a builder bounty for it.",
+  "The reward wallet funds a builder bounty for it.",
   "Builders develop the integration and pass the tests.",
   "Verified integrations expand what Nomad can move.",
-  "More integrations bring more users, more builders and more proposals."
+  "More integrations bring more users, more builders and more suggestions."
 ];
 
 export default function Token() {
@@ -21,28 +26,45 @@ export default function Token() {
       <p className="label">Documentation</p>
       <h1>Token and builder bounties</h1>
       <p>
-        Nomad&apos;s token has two jobs: governance and funding development. Token holders decide which integrations Nomad gets next, and the treasury pays the builders who deliver them. The token coordinates the people deciding what Nomad becomes and the builders making it happen.
+        {TOKEN_TICKER} has two jobs: governance and funding development. Holders decide which integrations Nomad gets next, and the reward wallet pays the builders who deliver them. The token coordinates the people deciding what Nomad becomes and the builders making it happen.
       </p>
+
+      <h2>Token details</h2>
+      <ul>
+        <li>
+          <strong>Ticker:</strong> {TOKEN_TICKER}
+        </li>
+        <li>
+          <strong>Network:</strong> {TOKEN_CHAIN}
+        </li>
+        <li>
+          <strong>Contract address:</strong> <code className="break">{TOKEN_CA}</code> (<a href={TOKEN_EXPLORER_URL}>explorer</a>, <a href={TOKEN_CHART_URL}>chart</a>)
+        </li>
+        <li>
+          <strong>Reward wallet:</strong> <code className="break">{REWARD_SAFE}</code> (<a href={REWARD_SAFE_URL}>explorer</a>)
+        </li>
+      </ul>
+      <p>Check the contract address against this page before you buy. Tokens with the same name and a different address are not Nomad&apos;s.</p>
 
       <h2>How it works</h2>
       <ol>
         <li>
-          <strong>Integration proposals.</strong> Anyone can propose a new agent platform or tool for Nomad to support. Proposals that the maintainers accept as buildable go forward to a vote.
+          <strong>Integration suggestions.</strong> Anyone can suggest a new agent platform or tool for Nomad to support. Suggestions that the maintainers accept as buildable go forward to a vote.
         </li>
         <li>
-          <strong>Community voting.</strong> Token holders vote on which accepted integration is built next.
+          <strong>Community voting.</strong> Holders vote on which accepted integration is built next.
         </li>
         <li>
-          <strong>Builder bounties.</strong> The treasury funds a bounty, paid in tokens, for the winning integration.
+          <strong>Builder bounties.</strong> The winning integration gets a bounty, paid in {TOKEN_TICKER} from the reward wallet.
         </li>
         <li>
           <strong>Verification.</strong> Builders submit the integration as a pull request. It is reviewed and must pass Nomad&apos;s adapter contract tests and security checks before it is merged.
         </li>
         <li>
-          <strong>Treasury payout.</strong> Once the integration is merged and verified, the builder receives the bounty.
+          <strong>Payout.</strong> Once the integration is merged and verified, the builder receives the bounty.
         </li>
         <li>
-          <strong>Ecosystem expansion.</strong> Each completed integration makes Nomad useful to more agent builders and users, which brings more proposals and more work for the community.
+          <strong>Ecosystem expansion.</strong> Each completed integration makes Nomad useful to more agent builders and users, which brings more suggestions and more work for the community.
         </li>
       </ol>
 
@@ -53,6 +75,37 @@ export default function Token() {
         ))}
       </ol>
       <p>The token gives the community real influence over Nomad&apos;s development and gives developers an economic reason to extend it.</p>
+
+      <h2>Taking part as a holder</h2>
+      <h3>Suggest an integration</h3>
+      <p>
+        Reply to the pinned post on <a href={X_URL}>{X_HANDLE}</a> with the app you want Nomad to support. If you have a GitHub account, you can also use the <a href={PROPOSAL_URL}>suggestion form</a>.
+      </p>
+      <h3>Vote</h3>
+      <ol>
+        <li>Open the vote link posted on {X_HANDLE}. Votes run on Snapshot.</li>
+        <li>Connect the wallet that holds your {TOKEN_TICKER}.</li>
+        <li>Pick an option.</li>
+        <li>Sign the message to confirm. Voting is free: there is no fee, and no tokens leave your wallet.</li>
+      </ol>
+      <h3>Check the payouts</h3>
+      <p>
+        Every bounty payment is sent from the <a href={REWARD_SAFE_URL}>reward wallet</a> and linked on its <a href={BOUNTIES_URL}>bounty issue</a>, so anyone can confirm who was paid and how much. The <a href={TOKEN_HOLDERS_URL}>holders list</a> is public on the explorer too.
+      </p>
+
+      <h2>Voting rules</h2>
+      <ul>
+        <li>A vote runs every two weeks, with three to five accepted suggestions on the ballot.</li>
+        <li>Each vote stays open for about three days.</li>
+        <li>One {TOKEN_TICKER} is one vote. Balances are counted at the moment the vote opens, so tokens bought during a vote do not add votes.</li>
+        <li>The team&apos;s wallets and the reward wallet do not vote.</li>
+        <li>The option with the most votes wins and becomes the next bounty.</li>
+      </ul>
+
+      <h2>The reward wallet</h2>
+      <p>
+        Bounties are paid from a Safe multisig on {TOKEN_CHAIN}. Sending from it needs two approvals, so no single key can move the funds. Each bounty is funded when it is posted: its amount is moved into the reward wallet and the deposit is linked on the bounty issue. The amount of every bounty is stated when it is posted.
+      </p>
 
       <h2>What the token does not include</h2>
       <p>
@@ -72,11 +125,11 @@ export default function Token() {
           Plant fake keys in your fixture and pass them to the contract. It fails if any of them appears in a plan, a receipt or a written file. Wallet folders and key files must never be read.
         </li>
         <li>
-          Open the pull request. Continuous integration runs the full test suite on Linux, macOS and Windows; all of it has to pass.
+          Comment on the <a href={BOUNTIES_URL}>bounty issue</a> with the wallet address for your payout, then open the pull request. Continuous integration runs the full test suite on Linux, macOS and Windows; all of it has to pass.
         </li>
       </ul>
       <p>
-        See also the <Link href="/docs/adapters">platform matrix</Link> and the <Link href="/docs/security">security model</Link>.
+        See also the <Link href="/docs/adapters">platform matrix</Link> and the <Link href="/docs/security">security model</Link>. Votes run on <a href={SNAPSHOT_URL}>Snapshot</a>.
       </p>
     </>
   );

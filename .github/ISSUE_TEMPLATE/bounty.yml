@@ -1,0 +1,49 @@
+name: Bounty (maintainers)
+description: Post the bounty for an integration that won a holder vote.
+title: "[Bounty] "
+labels: ["bounty"]
+body:
+  - type: input
+    id: platform
+    attributes:
+      label: Integration
+      placeholder: "Example: Windsurf adapter"
+    validations:
+      required: true
+  - type: input
+    id: vote
+    attributes:
+      label: Vote result
+      description: Link to the Snapshot vote this integration won.
+    validations:
+      required: true
+  - type: input
+    id: amount
+    attributes:
+      label: Bounty amount
+      placeholder: "Amount in $NOMAD"
+    validations:
+      required: true
+  - type: input
+    id: funding
+    attributes:
+      label: Funding transaction
+      description: Link to the deposit of this amount into the reward wallet (0xe4862B7605f0CD66796F5d1A9cC936462642b515).
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: What counts as done
+      value: |
+        - The adapter follows docs/adapters/building-an-adapter.md and declares honestly what the platform can and cannot hold.
+        - `runAdapterContract` passes against a realistic fixture of the platform, with planted fake keys that never appear in plans, receipts or written files.
+        - Wallet folders and key files are never read.
+        - CI passes on Linux, macOS and Windows.
+        - A maintainer has reviewed and merged the pull request.
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        **Builders:** comment here with the Robinhood Chain wallet address for your payout before you open the pull request. The payout transaction will be linked here once it is sent.

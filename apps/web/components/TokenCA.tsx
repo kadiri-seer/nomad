@@ -1,12 +1,7 @@
 "use client";
 
 import { useState } from "react";
-
-export const TOKEN_TICKER = "$NOMAD";
-export const TOKEN_CA = "0x14c0a77e792f6c9818888630e95c50cf3b48c979";
-export const TOKEN_CHAIN = "Robinhood Chain";
-export const TOKEN_EXPLORER_URL = `https://robinhoodchain.blockscout.com/token/${TOKEN_CA}`;
-export const TOKEN_CHART_URL = `https://dexscreener.com/robinhood/${TOKEN_CA}`;
+import { TOKEN_CA, TOKEN_CHAIN, TOKEN_CHART_URL, TOKEN_EXPLORER_URL, TOKEN_TICKER } from "@/lib/token";
 
 /** The token ticker and contract address, with copy, explorer and chart links. */
 export function TokenCA() {
