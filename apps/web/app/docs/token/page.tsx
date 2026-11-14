@@ -79,7 +79,7 @@ export default function Token() {
       <h2>Taking part as a holder</h2>
       <h3>Suggest an integration</h3>
       <p>
-        Reply to the pinned post on <a href={X_URL}>{X_HANDLE}</a> with the app you want Nomad to support. If you have a GitHub account, use the <a href={PROPOSAL_URL}>suggestion form</a>, and add a thumbs-up reaction to the suggestions you want on the next ballot.
+        Use the suggestion box on the <Link href="/vote">Vote page</Link>: type the app&apos;s name and, if you like, why it should be next. No account or wallet is needed. You can also back the suggestions already listed there. With a GitHub account you can use the <a href={PROPOSAL_URL}>suggestion form</a> and add a thumbs-up reaction instead; both count.
       </p>
       <h3>Vote</h3>
       <ol>
@@ -97,7 +97,7 @@ export default function Token() {
 
       <h2>Voting rules</h2>
       <ul>
-        <li>A round opens every two weeks. Its ballot holds up to five accepted suggestions: the ones with the most thumbs-up reactions on GitHub. A round needs at least two.</li>
+        <li>A round opens every two weeks. Its ballot holds up to five accepted suggestions: the ones with the most backing (backs on the Vote page plus thumbs-up reactions on GitHub). A round needs at least two.</li>
         <li>Each vote stays open for about three days.</li>
         <li>One {TOKEN_TICKER} is one vote. Balances are counted at the moment the vote opens, so tokens bought during a vote do not add votes.</li>
         <li>The team&apos;s wallets and the reward wallet do not vote.</li>

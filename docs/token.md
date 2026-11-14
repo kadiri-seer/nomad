@@ -33,7 +33,7 @@ Check the contract address against this page before you buy. Tokens with the sam
 
 ### Suggest an integration
 
-Reply to the pinned post on [@thenomadlabs](https://x.com/thenomadlabs) with the app you want Nomad to support. With a GitHub account, use the [suggestion form](https://github.com/kadiri-seer/nomad/issues/new?template=integration-proposal.yml), and add a thumbs-up reaction to the suggestions you want on the next ballot.
+Use the suggestion box on the [Vote page](https://nomad-iota-six.vercel.app/vote): type the app's name and, if you like, why it should be next. No account or wallet is needed. You can also back the suggestions already listed there. With a GitHub account you can use the [suggestion form](https://github.com/kadiri-seer/nomad/issues/new?template=integration-proposal.yml) and add a thumbs-up reaction instead; both count.
 
 ### Vote
 
@@ -48,7 +48,7 @@ Every bounty payment is sent from the reward wallet and linked on its [bounty is
 
 ## Voting rules
 
-- A round opens every two weeks. Its ballot holds up to five accepted suggestions: the ones with the most thumbs-up reactions on GitHub. A round needs at least two.
+- A round opens every two weeks. Its ballot holds up to five accepted suggestions: the ones with the most backing (backs on the Vote page plus thumbs-up reactions on GitHub). A round needs at least two.
 - Each vote stays open for about three days.
 - One $NOMAD is one vote. Balances are counted at the moment the vote opens, so tokens bought during a vote do not add votes.
 - The team's wallets and the reward wallet do not vote.
