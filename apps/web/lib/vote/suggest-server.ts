@@ -1,11 +1,10 @@
-import { redisFromEnv } from "./redis";
+import { findRedisEnv, UpstashRedis } from "./redis";
 import { loadSuggestions } from "./rounds";
 import { SuggestionStore } from "./suggest";
 
 export function suggestionStore(env: Record<string, string | undefined> = process.env): SuggestionStore | null {
-  const redis = redisFromEnv(env);
-  const salt = env.KV_REST_API_TOKEN ?? env.UPSTASH_REDIS_REST_TOKEN;
-  return redis && salt ? new SuggestionStore(redis, salt) : null;
+  const found = findRedisEnv(env);
+  return found ? new SuggestionStore(new UpstashRedis(found.url, found.token), found.token) : null;
 }
 
 export { loadSuggestions };

@@ -3,6 +3,7 @@
  * Vercel; every key starts with `nomad:` so it can share a database with other projects.
  */
 import type { Vote } from "./core";
+import { findRedisEnv } from "./redis";
 
 export interface VoteStore {
   /** Saves the vote only if this wallet has not voted in this round. Returns false if it had. */
@@ -91,8 +92,6 @@ export class UpstashVoteStore implements VoteStore {
 
 /** Picks up the connection that Vercel's Upstash integration adds to the project. */
 export function storeFromEnv(env: Record<string, string | undefined> = process.env): VoteStore | null {
-  const url = env.KV_REST_API_URL ?? env.UPSTASH_REDIS_REST_URL;
-  const token = env.KV_REST_API_TOKEN ?? env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) return null;
-  return new UpstashVoteStore(url, token);
+  const found = findRedisEnv(env);
+  return found ? new UpstashVoteStore(found.url, found.token) : null;
 }

@@ -74,11 +74,45 @@ export class MemoryRedis implements RedisLike {
   }
 }
 
+export type RedisEnv = { url: string; token: string; urlName: string; tokenName: string };
+
+const PAIRS: [RegExp, string][] = [
+  [/^(.*?)REST_API_URL$/, "REST_API_TOKEN"],
+  [/^(.*?)UPSTASH_REDIS_REST_URL$/, "UPSTASH_REDIS_REST_TOKEN"]
+];
+
+/**
+ * Finds the Upstash REST connection Vercel added. Vercel puts the chosen prefix in front
+ * (KV_REST_API_URL by default, NOMAD_REST_API_URL with the prefix NOMAD, ...), so any prefix
+ * is accepted as long as the matching token has the same prefix. Upstash hosts are preferred,
+ * and the read-only token is never used.
+ */
+export function findRedisEnv(env: Record<string, string | undefined> = process.env): RedisEnv | null {
+  const names = Object.keys(env).sort((a, b) => a.length - b.length || a.localeCompare(b));
+  const found: RedisEnv[] = [];
+  for (const [re, tokenSuffix] of PAIRS) {
+    for (const urlName of names) {
+      const m = re.exec(urlName);
+      if (!m) continue;
+      const tokenName = `${m[1]}${tokenSuffix}`;
+      const url = env[urlName];
+      const token = env[tokenName];
+      if (url && token && /^https:\/\//.test(url)) found.push({ url, token, urlName, tokenName });
+    }
+  }
+  return found.find((f) => /upstash\.io/i.test(f.url)) ?? found[0] ?? null;
+}
+
+/** Names (never values) of variables that look like storage settings, for the health check. */
+export function storageVariableNames(env: Record<string, string | undefined> = process.env): string[] {
+  return Object.keys(env)
+    .filter((k) => /(KV_|REDIS|UPSTASH|REST_API)/.test(k))
+    .sort();
+}
+
 export function redisFromEnv(env: Record<string, string | undefined> = process.env): RedisLike | null {
-  const url = env.KV_REST_API_URL ?? env.UPSTASH_REDIS_REST_URL;
-  const token = env.KV_REST_API_TOKEN ?? env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) return null;
-  return new UpstashRedis(url, token);
+  const found = findRedisEnv(env);
+  return found ? new UpstashRedis(found.url, found.token) : null;
 }
 
 /** Redis returns hashes as [field, value, field, value, ...] over REST. */

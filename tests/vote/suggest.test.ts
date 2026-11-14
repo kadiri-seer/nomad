@@ -3,7 +3,7 @@ import { cpSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { cleanName, cleanWhy, LIMITS, suggestionIssueBody, suggestionKey, suggestionMarker, SuggestionStore, visitorTag, type PublishedSuggestion } from "../../apps/web/lib/vote/suggest";
-import { hashToObject, MemoryRedis, redisFromEnv, UpstashRedis } from "../../apps/web/lib/vote/redis";
+import { findRedisEnv, hashToObject, MemoryRedis, redisFromEnv, storageVariableNames, UpstashRedis } from "../../apps/web/lib/vote/redis";
 import { backing, importSuggestions, pickBallot, publishSuggestions, readConfig, type GitHubApi, type Issue, type JobDeps } from "../../apps/web/lib/vote/job";
 
 const ROOT = resolve(__dirname, "../..");
@@ -106,6 +106,22 @@ describe("redis client", () => {
     expect(sent[0]).toEqual(["HGETALL", "nomad:k"]);
     expect(redisFromEnv({})).toBeNull();
     expect(redisFromEnv({ KV_REST_API_URL: "https://x", KV_REST_API_TOKEN: "t" })).toBeInstanceOf(UpstashRedis);
+  });
+
+  it("finds the connection whatever prefix Vercel was given, never the read-only token", () => {
+    const env = {
+      NOMAD_REST_API_URL: "https://able-cat-1.upstash.io",
+      NOMAD_REST_API_TOKEN: "write",
+      NOMAD_REST_API_READ_ONLY_TOKEN: "read",
+      NOMAD_URL: "rediss://default:x@able-cat-1.upstash.io:6379"
+    };
+    expect(findRedisEnv(env)).toEqual({ url: env.NOMAD_REST_API_URL, token: "write", urlName: "NOMAD_REST_API_URL", tokenName: "NOMAD_REST_API_TOKEN" });
+    expect(findRedisEnv({ STORAGE_KV_REST_API_URL: "https://a.upstash.io", STORAGE_KV_REST_API_TOKEN: "t" })?.urlName).toBe("STORAGE_KV_REST_API_URL");
+    expect(findRedisEnv({ UPSTASH_REDIS_REST_URL: "https://a.upstash.io", UPSTASH_REDIS_REST_TOKEN: "t" })?.tokenName).toBe("UPSTASH_REDIS_REST_TOKEN");
+    expect(findRedisEnv({ OTHER_REST_API_URL: "https://api.other.com", OTHER_REST_API_TOKEN: "o", NOMAD_REST_API_URL: "https://b.upstash.io", NOMAD_REST_API_TOKEN: "n" })?.token).toBe("n");
+    expect(findRedisEnv({ NOMAD_REST_API_URL: "https://b.upstash.io" })).toBeNull();
+    expect(findRedisEnv({ NOMAD_REST_API_URL: "http://b.upstash.io", NOMAD_REST_API_TOKEN: "n" })).toBeNull();
+    expect(storageVariableNames(env)).toEqual(["NOMAD_REST_API_READ_ONLY_TOKEN", "NOMAD_REST_API_TOKEN", "NOMAD_REST_API_URL"]);
   });
 });
 
