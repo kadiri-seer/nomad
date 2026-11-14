@@ -244,10 +244,10 @@ describe("round job", () => {
     expect(t.gh.comments.find((c) => c.issue === r1.roundIssue)?.body).toMatch(/no votes, so there is no winner/);
 
     await t.gh.addLabels(12, ["won"]);
-    t.setNow(new Date(Date.parse(r1.opensAt) + 6 * DAY));
+    t.setNow(new Date(Date.parse(r1.opensAt) + 1 * DAY));
     await runAuto(t.deps, cfg);
     expect(t.read<{ latest: number }>("index.json")).toEqual({ latest: 1 });
-    t.setNow(new Date(Date.parse(r1.opensAt) + 7 * DAY + 1));
+    t.setNow(new Date(Date.parse(r1.opensAt) + 2 * DAY + 1));
     await runAuto(t.deps, cfg);
     const r2 = t.read<Round>("round-2.json");
     expect(r2.options.map((o) => o.id)).toEqual(["15", "18"]);

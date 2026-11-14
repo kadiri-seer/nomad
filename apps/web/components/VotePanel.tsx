@@ -230,7 +230,7 @@ export function VotePanel() {
       {!round || (round.status === "closed" && round.results?.final) ? (
         <div className="panel panel-body vote-empty">
           <p>
-            <strong>No vote is open right now.</strong> A new round opens every week. Suggest an app for the next ballot below, or back the suggestions you want. New rounds are announced on <a href={X_URL}>{X_HANDLE}</a>.
+            <strong>No vote is open right now.</strong> Rounds run every 48 hours, back to back; the next one opens as soon as at least two suggestions have been accepted. Suggest an app for the next ballot below, or back the suggestions you want. New rounds are announced on <a href={X_URL}>{X_HANDLE}</a>.
           </p>
         </div>
       ) : null}

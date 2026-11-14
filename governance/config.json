@@ -13,7 +13,7 @@
   },
   "site": "https://nomad-iota-six.vercel.app",
   "votingDays": 2,
-  "cadenceDays": 7,
+  "cadenceDays": 2,
   "maxOptions": 5,
   "minOptions": 2,
   "labels": {
