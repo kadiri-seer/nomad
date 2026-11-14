@@ -33,14 +33,14 @@ Check the contract address against this page before you buy. Tokens with the sam
 
 ### Suggest an integration
 
-Reply to the pinned post on [@thenomadlabs](https://x.com/thenomadlabs) with the app you want Nomad to support. With a GitHub account you can also use the [suggestion form](https://github.com/kadiri-seer/nomad/issues/new?template=integration-proposal.yml).
+Reply to the pinned post on [@thenomadlabs](https://x.com/thenomadlabs) with the app you want Nomad to support. With a GitHub account, use the [suggestion form](https://github.com/kadiri-seer/nomad/issues/new?template=integration-proposal.yml), and add a thumbs-up reaction to the suggestions you want on the next ballot.
 
 ### Vote
 
-1. Open the vote link posted on @thenomadlabs. Votes run on [Snapshot](https://snapshot.box).
+1. Open the [Vote page](https://nomad-iota-six.vercel.app/vote) while a round is open. Each new round is also announced on @thenomadlabs.
 2. Connect the wallet that holds your $NOMAD.
 3. Pick an option.
-4. Sign the message to confirm. Voting is free: there is no fee, and no tokens leave your wallet.
+4. Sign the message to confirm. Voting is free: no transaction is sent, there is no fee, and no tokens leave your wallet.
 
 ### Check the payouts
 
@@ -48,11 +48,13 @@ Every bounty payment is sent from the reward wallet and linked on its [bounty is
 
 ## Voting rules
 
-- A vote runs every two weeks, with three to five accepted suggestions on the ballot.
+- A round opens every two weeks. Its ballot holds up to five accepted suggestions: the ones with the most thumbs-up reactions on GitHub. A round needs at least two.
 - Each vote stays open for about three days.
 - One $NOMAD is one vote. Balances are counted at the moment the vote opens, so tokens bought during a vote do not add votes.
 - The team's wallets and the reward wallet do not vote.
-- The option with the most votes wins and becomes the next bounty.
+- The option with the most votes wins and becomes the next bounty. In a tie, the option with more voting wallets wins; if that is also tied, the older suggestion wins.
+- One vote per wallet, and it cannot be changed.
+- Everything is public: the ballot, the balances taken when the round opened and every signed vote are published in [governance/rounds](../governance/rounds). When a round closes, every signature is checked again and the votes are recounted before the result is posted. See [governance/README.md](../governance/README.md).
 
 ## The reward wallet
 

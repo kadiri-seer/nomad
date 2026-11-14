@@ -73,3 +73,10 @@ Not verified:
 - Claude Code plugin layout (`installed_plugins.json` shape, `enabledPlugins`) and Hermes plugin layout beyond the documented files are modeled on documentation, not on a real install.
 - Whether Claude Code accepts `${VAR:-}` for every variable (only `PRIORS_AGENT_ID` is written that way), whether ElizaOS's MCP plugin expands `${VAR}`, and whether it ignores the `settings.nomadAgentId` key.
 - OpenClaw (Phase 1B) is not done.
+
+## Holder vote (added)
+
+- Vote page at `/vote`, vote API under `/api/vote`, round job in `.github/workflows/vote-rounds.yml`, round files in `governance/`. See [governance/README.md](../governance/README.md).
+- Tested: signature checks, weighting from the balance snapshot, one vote per wallet, closed and upcoming rounds, tie rules, the explorer and transfer-replay snapshots, the round job (opening, closing, recount, GitHub comments and labels), and an end-to-end run in a browser with wallets that really sign, a stand-in database and the close step recounting those votes.
+- Not yet verified: the live Robinhood Chain RPC and Blockscout API (unreachable from the build environment), the connected Upstash database, and a vote from a real wallet app. The first round is the check: open it by hand and cast one test vote.
+- Smart-contract wallets (ERC-1271) cannot vote yet; votes must be signed by an ordinary wallet key.

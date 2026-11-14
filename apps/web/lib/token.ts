@@ -12,4 +12,3 @@ export const TOKEN_EXPLORER_URL = `${EXPLORER}/token/${TOKEN_CA}`;
 export const TOKEN_HOLDERS_URL = `${EXPLORER}/token/${TOKEN_CA}?tab=holders`;
 export const TOKEN_CHART_URL = `https://dexscreener.com/robinhood/${TOKEN_CA}`;
 export const REWARD_SAFE_URL = `${EXPLORER}/address/${REWARD_SAFE}`;
-export const SNAPSHOT_URL = "https://snapshot.box";

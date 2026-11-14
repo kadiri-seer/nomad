@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { REPO_URL } from "@/components/SiteFooter";
 import { X_HANDLE, X_URL } from "@/components/Social";
-import { REWARD_SAFE, REWARD_SAFE_URL, SNAPSHOT_URL, TOKEN_CA, TOKEN_CHAIN, TOKEN_CHART_URL, TOKEN_EXPLORER_URL, TOKEN_HOLDERS_URL, TOKEN_TICKER } from "@/lib/token";
+import { REWARD_SAFE, REWARD_SAFE_URL, TOKEN_CA, TOKEN_CHAIN, TOKEN_CHART_URL, TOKEN_EXPLORER_URL, TOKEN_HOLDERS_URL, TOKEN_TICKER } from "@/lib/token";
 
 export const metadata = {
   title: "Token and builder bounties",
@@ -79,14 +79,16 @@ export default function Token() {
       <h2>Taking part as a holder</h2>
       <h3>Suggest an integration</h3>
       <p>
-        Reply to the pinned post on <a href={X_URL}>{X_HANDLE}</a> with the app you want Nomad to support. If you have a GitHub account, you can also use the <a href={PROPOSAL_URL}>suggestion form</a>.
+        Reply to the pinned post on <a href={X_URL}>{X_HANDLE}</a> with the app you want Nomad to support. If you have a GitHub account, use the <a href={PROPOSAL_URL}>suggestion form</a>, and add a thumbs-up reaction to the suggestions you want on the next ballot.
       </p>
       <h3>Vote</h3>
       <ol>
-        <li>Open the vote link posted on {X_HANDLE}. Votes run on Snapshot.</li>
+        <li>
+          Open the <Link href="/vote">Vote page</Link> while a round is open. Each new round is also announced on {X_HANDLE}.
+        </li>
         <li>Connect the wallet that holds your {TOKEN_TICKER}.</li>
         <li>Pick an option.</li>
-        <li>Sign the message to confirm. Voting is free: there is no fee, and no tokens leave your wallet.</li>
+        <li>Sign the message to confirm. Voting is free: no transaction is sent, there is no fee, and no tokens leave your wallet.</li>
       </ol>
       <h3>Check the payouts</h3>
       <p>
@@ -95,11 +97,15 @@ export default function Token() {
 
       <h2>Voting rules</h2>
       <ul>
-        <li>A vote runs every two weeks, with three to five accepted suggestions on the ballot.</li>
+        <li>A round opens every two weeks. Its ballot holds up to five accepted suggestions: the ones with the most thumbs-up reactions on GitHub. A round needs at least two.</li>
         <li>Each vote stays open for about three days.</li>
         <li>One {TOKEN_TICKER} is one vote. Balances are counted at the moment the vote opens, so tokens bought during a vote do not add votes.</li>
         <li>The team&apos;s wallets and the reward wallet do not vote.</li>
-        <li>The option with the most votes wins and becomes the next bounty.</li>
+        <li>The option with the most votes wins and becomes the next bounty. In a tie, the option with more voting wallets wins; if that is also tied, the older suggestion wins.</li>
+        <li>One vote per wallet, and it cannot be changed.</li>
+        <li>
+          Everything is public: the ballot, the balances taken when the round opened and every signed vote are published in the <a href={`${REPO_URL}/tree/main/governance/rounds`}>repository</a>. When a round closes, every signature is checked again and the votes are recounted before the result is posted.
+        </li>
       </ul>
 
       <h2>The reward wallet</h2>
@@ -129,7 +135,7 @@ export default function Token() {
         </li>
       </ul>
       <p>
-        See also the <Link href="/docs/adapters">platform matrix</Link> and the <Link href="/docs/security">security model</Link>. Votes run on <a href={SNAPSHOT_URL}>Snapshot</a>.
+        See also the <Link href="/docs/adapters">platform matrix</Link> and the <Link href="/docs/security">security model</Link>.
       </p>
     </>
   );
