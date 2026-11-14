@@ -74,6 +74,25 @@ Not verified:
 - Whether Claude Code accepts `${VAR:-}` for every variable (only `PRIORS_AGENT_ID` is written that way), whether ElizaOS's MCP plugin expands `${VAR}`, and whether it ignores the `settings.nomadAgentId` key.
 - OpenClaw (Phase 1B) is not done.
 
+## Oak setups (added)
+
+Written Nov 14, 2026. Oak Agent Kit is a local wallet and tools for Robinhood Chain projects. Oak and its team have not been contacted and have not reviewed this work. See [docs/guides/oak-setups.md](guides/oak-setups.md).
+
+Tested (automated, every push):
+- Oak setups moving between Claude Code, Codex, Hermes, Cursor and Gemini CLI, including Oak's Claude Code plugin, whose `.mcp.json` lists servers without an `mcpServers` wrapper (`tests/migration/oak.test.ts`).
+- `~/.oak` is never read, followed through a symlink or written; wallet contents never appear in plans, receipts, destinations, backups or `.nomad` exports, with or without `--include-secrets`; sources and `~/.oak` are unchanged after every move; every move is idempotent.
+- Which entries count as Oak (the `oak` command with `mcp`, `npx @oakagentkit/addon`), and that the Priors profile behaves exactly as before.
+
+Checked with real applications on Nov 14, 2026 (Oak `@oakagentkit/addon` 0.3.8 installed in a throwaway folder, throwaway home folders, no funds):
+- Oak's own `oak connect` reports "already set up, nothing was changed" for the entries Nomad wrote into Codex, Gemini CLI, Cursor and Claude Code. The same command on an empty home writes a new entry, so the check is meaningful.
+- Claude Code 2.1.325 started Oak and connected for the entries Nomad wrote: `oak mcp`, the pinned `npx -y @oakagentkit/addon@0.3.8 mcp`, and the entry moved from Hermes.
+- Oak's MCP server answers an MCP initialize with server `oak` 0.3.8. On first start it created a new wallet in the throwaway home, and with no system keychain available it kept the wallet's unlock key in `~/.oak`.
+
+Not verified:
+- Codex, Cursor, Gemini CLI and Hermes were not run with the moved entries (only Oak's own check above).
+- Signing, approvals and anything on chain: no wallet was funded and no transaction was made. Which apps show Oak's approval form (MCP form elicitation) was not tested.
+- Gemini CLI's bare `$NAME` references are read as plain text by Nomad for every server, not only Oak; `${NAME}` works. For Oak this fails safe: Oak rejects the value.
+
 ## Holder vote (added)
 
 - Vote page at `/vote`, vote API under `/api/vote`, round job in `.github/workflows/vote-rounds.yml`, round files in `governance/`. See [governance/README.md](../governance/README.md).

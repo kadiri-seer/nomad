@@ -33,6 +33,8 @@ Every move shows a short summary first (`--details` for every file and diff, `--
 
 We are exploring Priors setups: moving the Priors MCP servers and Hermes plugin settings between agents, with keys and limits shown as things you set again. Priors is a credit service for agents on Robinhood Chain. See [docs/guides/priors-setups.md](docs/guides/priors-setups.md). Wallet keys, key files and wallet state are never read or copied ([security model](docs/security/model.md)).
 
+Oak setups move the same way: the Oak MCP entry (`oak mcp`, `npx @oakagentkit/addon`, or Oak's Claude Code plugin) arrives in the destination's own format, and `~/.oak`, where Oak keeps its wallet, is never read. Oak Agent Kit is a local wallet and tools for Robinhood Chain projects. See [docs/guides/oak-setups.md](docs/guides/oak-setups.md).
+
 Packages: a `.nomad` file is a small ZIP of plain Markdown and JSON (`nomad.json`, `AGENTS.md`, `SOUL.md`, `MEMORY.md`, `skills/`, `routines/`, `tools.json`) with a SHA-256 for every file. Add `--sign` to sign it with your own Ed25519 key; whoever opens it sees whether it came from you, someone they trust or an unknown key, and any change after signing is reported (`nomad keys`, `nomad trust <file> --name <who>`). Older `.agentpack` files still open. Nomad also reads and writes `.jetpack` interchange archives, the flat layout other agent portability tools use (`nomad export <agent> --format jetpack`, and any `.jetpack` works wherever a package is accepted). Parts that layout has no place for, such as MCP tools, travel in a namespaced manifest key that other readers ignore.
 
 ## Install

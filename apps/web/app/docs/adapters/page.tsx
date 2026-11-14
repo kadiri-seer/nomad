@@ -92,6 +92,10 @@ export default function Adapters() {
       <p>
         We are exploring Priors setups: moving the Priors MCP servers and Hermes plugin settings between agents, with keys and limits shown as things you set again. Priors is a credit service for agents on Robinhood Chain. Wallet keys, key files and on-chain state are never read or moved. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/priors-setups.md">Priors setups guide</a>.
       </p>
+      <h2>Oak setups</h2>
+      <p>
+        Oak Agent Kit is a local wallet and tools for Robinhood Chain projects, used by an agent through one MCP server. Nomad moves the Oak MCP entry (<code>oak mcp</code>, <code>npx @oakagentkit/addon</code>, or Oak&apos;s Claude Code plugin) into the destination&apos;s own format, the same entry Oak&apos;s own setup writes. <code>~/.oak</code>, where Oak keeps its wallet and settings, is never read or moved. On another computer, Oak starts with a new wallet unless you restore yours there yourself. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/oak-setups.md">Oak setups guide</a>.
+      </p>
       <h3>Guided platforms</h3>
       <p>
         Hosted products (ChatGPT, Claude, Gemini, Grok, Perplexity) do not offer an agent import, and frameworks (CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n, Letta) define agents in code or in their own apps. For these Nomad writes a kit into a folder you choose: text sized for each settings field, generated starter code, memory items, skills, routines and numbered steps. Nothing is sent to those services.
