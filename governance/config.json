@@ -12,8 +12,8 @@
     "explorer": "https://robinhoodchain.blockscout.com"
   },
   "site": "https://nomad-iota-six.vercel.app",
-  "votingDays": 3,
-  "cadenceDays": 14,
+  "votingDays": 2,
+  "cadenceDays": 7,
   "maxOptions": 5,
   "minOptions": 2,
   "labels": {

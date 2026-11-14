@@ -164,7 +164,7 @@ describe("round job", () => {
     expect(round.excluded).toContain(SAFE.toLowerCase());
     expect(round.snapshot).toMatchObject({ holders: 2, totalWeight: (1250n * E18).toString(), source: "explorer holder list", block: 100 });
     expect(round.token.decimals).toBe(18);
-    expect(Date.parse(round.closesAt) - Date.parse(round.opensAt)).toBe(3 * DAY);
+    expect(Date.parse(round.closesAt) - Date.parse(round.opensAt)).toBe(2 * DAY);
     expect(t.read<Record<string, string>>("round-1-holders.json")[alice.address.toLowerCase()]).toBe((1000n * E18).toString());
     expect(t.read<{ latest: number }>("index.json")).toEqual({ latest: 1 });
     expect(t.commits[0].message).toBe("chore(vote): open round 1");
@@ -244,10 +244,10 @@ describe("round job", () => {
     expect(t.gh.comments.find((c) => c.issue === r1.roundIssue)?.body).toMatch(/no votes, so there is no winner/);
 
     await t.gh.addLabels(12, ["won"]);
-    t.setNow(new Date(Date.parse(r1.opensAt) + 13 * DAY));
+    t.setNow(new Date(Date.parse(r1.opensAt) + 6 * DAY));
     await runAuto(t.deps, cfg);
     expect(t.read<{ latest: number }>("index.json")).toEqual({ latest: 1 });
-    t.setNow(new Date(Date.parse(r1.opensAt) + 14 * DAY + 1));
+    t.setNow(new Date(Date.parse(r1.opensAt) + 7 * DAY + 1));
     await runAuto(t.deps, cfg);
     const r2 = t.read<Round>("round-2.json");
     expect(r2.options.map((o) => o.id)).toEqual(["15", "18"]);
