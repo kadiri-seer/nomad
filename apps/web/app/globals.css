@@ -900,7 +900,7 @@ table.data .why {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   gap: 48px;
-  padding: 48px 0 80px;
+  padding: 48px 20px 80px;
 }
 .doc-nav {
   position: sticky;
