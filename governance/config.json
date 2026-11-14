@@ -1,0 +1,26 @@
+{
+  "token": {
+    "address": "0x14c0a77e792f6c9818888630e95c50cf3b48c979",
+    "symbol": "$NOMAD",
+    "decimals": 18,
+    "deployBlock": 0
+  },
+  "rewardWallet": "0xe4862B7605f0CD66796F5d1A9cC936462642b515",
+  "excluded": ["0xe4862B7605f0CD66796F5d1A9cC936462642b515"],
+  "chain": {
+    "rpc": "https://rpc.mainnet.chain.robinhood.com",
+    "explorer": "https://robinhoodchain.blockscout.com"
+  },
+  "site": "https://nomad-iota-six.vercel.app",
+  "votingDays": 3,
+  "cadenceDays": 14,
+  "maxOptions": 5,
+  "minOptions": 2,
+  "labels": {
+    "approved": "approved",
+    "suggestion": "integration-suggestion",
+    "won": "won",
+    "round": "round",
+    "bounty": "bounty"
+  }
+}

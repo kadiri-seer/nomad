@@ -1,0 +1,42 @@
+name: Vote rounds
+# Opens and closes $NOMAD holder vote rounds. Runs every hour; press "Run workflow"
+# with "open" to start the first round (or one early), or "close" to close a finished one.
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "auto, open or close"
+        required: true
+        default: auto
+        type: choice
+        options: [auto, open, close]
+permissions:
+  contents: write
+  issues: write
+concurrency:
+  group: vote-rounds
+  cancel-in-progress: false
+jobs:
+  rounds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run the round job
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTION: ${{ inputs.action || 'auto' }}
+        run: |
+          git config user.name "kadiri-seer"
+          git config user.email "kadiriseer@gmail.com"
+          pnpm exec tsx apps/web/scripts/governance/run.ts "$ACTION"
