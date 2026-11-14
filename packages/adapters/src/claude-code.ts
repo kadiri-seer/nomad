@@ -44,6 +44,14 @@ import {
 
 const P = "claude-code";
 
+/**
+ * Plugin marketplaces whose GitHub repository is known, used for install steps when the
+ * source did not record it (known_marketplaces.json missing). Only documented ones.
+ */
+const KNOWN_MARKETPLACE_REPOS: Record<string, string> = {
+  "oak-agent-kit": "OakAgentKit/oak"
+};
+
 interface Layout {
   user: boolean;
   root: string;
@@ -262,6 +270,16 @@ async function readInstalledPlugins(root: string, settings: any, notes: Note[]):
     if (mcpFile?.mcpServers) {
       out.sourceFiles.push(mcpPath);
       Object.assign(servers, mcpFile.mcpServers);
+    } else if (mcpFile && typeof mcpFile === "object") {
+      // Claude Code also accepts a plugin .mcp.json that lists servers directly, without
+      // an mcpServers wrapper (Oak's plugin does). Only entries shaped like a server count.
+      const flat = Object.entries(mcpFile).filter(
+        ([, v]) => !!v && typeof v === "object" && !Array.isArray(v) && (typeof (v as Record<string, unknown>).command === "string" || typeof (v as Record<string, unknown>).url === "string")
+      );
+      if (flat.length) {
+        out.sourceFiles.push(mcpPath);
+        Object.assign(servers, Object.fromEntries(flat));
+      }
     }
     out.tools.push(...toolsFromMcpServers(servers, P, `plugins/${id}`, { notes, ...provenance }));
     const skillDirs = Array.isArray(manifest.skills) ? manifest.skills : typeof manifest.skills === "string" ? [manifest.skills] : ["skills"];
@@ -470,7 +488,8 @@ async function planMain(doc: AgentDocument, ctx: WriteContext, L: Layout): Promi
   const fromPlugins = new Set<string>([...doc.tools, ...doc.skills].map((x) => pluginOf(x, P)).filter((x): x is string => !!x));
   for (const id of fromPlugins) {
     const info = doc.integrations.find((i) => i.kind === "claude-code-plugin" && i.name === id)?.config as Record<string, unknown> | undefined;
-    const market = typeof info?.marketplaceRepo === "string" ? info.marketplaceRepo : (id.split("@")[1] ?? "<marketplace>");
+    const marketName = id.split("@")[1];
+    const market = typeof info?.marketplaceRepo === "string" ? info.marketplaceRepo : ((marketName && KNOWN_MARKETPLACE_REPOS[marketName]) ?? marketName ?? "<marketplace>");
     manualSteps.push(`Install the plugin ${id} in Claude Code: /plugin marketplace add ${market}, then /plugin install ${id}. Nomad does not copy plugin servers or skills.`);
   }
   if (wants(ctx, "skills")) {

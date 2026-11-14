@@ -16,6 +16,8 @@ export interface KnownServerProfileResult {
 
 interface ServerProfile {
   id: string;
+  /** The service's name, used in messages such as "the destination uses Priors defaults". */
+  vendor: string;
   label: string;
   matches: (t: Tool) => boolean;
   /** Key variables. Set exactly one; the server refuses both at once. */
@@ -40,6 +42,7 @@ const isPriorsHost = (url: string | undefined) => {
 
 const PRIORS: ServerProfile = {
   id: "priors",
+  vendor: "Priors",
   label: "Priors (a credit service for agents on Robinhood Chain)",
   matches: (t) => !!t.mcp && (t.mcp.command === "priors-mcp" || t.mcp.args.some((a) => a.includes("@priors/mcp")) || isPriorsHost(t.mcp.url)),
   keyVars: ["PRIORS_KEY_FILE", "PRIORS_KEY"],
@@ -88,7 +91,57 @@ const PRIORS: ServerProfile = {
   }
 };
 
-const PROFILES: ServerProfile[] = [PRIORS];
+/** The oak command (also oak.cmd or oak.exe on Windows), alone or as a path. */
+const isOakCommand = (command: string | undefined) => !!command && /(^|[\\/])oak(\.cmd|\.exe)?$/i.test(command);
+
+/**
+ * Oak Agent Kit, as Oak documents it (github.com/OakAgentKit/oak and the
+ * @oakagentkit/addon 0.3.8 package, read Nov 14, 2026): one local MCP server,
+ * started as `oak mcp` or `npx -y @oakagentkit/addon@<version> mcp`, or from the
+ * Claude Code plugin oak@oak-agent-kit. Its wallet, settings and keychain entry
+ * live in ~/.oak and the system keychain, never in the MCP entry.
+ */
+const OAK: ServerProfile = {
+  id: "oak",
+  vendor: "Oak",
+  label: "Oak Agent Kit (a local wallet and tools for Robinhood Chain projects)",
+  matches: (t) => !!t.mcp && t.mcp.transport === "stdio" && ((isOakCommand(t.mcp.command) && t.mcp.args[0] === "mcp") || t.mcp.args.some((a) => /^@oakagentkit\/addon(@|$)/.test(a))),
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: ["OAK_AUTO_DAILY_CAP_USD"],
+  looserDefaults: { OAK_AUTO_DAILY_CAP_USD: "50 USD a day for automatic approvals" },
+  apply(t, out, platform) {
+    const mcp = t.mcp!;
+    out.notes.push({
+      level: "info",
+      category: "integrations",
+      message: "Oak's wallet, its settings (including the approval mode and the daily budget) and its keychain entry stay on this computer, in ~/.oak and the system keychain. Nomad never reads ~/.oak."
+    });
+    out.notes.push({
+      level: "warning",
+      category: "tools",
+      message: `Oak: if ${platform} runs on another computer, Oak creates a new, empty wallet there the first time it starts. To keep the same wallet, restore it there yourself, in your own terminal and never through an agent, following Oak's backup guide (oak backup).`
+    });
+    out.notes.push({
+      level: "warning",
+      category: "tools",
+      message: `Oak: Oak asks for approval in the app before it signs. Oak's documentation says apps without MCP form elicitation cannot sign in its default ask mode, so check that ${platform} shows Oak's approval form before relying on it.`
+    });
+    if (isOakCommand(mcp.command)) {
+      out.manualSteps.push(`Install Oak for "${t.name}": npm install -g @oakagentkit/addon. It needs Node.js 22.12 or later, and the oak command must be on the PATH ${platform} uses.`);
+    } else {
+      out.manualSteps.push(`"${t.name}" runs Oak through npx: ${platform} needs Node.js 22.12 or later on its PATH.`);
+    }
+    for (const k of ["OAK_NETWORK", "OAK_CHAIN_ID"]) {
+      const v = mcp.env[k];
+      if (v && !("value" in v)) {
+        out.notes.push({ level: "warning", category: "tools", message: `"${t.name}": ${k} is a reference. Set it on ${platform} too; without it Oak uses Robinhood Chain mainnet.` });
+      }
+    }
+  }
+};
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {
@@ -120,7 +173,7 @@ export function applyKnownServerProfile(tool: Tool, platformName = "the destinat
     out.unsupported.push({
       category: "permissions",
       item: `${tool.name}: ${k}`,
-      reason: `Limit not carried: it was a reference on the source, so the destination uses Priors defaults${looser ? ` (${looser})` : ""}.`,
+      reason: `Limit not carried: it was a reference on the source, so the destination uses ${profile.vendor} defaults${looser ? ` (${looser})` : ""}.`,
       alternative: `Set ${k} on the destination to keep the limit.`
     });
   }
@@ -129,7 +182,7 @@ export function applyKnownServerProfile(tool: Tool, platformName = "the destinat
   const keptOptional = [...optional].filter((k) => env[k]);
   if (keptOptional.length) mcp.optionalEnv = keptOptional;
   else delete mcp.optionalEnv;
-  mcp.emptyOkEnv = profile.emptyOkEnv;
+  if (profile.emptyOkEnv.length) mcp.emptyOkEnv = profile.emptyOkEnv;
   out.tool = { ...tool, mcp: mcp as Tool["mcp"] };
   profile.apply?.(out.tool, out, platformName);
   return out;
