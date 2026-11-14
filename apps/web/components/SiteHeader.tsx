@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/docs/adapters", label: "Platforms" },
   { href: "/docs/security", label: "Security" },
   { href: "/docs", label: "Docs" },
+  { href: "/vote", label: "Vote" },
   { href: "/inspect", label: "Inspector" }
 ];
 

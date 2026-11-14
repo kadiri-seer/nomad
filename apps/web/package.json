@@ -23,7 +23,8 @@
     "@nomad/storage": "workspace:*",
     "next": "^16.0.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "viem": "^2.57.19"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",

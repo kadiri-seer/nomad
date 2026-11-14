@@ -35,6 +35,9 @@ export function SiteFooter() {
               <li>
                 <Link href="/docs/adapters">Platforms</Link>
               </li>
+              <li>
+                <Link href="/vote">Holder vote</Link>
+              </li>
             </ul>
           </div>
           <div>
