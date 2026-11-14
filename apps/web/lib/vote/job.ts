@@ -1,5 +1,5 @@
 /**
- * The round job, run by GitHub Actions every hour (and by the "Run workflow" button).
+ * The round job, run by GitHub Actions every 5 minutes (and by the "Run workflow" button).
  *
  * Opening a round: take the approved suggestions with the most 👍, snapshot $NOMAD balances,
  * publish the ballot and snapshot under governance/rounds/, open a round issue and tell each
@@ -347,7 +347,7 @@ export async function publishSuggestions(deps: JobDeps, cfg: GovernanceConfig): 
   return true;
 }
 
-/** The hourly run: post new suggestions, close a finished round, open the next one when due, refresh the list. */
+/** The scheduled run: post new suggestions, close a finished round, open the next one when due, refresh the list. */
 export async function runAuto(deps: JobDeps, cfg: GovernanceConfig) {
   await ensureLabels(deps, cfg);
   await importSuggestions(deps, cfg);

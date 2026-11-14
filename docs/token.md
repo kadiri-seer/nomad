@@ -48,7 +48,7 @@ Every bounty payment is sent from the reward wallet and linked on its [bounty is
 
 ## Voting rules
 
-- Rounds run back to back: each vote lasts 48 hours, and the next round opens within the hour after one closes, as long as at least two accepted suggestions are waiting. Each ballot holds up to five accepted suggestions: the ones with the most backing (backs on the Vote page plus thumbs-up reactions on GitHub).
+- Rounds run back to back: each vote lasts 48 hours, and the next round opens within minutes after one closes, as long as at least two accepted suggestions are waiting. Each ballot holds up to five accepted suggestions: the ones with the most backing (backs on the Vote page plus thumbs-up reactions on GitHub).
 - Past winners do not go on the ballot again.
 - One $NOMAD is one vote. Balances are counted at the moment the vote opens, so tokens bought during a vote do not add votes.
 - The team's wallets and the reward wallet do not vote.

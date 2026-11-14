@@ -1,6 +1,6 @@
 /**
  * Suggestions from the website. Anyone can suggest an app (no GitHub account, no wallet).
- * New suggestions wait here until the hourly round job turns them into GitHub issues; only
+ * New suggestions wait here until the scheduled round job turns them into GitHub issues; only
  * suggestions with an open GitHub issue are listed on the site, so closing an issue hides it.
  * People can back listed suggestions; backing adds to the thumbs-up count used to rank ballots.
  */

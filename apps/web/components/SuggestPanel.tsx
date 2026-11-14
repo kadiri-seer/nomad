@@ -74,11 +74,11 @@ export function SuggestPanel() {
         setNotice({ kind: "bad", text: String(r.data.error ?? "Your suggestion was not sent. Try again.") });
       } else if (r.data.status === "duplicate") {
         const issue = typeof r.data.issue === "number" ? r.data.issue : null;
-        setNotice({ kind: "ok", text: issue ? `Someone already suggested that. Back it in the list below to move it up.` : "Someone already suggested that. It will appear in the list within an hour." });
+        setNotice({ kind: "ok", text: issue ? "Someone already suggested that. Back it in the list below to move it up." : "Sent. Thanks for your suggestion." });
         setName("");
         setWhy("");
       } else {
-        setNotice({ kind: "ok", text: "Thanks. Your suggestion will appear in the list within an hour, once it is posted on GitHub." });
+        setNotice({ kind: "ok", text: "Sent. Thanks for your suggestion." });
         setName("");
         setWhy("");
       }

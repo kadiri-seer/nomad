@@ -1,9 +1,9 @@
 name: Vote rounds
-# Opens and closes $NOMAD holder vote rounds. Runs every hour; press "Run workflow"
+# Opens and closes $NOMAD holder vote rounds. Runs every 5 minutes (the shortest GitHub allows); press "Run workflow"
 # with "open" to start the first round (or one early), or "close" to close a finished one.
 on:
   schedule:
-    - cron: "23 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       action:

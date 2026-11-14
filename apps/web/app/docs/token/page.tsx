@@ -97,7 +97,7 @@ export default function Token() {
 
       <h2>Voting rules</h2>
       <ul>
-        <li>Rounds run back to back: each vote lasts 48 hours, and the next round opens within the hour after one closes, as long as at least two accepted suggestions are waiting. Each ballot holds up to five accepted suggestions: the ones with the most backing (backs on the Vote page plus thumbs-up reactions on GitHub).</li>
+        <li>Rounds run back to back: each vote lasts 48 hours, and the next round opens within minutes after one closes, as long as at least two accepted suggestions are waiting. Each ballot holds up to five accepted suggestions: the ones with the most backing (backs on the Vote page plus thumbs-up reactions on GitHub).</li>
         <li>Past winners do not go on the ballot again.</li>
         <li>One {TOKEN_TICKER} is one vote. Balances are counted at the moment the vote opens, so tokens bought during a vote do not add votes.</li>
         <li>The team&apos;s wallets and the reward wallet do not vote.</li>
