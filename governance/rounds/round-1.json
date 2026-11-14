@@ -1,0 +1,35 @@
+{
+  "id": 1,
+  "title": "Round 1: next integration",
+  "opensAt": "2026-11-14T07:12:30.909Z",
+  "closesAt": "2026-11-16T07:12:30.909Z",
+  "token": {
+    "address": "0x14c0a77e792f6c9818888630e95c50cf3b48c979",
+    "symbol": "$NOMAD",
+    "decimals": 18
+  },
+  "snapshot": {
+    "takenAt": "2026-11-14T07:12:30.909Z",
+    "source": "token transfer events",
+    "block": 113987594,
+    "holders": 87,
+    "totalWeight": "1000000000000000000000000000"
+  },
+  "options": [
+    {
+      "id": "3",
+      "label": "Oak Agent Kit OakAgentKit",
+      "issue": 3
+    },
+    {
+      "id": "4",
+      "label": "Hedgehood",
+      "issue": 4
+    }
+  ],
+  "excluded": [
+    "0xe4862b7605f0cd66796f5d1a9cc936462642b515"
+  ],
+  "roundIssue": 5,
+  "result": null
+}
