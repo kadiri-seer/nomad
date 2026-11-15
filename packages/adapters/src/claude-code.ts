@@ -49,7 +49,8 @@ const P = "claude-code";
  * source did not record it (known_marketplaces.json missing). Only documented ones.
  */
 const KNOWN_MARKETPLACE_REPOS: Record<string, string> = {
-  "oak-agent-kit": "OakAgentKit/oak"
+  "oak-agent-kit": "OakAgentKit/oak",
+  hedgehood: "0xHedgeHood/hedgehood-agent-kit"
 };
 
 interface Layout {
@@ -287,7 +288,9 @@ async function readInstalledPlugins(root: string, settings: any, notes: Note[]):
       if (typeof rel !== "string") continue;
       const abs = resolve(dir, rel);
       if (abs !== dir && !abs.startsWith(dir + sep)) continue;
-      for (const sk of await readSkillsTree(abs, P, notes, 1)) {
+      // A listed path may be one skill folder (Hedgehood's plugin) or a folder of skills (Priors' plugin).
+      const single = abs !== dir ? await readSkillDir(abs, P, notes) : null;
+      for (const sk of single ? [single] : await readSkillsTree(abs, P, notes, 1)) {
         sk.source = { ...(sk.source ?? { platform: P }), note: provenance.note, ...provenance.extra };
         out.skills.push(sk);
       }

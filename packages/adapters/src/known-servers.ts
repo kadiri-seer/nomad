@@ -141,7 +141,98 @@ const OAK: ServerProfile = {
   }
 };
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK];
+const HEDGEHOOD_HOSTS = new Set(["mcp.hedgehood.io", "testnet-mcp.hedgehood.io"]);
+const isHedgehoodHost = (url: string | undefined) => {
+  if (!url) return false;
+  try {
+    return HEDGEHOOD_HOSTS.has(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+};
+/** The hedgehood-mcp command from @hedgehood-io/mcp (also .cmd or .exe on Windows), alone or as a path. */
+const isHedgehoodCommand = (command: string | undefined) => !!command && /(^|[\\/])hedgehood-mcp(\.cmd|\.exe)?$/i.test(command);
+const HEDGEHOOD_KEY_VARS = ["HEDGEHOOD_SESSION_KEY_FILE", "HEDGEHOOD_SESSION_KEY", "HEDGEHOOD_PAYER_KEY_FILE", "HEDGEHOOD_PAYER_KEY", "HEDGEHOOD_OWNER_KEY_FILE", "HEDGEHOOD_OWNER_KEY"];
+
+/**
+ * Hedgehood, an options market for AI agents on Robinhood Chain, as Hedgehood documents it
+ * (github.com/0xHedgeHood/hedgehood-agent-kit and @hedgehood-io/mcp 0.5.1, read Nov 15, 2026):
+ * the local server `npx -y @hedgehood-io/mcp` or `hedgehood-mcp`, the Claude Code plugin
+ * hedgehood-options@hedgehood, and the hosted read-only servers. Keys are files in ~/.hedgehood
+ * (or raw keys in the environment); unset settings fall back to ~/.hedgehood/config.json, then to testnet.
+ */
+const HEDGEHOOD: ServerProfile = {
+  id: "hedgehood",
+  vendor: "Hedgehood",
+  label: "Hedgehood (an options market for AI agents on Robinhood Chain)",
+  matches: (t) => !!t.mcp && (isHedgehoodCommand(t.mcp.command) || t.mcp.args.some((a) => /^@hedgehood-io\/mcp(@|$)/.test(a)) || isHedgehoodHost(t.mcp.url)),
+  // Both the file and the raw form of a key may be set (the file wins), so keys are handled in apply().
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: ["HEDGEHOOD_MAX_DEPOSIT", "HEDGEHOOD_DRY_RUN"],
+  looserDefaults: { HEDGEHOOD_MAX_DEPOSIT: "1000 USDG per deposit", HEDGEHOOD_DRY_RUN: "write tools only simulate" },
+  apply(t, out, platform) {
+    const mcp = t.mcp!;
+    if (mcp.transport !== "stdio") {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" is a read-only server run by Hedgehood, with no keys. Nomad copies only its address.` });
+      return;
+    }
+    out.notes.push({
+      level: "info",
+      category: "integrations",
+      message: "Hedgehood's keys and settings stay on this computer in ~/.hedgehood (the session, payer and owner key files and config.json). Nomad never reads that folder or any key file, and never moves positions, balances or sessions on chain."
+    });
+    // A raw key (not a file path) is a wallet private key: never written as a value, even with --include-secrets.
+    for (const k of ["HEDGEHOOD_SESSION_KEY", "HEDGEHOOD_PAYER_KEY", "HEDGEHOOD_OWNER_KEY"]) {
+      const v = mcp.env[k];
+      if (v && "value" in v) mcp.env[k] = { secretRef: k, redacted: true };
+    }
+    for (const k of HEDGEHOOD_KEY_VARS) {
+      if (!mcp.env[k]) continue;
+      out.unsupported.push({
+        category: "tools",
+        item: `${t.name}: ${k}`,
+        reason: "Hedgehood keys and key files are references only; Nomad never reads or copies them.",
+        alternative: k.includes("SESSION")
+          ? "On this computer, keep the key file where it is (owner-only, chmod 600) and set the variable. On another computer, create a new session key there."
+          : "Set it on the destination only if this agent needs it."
+      });
+    }
+    if (mcp.env.HEDGEHOOD_OWNER_KEY_FILE || mcp.env.HEDGEHOOD_OWNER_KEY) {
+      out.notes.push({
+        level: "warning",
+        category: "tools",
+        message: `"${t.name}" was given the owner key. The owner key can withdraw funds and manage sessions; Hedgehood says to keep it off shared machines. Set it on ${platform} only if this agent really needs it.`
+      });
+    }
+    out.notes.push({
+      level: "warning",
+      category: "tools",
+      message: `Hedgehood: if ${platform} runs on another computer, the session key does not come along. Run hedgehood init (or hedgehood join) there in your own terminal, have the owner authorize the new session with a spending budget, and revoke the old session if it will no longer be used (with the owner key: hedgehood session revoke <old session address> --send).`
+    });
+    const chain = mcp.env.HEDGEHOOD_CHAIN_ID;
+    const mainnetFlag = mcp.args.includes("--mainnet");
+    const testnetFlag = mcp.args.includes("--testnet");
+    if (mainnetFlag || (chain && "value" in chain && chain.value.trim() === "4663")) {
+      out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" runs on Robinhood Chain mainnet (4663): trades settle in real USDG.` });
+    } else if (testnetFlag || (chain && "value" in chain && chain.value.trim() === "46630")) {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" runs on the Robinhood Chain testnet (46630), with test funds.` });
+    } else {
+      out.notes.push({
+        level: "warning",
+        category: "tools",
+        message: `"${t.name}" does not fix the network in its entry, so Hedgehood takes it from ~/.hedgehood/config.json on that computer, or uses the testnet (46630) if there is none. Set HEDGEHOOD_CHAIN_ID=4663 on ${platform} for mainnet.`
+      });
+    }
+    if (isHedgehoodCommand(mcp.command)) {
+      out.manualSteps.push(`Install Hedgehood's MCP server for "${t.name}": npm install -g @hedgehood-io/mcp. It needs Node.js 20 or later, and the hedgehood-mcp command must be on the PATH ${platform} uses.`);
+    } else {
+      out.manualSteps.push(`"${t.name}" runs Hedgehood through npx: ${platform} needs Node.js 20 or later on its PATH.`);
+    }
+  }
+};
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {

@@ -11,7 +11,9 @@ export const KEY_MATERIAL_DIRS: RegExp[] = [
   /(^|\/)\.local\/state\/priors-mcp(\/|$)/,
   /(^|\/)\.agent001(\/|$)/,
   // Oak Agent Kit: the encrypted wallet (wallet.enc), private notes (*.gloam.enc), the wallet journal and settings.
-  /(^|\/)\.oak(\/|$)/
+  /(^|\/)\.oak(\/|$)/,
+  // Hedgehood: the session, payer and owner key files and the kit's settings.
+  /(^|\/)\.hedgehood(\/|$)/
 ];
 
 /** Key files by name, wherever they are. */
