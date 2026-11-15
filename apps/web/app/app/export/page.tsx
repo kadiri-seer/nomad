@@ -101,7 +101,7 @@ function ExportForm() {
         <span>
           Keep secret values
           <br />
-          <small className="muted">Not recommended. The library stores agents with secrets already redacted, so this only matters for values that were never detected.</small>
+          <small className="muted">Not recommended. The library stores agents with secrets already redacted, so this only matters for values that were never detected. Wallet keys and recovery phrases are never kept.</small>
         </span>
       </label>
       {format === "nomad" && (

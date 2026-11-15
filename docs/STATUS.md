@@ -111,6 +111,14 @@ Not verified:
 - Codex, Cursor, Gemini CLI and Hermes were not run with the moved entries (only Hedgehood's own check above).
 - The hosted read-only servers were not contacted.
 
+## Wallet keys stay out with --include-secrets (added)
+
+Written Nov 15, 2026. With `--include-secrets`, other secrets still travel when asked, but wallet private keys and recovery phrases are left out everywhere a move, export or import writes: text, launch arguments, URLs, headers, environment values and files (including `.env` files kept with `--include-sensitive-files`). They become references, and the preview and export output say how many were left out. Without `--include-secrets` nothing changed.
+
+Tested (automated, every push, `tests/security/wallet-keys.test.ts`): which values count as wallet keys (0x keys, bare hex keys, Solana base58 and byte-array keys, recovery phrases) and which do not (API keys, a 64-character hex value under an API name, transaction hashes without key words); the sanitizer, `.nomad` exports and opening older packages that hold a wallet key; moves from Codex to Claude Code, Hermes and Cursor with `--include-secrets`, where the API key arrives and no wallet key reaches the plan, receipt, destination or backups, and the source is unchanged.
+
+Not covered: wallet keys in formats other than those above (for example an encrypted keystore file, which is already left out as a credential file unless `--include-sensitive-files` is used, and is encrypted).
+
 ## Holder vote (added)
 
 - Vote page at `/vote`, vote API under `/api/vote`, round job in `.github/workflows/vote-rounds.yml`, round files in `governance/`. See [governance/README.md](../governance/README.md).

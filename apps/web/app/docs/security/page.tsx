@@ -19,7 +19,7 @@ export default function Security() {
         <li>Findings show the rule, file and line, never the value.</li>
         <li>Detected secrets are replaced with markers such as <code>[REDACTED:openai-key]</code>. MCP environment variables and headers that hold credentials become references you reconnect at the destination.</li>
         <li>Credential files (<code>.env</code>, keys, <code>auth.json</code> and similar) are left out. Platform secret stores such as <code>~/.hermes/.env</code> or <code>~/.openclaw/credentials</code> are never read.</li>
-        <li>Keeping secrets requires <code>--include-secrets</code>, prints a warning and is recorded in the package manifest.</li>
+        <li>Keeping secrets requires <code>--include-secrets</code>, prints a warning and is recorded in the package manifest. Wallet private keys and recovery phrases are left out even then, because a leaked wallet key cannot be revoked.</li>
       </ul>
 
       <h2>Permissions never widen silently</h2>

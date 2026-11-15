@@ -34,7 +34,7 @@ Each destination gets the entry Oak itself writes there:
 - `~/.oak` and everything in it: the encrypted wallet (`wallet.enc`), private notes (`*.gloam.enc`), the wallet journal, and Oak's settings (`config.json`, including the approval mode and the daily budget). Where no system keychain is available, Oak also keeps the key that unlocks the wallet there. Nomad never reads this folder, never follows a symlink into it and never writes into it. The preview lists such paths as skipped, by path only.
 - The key in the system keychain.
 - Anything on chain.
-- API keys typed into an entry as plain values are carried only as references, unless you ask for secrets with `--include-secrets`.
+- API keys typed into an entry as plain values are carried only as references, unless you ask for secrets with `--include-secrets`. Wallet keys never travel as values, even then.
 
 ## Checked
 

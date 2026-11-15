@@ -6,7 +6,7 @@
 - Findings report rule, file and line, plus a short fingerprint. Values are never printed or stored.
 - Reads, exports, imports and migrations redact by default. MCP env values and headers holding credentials become references.
 - Credential files (`.env`, keys, `auth.json`, `.netrc`, ...) are skipped. Platform secret stores are never read.
-- `--include-secrets` keeps values, prints a warning and is recorded in the manifest.
+- `--include-secrets` keeps values, prints a warning and is recorded in the manifest. Wallet private keys and recovery phrases are still left out, in text, launch arguments, URLs, headers, environment values and files, because a leaked wallet key cannot be revoked: a 0x-prefixed 32-byte hex value, a BIP-39 recovery phrase, or a raw hex, base58 or byte-array key under a wallet name (PRIVATE, WALLET, SIGNER, SEED, MNEMONIC, OWNER, PAYER, SESSION). They become references the user sets again, and the preview says how many were left out.
 
 ## Keys and wallets: never read, never copied, listed as skipped
 
