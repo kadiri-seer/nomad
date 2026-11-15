@@ -30,7 +30,16 @@ jobs:
       - run: npm install -g npm@latest # Trusted Publishing needs npm 11.5 or newer
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
-      - run: node scripts/prepare-npm.mjs "${{ inputs.name }}"
+      # The name box is passed as an environment value, never pasted into the script, and must be a valid npm name.
+      - name: Prepare the package
+        env:
+          PKG_NAME: ${{ inputs.name }}
+        run: |
+          if ! printf '%s' "$PKG_NAME" | grep -Eq '^(@[a-z0-9~-][a-z0-9._~-]*/)?[a-z0-9~-][a-z0-9._~-]*$'; then
+            echo "::error::\"$PKG_NAME\" is not a valid npm package name."
+            exit 1
+          fi
+          node scripts/prepare-npm.mjs "$PKG_NAME"
       - name: Check Trusted Publishing is available
         run: |
           echo "npm $(npm --version)"
@@ -47,4 +56,6 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Done
-        run: echo "Published. Anyone can now run npx ${{ inputs.name }}" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          PKG_NAME: ${{ inputs.name }}
+        run: echo "Published. Anyone can now run npx $PKG_NAME" >> "$GITHUB_STEP_SUMMARY"
