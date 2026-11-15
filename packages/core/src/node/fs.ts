@@ -144,9 +144,17 @@ export function drainSkippedLinks(): string[] {
  * folder, and never to a credential file or a folder that can hold wallet keys.
  */
 async function linkTargetAllowed(p: string): Promise<boolean> {
+  // One resolver for both sides: on Windows the same folder can come back as a short (8.3) or a long name.
+  const realOf = (d: string) => {
+    try {
+      return realpathSync.native(d);
+    } catch {
+      return d;
+    }
+  };
   let real: string;
   try {
-    real = await fsp.realpath(p);
+    real = realpathSync.native(p);
   } catch {
     return false;
   }
@@ -156,14 +164,7 @@ async function linkTargetAllowed(p: string): Promise<boolean> {
     const r = relative(dir, real);
     return r !== "" && !r.startsWith("..") && !isAbsolute(r);
   };
-  const realOf = (d: string) => {
-    try {
-      return realpathSync(d);
-    } catch {
-      return d;
-    }
-  };
-  return inside(realOf(home())) || inside(realOf(dirname(p)));
+  return [home(), realOf(home()), dirname(p), realOf(dirname(p))].some(inside);
 }
 
 /** Read a text file. Returns null when missing. A symlink is followed only to an allowed target. */
