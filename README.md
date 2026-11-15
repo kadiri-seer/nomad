@@ -20,7 +20,7 @@ Every move shows a short summary first (`--details` for every file and diff, `--
 
 | Platform | Support | Notes |
 | --- | --- | --- |
-| OpenClaw | Partial | Workspaces (AGENTS.md, SOUL.md, IDENTITY.md, USER.md, MEMORY.md, memory/), skills, cron jobs, per agent model and tool deny lists. MCP servers need manual setup. |
+| OpenClaw | Partial | Workspaces (AGENTS.md, SOUL.md, IDENTITY.md, USER.md, MEMORY.md, memory/), skills, cron jobs, per agent model and tool deny lists, and MCP servers under `mcp.servers` (secret values are set with `openclaw config set`). |
 | Claude Code | Partial | CLAUDE.md, subagents, skills, slash commands, settings.json permissions and model, MCP servers (user and project). No scheduler. |
 | Codex CLI | Partial | AGENTS.md, config.toml (model, approval policy, sandbox, network, MCP), skills, custom prompts. One agent per home. |
 | Hermes Agent | Partial | SOUL.md, MEMORY.md and USER.md entries, skills, config.yaml (model, MCP, command allowlist), cron jobs, profiles. |

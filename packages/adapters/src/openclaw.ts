@@ -32,10 +32,47 @@ import {
   wants,
   workflowPrompt,
   integrationStep,
-  pluginOf
+  pluginOf,
+  mcpServersFromTools,
+  toolsFromMcpServers
 } from "./util";
 
 const P = "openclaw";
+
+/* ------------------------------ MCP servers ------------------------------ */
+
+/**
+ * OpenClaw keeps MCP servers in openclaw.json under mcp.servers (written by `openclaw mcp set`),
+ * shared by every agent of that OpenClaw (docs.openclaw.ai/gateway/config-extensions). Local servers
+ * have command, args and env; remote ones have url, transport ("streamable-http" or "sse", and SSE
+ * when it is left out) and headers. `enabled: false` keeps a server saved but switched off.
+ */
+function openclawServersForRead(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, unknown> = {};
+  for (const [name, cfg] of Object.entries(raw as Record<string, any>)) {
+    if (!cfg || typeof cfg !== "object") continue;
+    const c = { ...cfg };
+    // A remote entry without a transport is SSE in OpenClaw.
+    if (typeof c.url === "string" && c.transport === undefined && c.type === undefined) c.transport = "sse";
+    if (c.type === "http") c.transport = "streamable-http";
+    // A secret reference object ({ source, provider, id }) is read as a reference, never as text.
+    for (const field of ["env", "headers"]) {
+      if (!c[field] || typeof c[field] !== "object") continue;
+      c[field] = Object.fromEntries(
+        Object.entries(c[field] as Record<string, unknown>).map(([k, v]) => {
+          if (v && typeof v === "object") {
+            const ref = v as { source?: unknown; id?: unknown };
+            return [k, ref.source === "env" && typeof ref.id === "string" && /^[A-Za-z_][A-Za-z0-9_]*$/.test(ref.id) ? `\${${ref.id}}` : `\${${k}}`];
+          }
+          return [k, v];
+        })
+      );
+    }
+    out[name] = c;
+  }
+  return out;
+}
 
 interface OcAgent {
   id: string;
@@ -326,6 +363,9 @@ async function readAgent(root: string, agentId: string, notes: Note[], prefer?: 
 
   doc.skills.push(...(await readSkillsTree(join(ws, "skills"), P, notes, 1)));
 
+  // MCP servers are shared by every agent of this OpenClaw, so each agent carries them.
+  doc.tools.push(...toolsFromMcpServers(openclawServersForRead(cfg?.mcp?.servers), P, "openclaw.json"));
+
   const m = modelOf(cfg, agentId);
   if (m.primary) doc.models.preferred = m.primary;
   doc.models.fallbacks = m.fallbacks;
@@ -494,16 +534,34 @@ async function planAgent(doc: AgentDocument, ctx: WriteContext): Promise<Planned
       cfgPatch.agents = { ...(cfgPatch.agents ?? {}), list: listPatch };
     }
   }
-  if (Object.keys(cfgPatch).length) {
-    files.push({ path: "openclaw.json", content: JSON.stringify(cfgPatch, null, 2) + "\n", strategy: "merge-json5", arrayKeys: { "agents.list": "id" }, component: "project", description: newEntry ? `Register agent "${agentId}" in openclaw.json` : "Model and tool policy in openclaw.json" });
-    if (exists) notes.push({ level: "info", message: "openclaw.json is rewritten as JSON. Comments in it are not kept (a backup is taken first)." });
-  }
-
+  let mcpWritten = false;
   if (wants(ctx, "tools")) {
-    for (const t of doc.tools) {
-      unsupported.push({ category: "tools", item: t.name, reason: "OpenClaw connects MCP servers through plugins, which Nomad does not install.", alternative: "Install an MCP bridge plugin and add the server; its definition is in the report." });
-      if (t.mcp) manualSteps.push(`Add the "${t.name}" MCP server (${t.mcp.command ?? t.mcp.url ?? ""} ${t.mcp.args.join(" ")}) through your OpenClaw MCP plugin.`.replace(/\s+\)/, ")"));
+    const mcpTools = doc.tools.filter((t) => t.kind === "mcp" && t.mcp && !pluginOf(t, P));
+    if (mcpTools.length) {
+      // References are not written: an older OpenClaw refuses to load a config with an unset ${VAR}.
+      // Each one becomes an `openclaw config set` step instead.
+      const r = mcpServersFromTools(mcpTools, { platformName: "OpenClaw", envRefStyle: "none" });
+      for (const [name, server] of Object.entries(r.servers)) {
+        const tool = mcpTools.find((t) => t.name === name);
+        if (tool?.mcp?.transport === "http") server.transport = "streamable-http";
+        else if (tool?.mcp?.transport === "sse") server.transport = "sse";
+        const refs = r.refs[name];
+        for (const k of refs?.env ?? []) manualSteps.push(`Set ${k} for the "${name}" MCP server in OpenClaw: openclaw config set mcp.servers.${name}.env.${k} <value>${refs.optional.includes(k) ? " (optional on the source: only if you use it)" : ""}`);
+        for (const [h] of refs?.headers ?? []) manualSteps.push(`Set the ${h} header for the "${name}" MCP server in OpenClaw: openclaw config set mcp.servers.${name}.headers.${h} <value>`);
+      }
+      if (Object.keys(r.servers).length) {
+        cfgPatch.mcp = { servers: r.servers };
+        mcpWritten = true;
+        notes.push({ level: "info", category: "tools", message: `OpenClaw's MCP servers are shared by all its agents, so ${Object.keys(r.servers).map((n) => `"${n}"`).join(", ")} will also be available to the other agents of this OpenClaw.` });
+      }
+      manualSteps.push(...r.manualSteps.filter((m) => !m.startsWith("Add ") && !m.startsWith("If you use them, set ")));
+      unsupported.push(...r.unsupported);
+      notes.push(...r.notes);
     }
+  }
+  if (Object.keys(cfgPatch).length) {
+    files.push({ path: "openclaw.json", content: JSON.stringify(cfgPatch, null, 2) + "\n", strategy: "merge-json5", arrayKeys: { "agents.list": "id" }, component: "project", description: newEntry ? `Register agent "${agentId}" in openclaw.json` : mcpWritten ? "Model, tool policy and MCP servers in openclaw.json" : "Model and tool policy in openclaw.json" });
+    if (exists) notes.push({ level: "info", message: "openclaw.json is rewritten as JSON. Comments in it are not kept (a backup is taken first)." });
   }
   if (wants(ctx, "integrations")) for (const i of doc.integrations) manualSteps.push(integrationStep(i, "OpenClaw", `Reconnect ${i.name} in OpenClaw (credentials are never migrated).`));
   if (wants(ctx, "knowledge") && (doc.knowledge.length || doc.files.length)) manualSteps.push(`Copy ${doc.knowledge.length + doc.files.length} knowledge file(s) into the workspace.`);
@@ -571,6 +629,12 @@ export const openclawAdapter: Adapter = {
       const names = new Set(got.skills.map((s) => s.name));
       const missing = doc.skills.filter((s) => !pluginOf(s, this.info.id) && !names.has(s.name));
       checks.push({ name: "Skills written", ok: !missing.length, detail: missing.length ? `Missing: ${missing.map((s) => s.name).join(", ")}` : undefined });
+    }
+    const servers = doc.tools.filter((t) => t.kind === "mcp" && t.mcp && t.enabled !== false && !pluginOf(t, this.info.id));
+    if (wants(ctx, "tools") && servers.length) {
+      const names = new Set(got.tools.map((t) => t.name));
+      const missing = servers.filter((t) => !names.has(t.name));
+      checks.push({ name: "MCP servers written", ok: !missing.length, detail: missing.length ? `Missing: ${missing.map((t) => t.name).join(", ")}` : `${servers.length} server(s) in mcp.servers` });
     }
     if (wants(ctx, "workflows") && doc.workflows.length) {
       const active = got.workflows.filter((w) => w.sourceEnabled && doc.workflows.some((d) => d.name === w.name));

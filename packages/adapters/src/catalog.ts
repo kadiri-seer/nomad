@@ -104,7 +104,7 @@ export const OPENCLAW_INFO: AdapterInfo = {
     instructions: full,
     memory: full,
     skills: full,
-    tools: rw("convert", "manual", "OpenClaw reaches MCP servers through plugins. Nomad lists them for manual setup."),
+    tools: rw("full", "convert", "MCP servers under mcp.servers in openclaw.json, shared by all agents. Secrets are not written; Nomad lists the openclaw config set commands."),
     integrations: manual("Channels and credentials must be reconnected."),
     models: convert("Written as provider/model."),
     permissions: rw("convert", "convert", "Deny rules become tools.deny entries. Allow rules are documented, not applied."),

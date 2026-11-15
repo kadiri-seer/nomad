@@ -93,6 +93,19 @@ Not verified:
 - Signing, approvals and anything on chain: no wallet was funded and no transaction was made. Which apps show Oak's approval form (MCP form elicitation) was not tested.
 - Gemini CLI's bare `$NAME` references are read as plain text by Nomad for every server, not only Oak; `${NAME}` works. For Oak this fails safe: Oak rejects the value.
 
+## OpenClaw MCP servers (added)
+
+Written Nov 15, 2026. Nomad reads and writes OpenClaw's MCP servers in `openclaw.json` under `mcp.servers`, the block `openclaw mcp set` manages (docs.openclaw.ai/gateway/config-extensions). Before, servers moving to OpenClaw were listed for manual setup through a plugin.
+
+- Read: local servers (command, args, env) and remote ones (url, headers; `transport` `streamable-http` or `sse`, and SSE when it is left out, as in OpenClaw). `${VAR}` values and OpenClaw secret reference objects become references; literal secrets are never kept. `enabled: false` servers are read as switched off. The servers are shared by every agent of that OpenClaw, so each agent carries them.
+- Write: servers are merged into `mcp.servers` next to the ones already there, with the transport written out. References are never written into `openclaw.json`, because an older OpenClaw refuses to load a config with an unset `${VAR}`; each one becomes an `openclaw config set mcp.servers.<name>.env.<VAR> <value>` step. The preview says the servers will be shared by all agents of that OpenClaw.
+
+Tested (automated, `tests/migration/openclaw-mcp.test.ts`): reading every form above; OpenClaw to Claude Code; Claude Code to OpenClaw next to an existing server, with no `${` in the written file, the steps, verification and a second move that changes nothing; OpenClaw to OpenClaw with a switched-off server left behind; no secret value in any destination; source unchanged.
+
+Checked with the real application on Nov 15, 2026 (OpenClaw 2026.11.3 in a throwaway folder and home): a file Nomad wrote (Claude Code to OpenClaw, next to an existing server) is listed by `openclaw mcp list` and `openclaw mcp status` with every server `ok` and the right transport, the `openclaw config set` steps from the preview work as written, and `openclaw config validate` reports the config as valid. Nomad then read the file back after OpenClaw rewrote it: all four servers, with the values set through `openclaw config set` turned into references and not shown anywhere.
+
+Not verified: OpenClaw agents were not run, so no server was started from OpenClaw.
+
 ## Hedgehood setups (added)
 
 Written Nov 15, 2026. Hedgehood is an options market for AI agents on Robinhood Chain. Hedgehood and its team have not been contacted and have not reviewed this work. See [docs/guides/hedgehood-setups.md](guides/hedgehood-setups.md).
