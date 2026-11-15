@@ -106,7 +106,7 @@ nomad ui                        local web app`}
 
       <h2>Use it from an assistant</h2>
       <p>
-        <code>nomad mcp</code> exposes listing, inspection, compatibility checks, previews and exports to any MCP client. It is read only unless started with <code>--allow-writes</code>, and even then an assistant can only apply a preview by quoting its token. Replace mode, edited files and broader permissions also need <code>--allow-replace</code>.
+        <code>nomad mcp</code> exposes listing, inspection, compatibility checks, previews and exports to any MCP client. It is read only unless started with <code>--allow-writes</code>, and even then an assistant can only apply a preview by quoting its token. Replace mode, edited files, broader permissions and commands from packages also need <code>--allow-replace</code>.
       </p>
       <p>
         Plugins for Claude Code, OpenClaw and Hermes live in the <code>plugins/</code> folder of the repository. Continue with <Link href="/docs/format">the agent format</Link> or <Link href="/docs/adapters">the platform matrix</Link>.

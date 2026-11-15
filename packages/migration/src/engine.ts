@@ -62,9 +62,27 @@ export interface Approvals {
   overwriteModified?: boolean;
   /** Approve a destination policy that is broader than before. */
   broaderPermissions?: boolean;
+  /** Approve commands from a package or the library that the destination app will start by itself. */
+  runCommands?: boolean;
 }
 
-export type ApprovalKind = "replace" | "overwrite-modified" | "broader-permissions";
+export type ApprovalKind = "replace" | "overwrite-modified" | "broader-permissions" | "run-commands";
+
+/** A local MCP server the destination app will start by itself: the exact command, and the names of its environment values. */
+export interface PlannedCommand {
+  tool: string;
+  /** Where it came from. */
+  from: "package" | "library";
+  command: string;
+  env: string[];
+}
+
+const shellWord = (a: string) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, "'\\''")}'`);
+
+/** The command line as a shell would show it. */
+export function commandLine(command: string, args: string[]): string {
+  return [command, ...args].map(shellWord).join(" ");
+}
 
 export interface PlanOperationView {
   path: string;
@@ -103,6 +121,8 @@ export interface MigrationPlan {
   secrets: { findings: number; redacted: number; strippedEnv: string[]; sensitiveFiles: number; included: boolean };
   summary: { create: number; update: number; unchanged: number; kept: number; transfer: number; convert: number; manual: number; unsupported: number };
   approvalsRequired: ApprovalKind[];
+  /** Commands from a package or the library that the destination app will start by itself. Empty for agents read from this computer. */
+  commands: PlannedCommand[];
   blocked: string[];
 }
 
@@ -305,6 +325,16 @@ export class Nomad {
     if (mode === "replace" && changing.some((o) => o.replacesForeign)) approvalsRequired.push("replace");
     if (changing.some((o) => o.userModified)) approvalsRequired.push("overwrite-modified");
     if (widened.length) approvalsRequired.push("broader-permissions");
+    // A package (or the library, which also holds imported packages) can carry local MCP servers:
+    // commands the destination app starts by itself. Each one is shown and needs approval.
+    const toolsWritten = ["full", "convert"].includes(compatibility.categories.find((c) => c.category === "tools")?.status ?? "");
+    const commands: PlannedCommand[] =
+      req.source.kind === "location" || !toolsWritten
+        ? []
+        : doc.tools
+            .filter((t) => t.enabled !== false && t.mcp?.transport === "stdio" && t.mcp.command)
+            .map((t) => ({ tool: t.name, from: req.source.kind === "package" ? ("package" as const) : ("library" as const), command: commandLine(t.mcp!.command!, t.mcp!.args), env: Object.keys(t.mcp!.env) }));
+    if (commands.length && changing.length) approvalsRequired.push("run-commands");
 
     const notes = [...loaded.notes, ...planned.notes];
     if (!(await adapter.detect(root)).detected && adapter.info.support !== "GUIDED") {
@@ -315,6 +345,10 @@ export class Nomad {
     }
     if (loaded.sanitize.walletKeysKept) {
       notes.push({ level: "warning", message: `${loaded.sanitize.walletKeysKept} wallet key(s) or recovery phrase(s) were left out although secrets are included: Nomad never copies them as values, because a leaked wallet key cannot be revoked. Set them again on the destination.` });
+    }
+
+    for (const c of commands) {
+      notes.push({ level: "warning", message: `"${c.tool}" comes from ${c.from === "package" ? "a package" : "the Nomad library"} and ${adapter.info.displayName} will start it by itself: ${c.command}${c.env.length ? ` (with ${c.env.join(", ")} set)` : ""}. Approve only if you trust where it came from.` });
     }
 
     const statusCount = (s: string) => compatibility.categories.filter((c) => c.status === s).length;
@@ -369,6 +403,7 @@ export class Nomad {
         unsupported: statusCount("unsupported")
       },
       approvalsRequired,
+      commands,
       blocked
     };
     this.plans.set(id, { plan, ops, doc, adapter, ctx, planned, at: Date.now() });
@@ -432,7 +467,7 @@ export class Nomad {
     if (options.token && options.token !== plan.token) throw new NomadError("The approval does not match this preview.", "token-mismatch");
     if (plan.blocked.length) throw new NomadError("This migration cannot run: " + plan.blocked.join(" "), "blocked");
     const missing = plan.approvalsRequired.filter(
-      (a) => (a === "replace" && !approvals.replace) || (a === "overwrite-modified" && !approvals.overwriteModified) || (a === "broader-permissions" && !approvals.broaderPermissions)
+      (a) => (a === "replace" && !approvals.replace) || (a === "overwrite-modified" && !approvals.overwriteModified) || (a === "broader-permissions" && !approvals.broaderPermissions) || (a === "run-commands" && !approvals.runCommands)
     );
     if (missing.length) {
       throw new NomadError(`Explicit approval is required: ${missing.join(", ")}.`, "approval-required", "Review the preview and approve these changes to continue.");

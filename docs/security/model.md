@@ -20,6 +20,10 @@
 
 The destination policy is computed before and after (by applying the planned files to a temporary overlay and asking the adapter to read it). Any broader mode, capability, new allow pattern or removed restriction requires the `broader-permissions` approval. Restrictions the destination cannot enforce are listed. Mappings choose the stricter option when inexact.
 
+## Commands from packages
+
+A package can carry local MCP servers: commands the destination app starts by itself. When the agent comes from a package, or from the Nomad library (which also holds imported packages), the preview shows each such command exactly as a shell would, with the names of its environment values, and the move needs the `run-commands` approval (`--approve-commands` in the CLI, a checkbox in the dashboard). Remote servers, disabled servers and moves that leave tools out are not listed. Agents read from apps on this computer need no extra approval.
+
 ## Files
 
 Source agents are only read. Writes are previewed with diffs, backed up, atomic, re-checked against the preview, never follow symlinks below the root, and roll back on failure. Content outside Nomad's sections is never removed. Edited files are detected by hash.
@@ -34,7 +38,7 @@ Bound to 127.0.0.1, token exchanged for an httpOnly SameSite strict cookie, Host
 
 ## MCP
 
-Read only by default. `--allow-writes` lets an assistant apply a preview only with its token. Replace mode, edited files and broader permissions need `--allow-replace`.
+Read only by default. `--allow-writes` lets an assistant apply a preview only with its token. Replace mode, edited files, broader permissions and commands from packages need `--allow-replace`.
 
 ## SSH
 

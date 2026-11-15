@@ -89,7 +89,7 @@ async function run(fn: (nomad: Nomad) => Promise<number | void>) {
 }
 
 /** Shared: preview, ask once, execute. Used by move, migrate, import --to and sync. */
-export async function previewAndApply(nomad: Nomad, plan: MigrationPlan, o: { dryRun?: boolean; yes?: boolean; details?: boolean; approveReplace?: boolean; approveModified?: boolean; approvePermissions?: boolean }): Promise<number> {
+export async function previewAndApply(nomad: Nomad, plan: MigrationPlan, o: { dryRun?: boolean; yes?: boolean; details?: boolean; approveReplace?: boolean; approveModified?: boolean; approvePermissions?: boolean; approveCommands?: boolean }): Promise<number> {
   const output = out();
   const show = () => (o.details || output.verbose ? planText(plan, output.verbose) : summaryText(plan));
   if (o.dryRun || plan.blocked.length) {
@@ -97,11 +97,11 @@ export async function previewAndApply(nomad: Nomad, plan: MigrationPlan, o: { dr
     return plan.blocked.length ? EXIT.error : EXIT.ok;
   }
   if (!output.json) print(output, show, null);
-  const approvals: Approvals = { replace: o.approveReplace, overwriteModified: o.approveModified, broaderPermissions: o.approvePermissions };
-  const missing = plan.approvalsRequired.filter((a) => (a === "replace" && !approvals.replace) || (a === "overwrite-modified" && !approvals.overwriteModified) || (a === "broader-permissions" && !approvals.broaderPermissions));
+  const approvals: Approvals = { replace: o.approveReplace, overwriteModified: o.approveModified, broaderPermissions: o.approvePermissions, runCommands: o.approveCommands };
+  const missing = plan.approvalsRequired.filter((a) => (a === "replace" && !approvals.replace) || (a === "overwrite-modified" && !approvals.overwriteModified) || (a === "broader-permissions" && !approvals.broaderPermissions) || (a === "run-commands" && !approvals.runCommands));
   if (o.yes || !process.stdin.isTTY) {
     if (missing.length) {
-      const flags = missing.map((m) => (m === "replace" ? "--approve-replace" : m === "overwrite-modified" ? "--approve-modified" : "--approve-permissions"));
+      const flags = missing.map((m) => (m === "replace" ? "--approve-replace" : m === "overwrite-modified" ? "--approve-modified" : m === "run-commands" ? "--approve-commands" : "--approve-permissions"));
       throw new NomadError(`This migration needs explicit approval: ${missing.join(", ")}.`, "approval-required", `Review the preview, then add ${flags.join(" ")}.`);
     }
     if (!o.yes) throw new NomadError("Not running interactively.", "approval-required", "Add --yes to apply without a prompt, or --dry-run to preview.");
@@ -117,6 +117,7 @@ export async function previewAndApply(nomad: Nomad, plan: MigrationPlan, o: { dr
       if (m === "replace") approvals.replace = true;
       if (m === "overwrite-modified") approvals.overwriteModified = true;
       if (m === "broader-permissions") approvals.broaderPermissions = true;
+      if (m === "run-commands") approvals.runCommands = true;
     }
   }
   const receipt = await nomad.execute(plan.id, approvals, { token: plan.token });
@@ -141,7 +142,8 @@ const approvalOptions = (cmd: Command) =>
     .option("-y, --yes", "apply without asking (non-interactive)")
     .option("--approve-replace", "allow replacing content Nomad did not write")
     .option("--approve-modified", "allow overwriting files edited after Nomad wrote them")
-    .option("--approve-permissions", "allow a destination policy broader than the current one");
+    .option("--approve-permissions", "allow a destination policy broader than the current one")
+    .option("--approve-commands", "allow commands from a package or the library that the destination app will start");
 
 /* ------------------------------ discovery ------------------------------ */
 

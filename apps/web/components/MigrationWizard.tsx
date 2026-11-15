@@ -50,7 +50,7 @@ export function MigrationWizard() {
   const [targetName, setTargetName] = useState("");
   const [components, setComponents] = useState<Set<ComponentCategory>>(new Set(COMPONENT_CATEGORIES));
   const [plan, setPlan] = useState<any>(null);
-  const [approvals, setApprovals] = useState({ replace: false, overwriteModified: false, broaderPermissions: false });
+  const [approvals, setApprovals] = useState({ replace: false, overwriteModified: false, broaderPermissions: false, runCommands: false });
   const [confirmed, setConfirmed] = useState(false);
   const [receipt, setReceipt] = useState<any>(null);
   const [busy, setBusy] = useState(false);
@@ -87,7 +87,7 @@ export function MigrationWizard() {
     setPlan(null);
     setReceipt(null);
     setConfirmed(false);
-    setApprovals({ replace: false, overwriteModified: false, broaderPermissions: false });
+    setApprovals({ replace: false, overwriteModified: false, broaderPermissions: false, runCommands: false });
     setFurthest((f) => Math.min(f, 3));
   };
 
@@ -130,7 +130,7 @@ export function MigrationWizard() {
       });
       if (overrideMode) setMode(overrideMode);
       setPlan(p);
-      setApprovals({ replace: false, overwriteModified: false, broaderPermissions: false });
+      setApprovals({ replace: false, overwriteModified: false, broaderPermissions: false, runCommands: false });
       setConfirmed(false);
       go(overrideMode ? 6 : 4);
     } catch (e: any) {
@@ -156,7 +156,7 @@ export function MigrationWizard() {
   };
 
   const missingApprovals = plan
-    ? plan.approvalsRequired.filter((a: string) => (a === "replace" && !approvals.replace) || (a === "overwrite-modified" && !approvals.overwriteModified) || (a === "broader-permissions" && !approvals.broaderPermissions))
+    ? plan.approvalsRequired.filter((a: string) => (a === "replace" && !approvals.replace) || (a === "overwrite-modified" && !approvals.overwriteModified) || (a === "broader-permissions" && !approvals.broaderPermissions) || (a === "run-commands" && !approvals.runCommands))
     : [];
 
   const canNext: Record<number, boolean> = {
@@ -613,6 +613,20 @@ export function MigrationWizard() {
                 <label className="check">
                   <input type="checkbox" checked={approvals.broaderPermissions} onChange={(e) => setApprovals({ ...approvals, broaderPermissions: e.target.checked })} />
                   <span>Apply the broader permissions listed above.</span>
+                </label>
+              )}
+              {plan.approvalsRequired.includes("run-commands") && (
+                <label className="check">
+                  <input type="checkbox" checked={approvals.runCommands} onChange={(e) => setApprovals({ ...approvals, runCommands: e.target.checked })} />
+                  <span>
+                    {plan.destination.displayName} will start these commands by itself. I trust where they came from.
+                    {plan.commands.map((c: { tool: string; command: string; env: string[] }) => (
+                      <span key={c.tool} style={{ display: "block" }}>
+                        <code>{c.tool}</code>: <code>{c.command}</code>
+                        {c.env.length > 0 && <small className="muted"> (with {c.env.join(", ")} set)</small>}
+                      </span>
+                    ))}
+                  </span>
                 </label>
               )}
             </div>

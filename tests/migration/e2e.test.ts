@@ -331,9 +331,10 @@ describe("export and import", () => {
     // Then migrate the package into a fresh Claude Code
     const dest = emptyDir(env.home, "fromPack/.claude");
     const plan = await env.nomad.plan({ source: { kind: "package", path: out }, destination: { adapter: "claude-code", root: dest } });
-    // Hermes allowlists shell commands, which is broader than a fresh Claude Code project.
-    expect(plan.approvalsRequired).toEqual(["broader-permissions"]);
-    const receipt = await env.nomad.execute(plan.id, { broaderPermissions: true });
+    // Hermes allowlists shell commands, which is broader than a fresh Claude Code project,
+    // and the package carries local MCP servers that Claude Code will start by itself.
+    expect(plan.approvalsRequired).toEqual(["broader-permissions", "run-commands"]);
+    const receipt = await env.nomad.execute(plan.id, { broaderPermissions: true, runCommands: true });
     expect(receipt.status).toBe("success");
     expect(env.nomad.store.listAgents()).toHaveLength(1);
   });

@@ -153,6 +153,7 @@ export function summaryText(p: MigrationPlan): string[] {
   if (p.conversions.length) lines.push(`Adapted: ${p.conversions.map((c) => `${c.item} ${dim("→ " + c.to)}`).join("; ")}.`);
   if (p.unsupported.length) lines.push(yellow(`Can't move: ${p.unsupported.map((u) => u.item).join(", ")}`) + dim(" (kept in the report with setup steps)"));
   if (p.disabledRoutines.length) lines.push(`Routines arrive paused: ${p.disabledRoutines.join(", ")}.`);
+  for (const c of p.commands ?? []) lines.push(yellow(`Starts by itself on ${p.destination.displayName}: "${c.tool}" runs ${c.command}`) + (c.env.length ? dim(` (with ${c.env.join(", ")} set)`) : ""));
   if (p.secrets.findings || p.secrets.strippedEnv.length) {
     const parts = [p.secrets.findings ? `${p.secrets.findings} found in text and removed` : "", p.secrets.strippedEnv.length ? `you will reconnect ${p.secrets.strippedEnv.map((s) => s.split(":")[1]).join(", ")}` : ""].filter(Boolean);
     lines.push(`Secrets stay behind: ${parts.join("; ")}.`);
@@ -171,5 +172,6 @@ export function approvalQuestion(p: MigrationPlan): string | null {
   if (p.approvalsRequired.includes("replace")) parts.push(`it replaces content Nomad did not create`);
   if (p.approvalsRequired.includes("overwrite-modified")) parts.push(`it overwrites files you edited after Nomad wrote them`);
   if (p.approvalsRequired.includes("broader-permissions")) parts.push(`the destination would allow more than it does now (${p.permissions.widened.join("; ")})`);
+  if (p.approvalsRequired.includes("run-commands")) parts.push(`${p.destination.displayName} will start ${p.commands.length === 1 ? "this command" : "these commands"} by itself: ${p.commands.map((c) => `"${c.tool}" (from ${c.from === "package" ? "the package" : "the Nomad library"}): ${c.command}`).join("; ")}. Approve only if you trust where it came from`);
   return parts.length ? `Heads up: ${parts.join(", and ")}.` : null;
 }

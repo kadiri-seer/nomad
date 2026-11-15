@@ -181,7 +181,7 @@ async function handle(req: Request, ctx: LocalContext, path: string[]): Promise<
     }
     case "POST execute": {
       const s = await body(req);
-      const receipt = await nomad.execute(String(s.planId), { replace: !!s.approvals?.replace, overwriteModified: !!s.approvals?.overwriteModified, broaderPermissions: !!s.approvals?.broaderPermissions }, { token: String(s.token) });
+      const receipt = await nomad.execute(String(s.planId), { replace: !!s.approvals?.replace, overwriteModified: !!s.approvals?.overwriteModified, broaderPermissions: !!s.approvals?.broaderPermissions, runCommands: !!s.approvals?.runCommands }, { token: String(s.token) });
       return json(receipt);
     }
     case "POST export": {

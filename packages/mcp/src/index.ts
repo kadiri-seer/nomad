@@ -187,7 +187,7 @@ export function createMcpServer(options: McpOptions = {}) {
         if (sensitive.length && !options.allowReplace) {
           throw new NomadError(`This migration needs approvals an assistant cannot give here: ${sensitive.join(", ")}.`, "forbidden", "Ask the user to apply it with the Nomad CLI or web app.");
         }
-        const receipt = await nomad.execute(planId, { replace: sensitive.includes("replace"), overwriteModified: sensitive.includes("overwrite-modified"), broaderPermissions: sensitive.includes("broader-permissions") }, { token: approvalToken });
+        const receipt = await nomad.execute(planId, { replace: sensitive.includes("replace"), overwriteModified: sensitive.includes("overwrite-modified"), broaderPermissions: sensitive.includes("broader-permissions"), runCommands: sensitive.includes("run-commands") }, { token: approvalToken });
         return text(receipt);
       } catch (e) {
         return fail(e);

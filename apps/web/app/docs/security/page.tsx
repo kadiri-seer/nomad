@@ -43,10 +43,13 @@ export default function Security() {
       <p>
         A package is never trusted, even one Nomad created. Before anything is extracted, the archive directory is checked for path traversal, absolute paths, backslashes, control characters, symbolic links and special files, duplicate paths, encrypted entries, unexpected file types, size limits and compression ratios. Entries are then inflated with their declared size as a hard cap, and every file is checked against the SHA-256 recorded in the manifest. Scripts inside skills are stored and reported but never executed.
       </p>
+      <p>
+        A package can also carry local MCP servers, which are commands the destination app starts by itself. When an agent comes from a package or from the Nomad library, the preview shows each of these commands exactly, and the move waits for your approval (<code>--approve-commands</code> in the CLI, a checkbox in the dashboard). Agents read from apps on this computer need no extra approval.
+      </p>
 
       <h2>Assistants</h2>
       <p>
-        The MCP server is read only by default. With <code>--allow-writes</code> an assistant can apply a migration only by quoting the token of a preview, so it cannot write anything that was not previewed. Replace mode, overwriting edited files and broader permissions additionally require <code>--allow-replace</code>.
+        The MCP server is read only by default. With <code>--allow-writes</code> an assistant can apply a migration only by quoting the token of a preview, so it cannot write anything that was not previewed. Replace mode, overwriting edited files, broader permissions and commands from packages additionally require <code>--allow-replace</code>.
       </p>
 
       <h2>Remote migration</h2>
