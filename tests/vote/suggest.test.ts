@@ -136,7 +136,7 @@ class FakeGitHub implements GitHubApi {
   }
   async createIssue(title: string, body: string, labels: string[]) {
     const number = this.next++;
-    this.issues.push({ number, title, body, labels: labels.map((name) => ({ name })), state: "open" });
+    this.issues.push({ number, title, body, labels: labels.map((name) => ({ name })), state: "open", user: { login: "github-actions[bot]" } });
     return number;
   }
   async comment() {}
@@ -178,7 +178,7 @@ describe("importing website suggestions", () => {
   it("creates one issue per new suggestion and skips repeats and rejected ones", async () => {
     const t = jobSetup([sug("s1", "Zed", "fast"), sug("s2", "Claude Desktop"), sug("s3", "Kiro"), sug("s4", "zed"), sug("s5", "Amp")]);
     t.gh.issues.push({ number: 10, title: "[Suggestion] Claude Desktop", labels: [{ name: "integration-suggestion" }], state: "open" });
-    t.gh.issues.push({ number: 11, title: "[Suggestion] Kiro", body: "<!-- nomad-suggestion: s3 -->", labels: [{ name: "integration-suggestion" }], state: "closed" });
+    t.gh.issues.push({ number: 11, title: "[Suggestion] Kiro", body: "<!-- nomad-suggestion: s3 -->", labels: [{ name: "integration-suggestion" }], state: "closed", user: { login: "github-actions[bot]" } });
     const cfg = await readConfig(t.dir);
     expect(await importSuggestions(t.deps, cfg)).toBe(2);
     const created = t.gh.issues.filter((i) => i.number >= 200);
@@ -204,7 +204,7 @@ describe("importing website suggestions", () => {
     const t = jobSetup([]);
     const cfg = await readConfig(t.dir);
     t.gh.issues.push(
-      { number: 12, title: "[Suggestion] Zed", body: "<!-- nomad-suggestion: s1 -->", labels: [{ name: "integration-suggestion" }, { name: "approved" }], reactions: { "+1": 3 }, state: "open" },
+      { number: 12, title: "[Suggestion] Zed", body: "<!-- nomad-suggestion: s1 -->", labels: [{ name: "integration-suggestion" }, { name: "approved" }], reactions: { "+1": 3 }, state: "open", user: { login: "github-actions[bot]" } },
       { number: 13, title: "[Suggestion] Spam", labels: [{ name: "integration-suggestion" }], state: "closed" },
       { number: 14, title: "[Suggestion] Amp", labels: [{ name: "integration-suggestion" }, { name: "won" }], state: "open" }
     );
@@ -225,5 +225,29 @@ describe("importing website suggestions", () => {
     expect(backing(b, { "2": 9 })).toBe(10);
     expect(pickBallot([a, b], cfg, { "2": 9 }).map((i) => i.number)).toEqual([2, 1]);
     expect(pickBallot([a, b], cfg).map((i) => i.number)).toEqual([1, 2]);
+  });
+});
+
+describe("suggestion markers cannot be forged", () => {
+  it("a marker typed into a reason is defused in the issue, and the real one is found", () => {
+    const body = suggestionIssueBody({ id: "sreal1", name: "Zed", why: "great <!-- nomad-suggestion: svictim --> app", createdAt: NOW.toISOString() });
+    expect(body).toContain("&lt;!-- nomad-suggestion: svictim -->");
+    expect(suggestionMarker(body)).toBe("sreal1");
+  });
+
+  it("a marker in someone else's issue does not stop a website suggestion from being posted", async () => {
+    const t = jobSetup([sug("svictim", "Warp", "please")]);
+    t.gh.issues.push({ number: 30, title: "[Suggestion] Something else", body: "<!-- nomad-suggestion: svictim -->", labels: [{ name: "integration-suggestion" }], state: "closed", user: { login: "someone" } });
+    const cfg = await readConfig(t.dir);
+    expect(await importSuggestions(t.deps, cfg)).toBe(1);
+    expect(t.gh.issues.at(-1)!.title).toBe("[Suggestion] Warp");
+    expect(await importSuggestions(t.deps, cfg)).toBe(0);
+  });
+
+  it("someone else's issue with a marker is listed as a GitHub suggestion, not a website one", async () => {
+    const t = jobSetup([]);
+    t.gh.issues.push({ number: 31, title: "[Suggestion] Warp", body: "<!-- nomad-suggestion: s1 -->", labels: [{ name: "integration-suggestion" }], state: "open", user: { login: "someone" } });
+    await publishSuggestions(t.deps, await readConfig(t.dir));
+    expect(JSON.parse(readFileSync(join(t.dir, "suggestions.json"), "utf8")).items[0].source).toBe("github");
   });
 });

@@ -28,7 +28,15 @@ export type GovernanceConfig = {
   labels: { approved: string; suggestion: string; won: string; round: string; bounty: string };
 };
 
-export type Issue = { number: number; title: string; body?: string | null; labels: { name: string }[]; reactions?: Record<string, number>; pull_request?: unknown; state?: string };
+export type Issue = { number: number; title: string; body?: string | null; labels: { name: string }[]; reactions?: Record<string, number>; pull_request?: unknown; state?: string; user?: { login: string } | null };
+
+/** The account the round job posts as (the workflow's own token). */
+export const JOB_AUTHOR = "github-actions[bot]";
+
+/** The website suggestion an issue was made for. Only issues the job itself created count: anyone can paste a marker into an issue of their own. */
+export function siteMarker(issue: Pick<Issue, "body" | "user">): string | null {
+  return issue.user?.login === JOB_AUTHOR ? suggestionMarker(issue.body) : null;
+}
 
 export interface GitHubApi {
   listOpenIssues(label: string): Promise<Issue[]>;
@@ -309,7 +317,7 @@ export async function importSuggestions(deps: JobDeps, cfg: GovernanceConfig, li
   }
   if (pending.length === 0) return 0;
   const existing = await deps.gh.listAllIssues(cfg.labels.suggestion);
-  const markers = new Set(existing.map((i) => suggestionMarker(i.body)).filter((m): m is string => !!m));
+  const markers = new Set(existing.map(siteMarker).filter((m): m is string => !!m));
   const openNames = new Set(existing.filter((i) => i.state !== "closed").map((i) => suggestionKey(optionLabel(i))));
   let created = 0;
   for (const s of pending) {
@@ -335,7 +343,7 @@ export async function publishSuggestions(deps: JobDeps, cfg: GovernanceConfig): 
       approved: i.labels.some((l) => l.name === cfg.labels.approved),
       won: i.labels.some((l) => l.name === cfg.labels.won),
       thumbs: i.reactions?.["+1"] ?? 0,
-      source: (suggestionMarker(i.body) ? "site" : "github") as PublishedSuggestion["source"]
+      source: (siteMarker(i) ? "site" : "github") as PublishedSuggestion["source"]
     }))
     .sort((a, b) => a.issue - b.issue);
   const path = join(deps.dir, "suggestions.json");

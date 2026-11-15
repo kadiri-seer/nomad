@@ -133,11 +133,12 @@ export class SuggestionStore {
   }
 }
 
-/** The text of the GitHub issue created for a site suggestion. Mentions are defused. */
+/** The text of the GitHub issue created for a site suggestion. Mentions and hidden comments are defused. */
 export function suggestionIssueBody(s: PendingSuggestion): string {
   const quote = (t: string) =>
     t
       .replace(/@/g, "@​")
+      .replace(/<!--/g, "&lt;!--")
       .split("\n")
       .map((l) => `> ${l}`)
       .join("\n");
