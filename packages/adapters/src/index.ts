@@ -10,4 +10,4 @@ export { defineFileAdapter, FILE_ADAPTERS, type FileAdapterSpec } from "./file-b
 export { createGuidedAdapter, GUIDED_ADAPTERS, instructionsText, userContextText } from "./guided";
 export { elizaosAdapter, parseCharacter, characterToDocument, documentToCharacter, hasSecretsKey } from "./elizaos";
 export { KNOWN_ELIZAOS_PLUGINS, knownElizaosPlugin, elizaosPluginHint } from "./elizaos-known-plugins";
-export { applyKnownServerProfile, knownServerId } from "./known-servers";
+export { applyKnownServerProfile, knownServerId, knownSkillNotes } from "./known-servers";

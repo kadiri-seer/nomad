@@ -13,7 +13,10 @@ export const KEY_MATERIAL_DIRS: RegExp[] = [
   // Oak Agent Kit: the encrypted wallet (wallet.enc), private notes (*.gloam.enc), the wallet journal and settings.
   /(^|\/)\.oak(\/|$)/,
   // Hedgehood: the session, payer and owner key files and the kit's settings.
-  /(^|\/)\.hedgehood(\/|$)/
+  /(^|\/)\.hedgehood(\/|$)/,
+  // BrainChain: the payer and worker key files and the daily spending record (~/.brainchain), and the worker's state.
+  /(^|\/)\.brainchain(\/|$)/,
+  /(^|\/)\.config\/brainchain-worker(\/|$)/
 ];
 
 /** Key files by name, wherever they are. */

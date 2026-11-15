@@ -25,7 +25,7 @@ import { atomicWrite, displayPath, drainSkippedKeyMaterial, drainSkippedLinks, m
 import { sanitizeDocument, scanDocument, type DocumentScan, type SanitizeReport } from "@nomad/security";
 import { packAgent, packInterchange, unpackAgent, INTERCHANGE_EXTENSION, PACKAGE_EXTENSION, type UnpackResult } from "@nomad/archive";
 import { analyzeCompatibility, type CompatibilityReport } from "@nomad/compatibility";
-import { getAdapter, findAdapter, listAdapters, scanPlatforms } from "@nomad/adapters";
+import { getAdapter, findAdapter, knownSkillNotes, listAdapters, scanPlatforms } from "@nomad/adapters";
 import { NomadStore } from "@nomad/storage";
 import { applyOperations, computeOperations, type FileOperation } from "./ops";
 import { createBackup, previewRestore, restoreBackup, type RestorePreview } from "./backup";
@@ -343,6 +343,8 @@ export class Nomad {
     if (commands.length && changing.length) approvalsRequired.push("run-commands");
 
     const notes = [...loaded.notes, ...planned.notes];
+    // Skills that only work with the setup they were written for are moved, and the preview says so.
+    if (components.includes("skills")) notes.push(...knownSkillNotes(doc.skills, adapter.info.id, adapter.info.displayName));
     if (!(await adapter.detect(root)).detected && adapter.info.support !== "GUIDED") {
       notes.push({ level: "info", message: `${adapter.info.displayName} was not detected at ${displayPath(root)}. Nomad will create the files there.` });
     }

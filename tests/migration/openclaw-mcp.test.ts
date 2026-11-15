@@ -40,7 +40,7 @@ function openclawWithServers(home: string) {
     join(r, "openclaw.json"),
     `// OpenClaw configuration
 {
-  agents: { defaults: { workspace: "~/.openclaw/workspace", model: { primary: "anthropic/claude-sonnet-4-5" } } },
+  agents: { defaults: { model: { primary: "anthropic/claude-sonnet-4-5" } } },
   mcp: {
     servers: {
       fetch: { command: "uvx", args: ["mcp-server-fetch"] },

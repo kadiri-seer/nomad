@@ -232,7 +232,134 @@ const HEDGEHOOD: ServerProfile = {
   }
 };
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD];
+/** The brainchain-mcp command from the brainchain-mcp package (also .cmd or .exe on Windows), alone or as a path. */
+const isBrainChainCommand = (command: string | undefined) => !!command && /(^|[\\/])brainchain-mcp(\.cmd|\.exe)?$/i.test(command);
+const literal = (t: Tool, k: string) => {
+  const v = t.mcp?.env[k];
+  return v && "value" in v ? v.value.trim() : undefined;
+};
+/** Base units (6 decimals) as an amount, for example 10000000 as "10". */
+const amount = (units: string) => {
+  if (!/^\d+$/.test(units)) return units;
+  const n = BigInt(units);
+  const whole = n / 1000000n;
+  const fraction = (n % 1000000n).toString().padStart(6, "0").replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : `${whole}`;
+};
+
+/**
+ * BrainChain, which verifies AI agent work and settles payments on Robinhood Chain and Base, as it
+ * documents its MCP server (docs.usebrainchain.com/agents and github.com/usebrainchain/brainchain-mcp,
+ * brainchain-mcp 0.9.3, read Nov 15, 2026): `npx -y brainchain-mcp@<version>` or `brainchain-mcp`.
+ * It pays from a wallet whose key is in BRAINCHAIN_PAYER_KEY_FILE (~/.brainchain/payer.key) or
+ * BRAINCHAIN_PAYER_KEY, never both; it uses mainnet unless BRAINCHAIN_NETWORK=testnet, and pays in USDG
+ * on Robinhood Chain unless BRAINCHAIN_PAY_ON=base. Limits are in base units (6 decimals).
+ */
+const BRAINCHAIN: ServerProfile = {
+  id: "brainchain",
+  vendor: "BrainChain",
+  label: "BrainChain (verified AI work, paid on Robinhood Chain or Base)",
+  matches: (t) => !!t.mcp && t.mcp.transport === "stdio" && (isBrainChainCommand(t.mcp.command) || t.mcp.args.some((a) => /^brainchain-mcp(@|$)/.test(a))),
+  keyVars: ["BRAINCHAIN_PAYER_KEY_FILE", "BRAINCHAIN_PAYER_KEY"],
+  emptyOkEnv: [],
+  limitVars: ["BRAINCHAIN_MAX_PRICE_UNITS", "BRAINCHAIN_BUDGET_UNITS", "BRAINCHAIN_DAILY_UNITS", "BRAINCHAIN_MAX_BOND_UNITS", "BRAINCHAIN_STATE_DIR"],
+  looserDefaults: {
+    BRAINCHAIN_BUDGET_UNITS: "10 per server run",
+    BRAINCHAIN_DAILY_UNITS: "no daily cap",
+    BRAINCHAIN_MAX_BOND_UNITS: "10 USDG per bond"
+  },
+  apply(t, out, platform) {
+    const mcp = t.mcp!;
+    out.notes.push({
+      level: "info",
+      category: "integrations",
+      message: "BrainChain's wallet key and daily spending record stay on this computer in ~/.brainchain. Nomad never reads that folder or any key file, and never moves tasks, bonds or approvals on chain."
+    });
+    // A raw key is a wallet private key: never written as a value, even with --include-secrets.
+    const raw = mcp.env.BRAINCHAIN_PAYER_KEY;
+    if (raw && "value" in raw) mcp.env.BRAINCHAIN_PAYER_KEY = { secretRef: "BRAINCHAIN_PAYER_KEY", redacted: true };
+    if (mcp.env.BRAINCHAIN_PAYER_KEY && !mcp.env.BRAINCHAIN_PAYER_KEY_FILE) {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" was given its wallet key directly. BrainChain recommends BRAINCHAIN_PAYER_KEY_FILE instead: a path to an owner-only file holding only that key, so the key is not in ${platform}'s settings.` });
+    }
+
+    const network = mcp.env.BRAINCHAIN_NETWORK;
+    const payOn = mcp.env.BRAINCHAIN_PAY_ON;
+    const testnet = literal(t, "BRAINCHAIN_NETWORK")?.toLowerCase() === "testnet";
+    const base = literal(t, "BRAINCHAIN_PAY_ON")?.toLowerCase() === "base";
+    const token = base ? "USDC" : "USDG";
+    const perTask = amount(literal(t, "BRAINCHAIN_MAX_PRICE_UNITS") ?? "1000000");
+    const perRun = amount(literal(t, "BRAINCHAIN_BUDGET_UNITS") ?? "10000000");
+    const where = base ? "Base" : "Robinhood Chain";
+    if (network && !("value" in network)) {
+      out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" takes its network from BRAINCHAIN_NETWORK, which was a variable on the source. BrainChain uses mainnet (real money) unless it is set to testnet on ${platform}.` });
+    } else if (testnet) {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" uses the BrainChain testnet and pays in test ${token} on ${base ? "Base Sepolia" : "the Robinhood Chain testnet"}.` });
+    } else {
+      out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" pays on ${where} mainnet in real ${token}: up to ${perTask} ${token} per task and ${perRun} ${token} per run.` });
+    }
+    if (payOn && !("value" in payOn)) {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" takes where it pays from BRAINCHAIN_PAY_ON, which was a variable on the source: USDG on Robinhood Chain unless it is set to base on ${platform}.` });
+    }
+    if (!mcp.env.BRAINCHAIN_DAILY_UNITS) {
+      out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" has no daily cap on ${platform}: BrainChain then limits only each run, and that budget starts over whenever ${platform} restarts the server. For an agent that runs on its own, set BRAINCHAIN_DAILY_UNITS (in units of 0.000001: 5000000 is 5 ${token}).` });
+    }
+    out.notes.push({
+      level: "warning",
+      category: "tools",
+      message: `BrainChain: if ${platform} runs on another computer, the wallet key does not come along. Create the key file there yourself (owner-only), for a wallet that holds only what this agent may spend, and set BRAINCHAIN_PAYER_KEY_FILE.`
+    });
+
+    // A key that was an optional reference on the source (Hermes) may be left out on the destination.
+    // Without it the server still starts, but it cannot pay, so the step says so plainly.
+    const optionalEnv = ((mcp as Record<string, unknown>).optionalEnv as string[] | undefined) ?? [];
+    const optionalKeys = ["BRAINCHAIN_PAYER_KEY_FILE", "BRAINCHAIN_PAYER_KEY"].filter((k) => mcp.env[k] && optionalEnv.includes(k));
+    if (optionalKeys.length) {
+      out.manualSteps.push(`"${t.name}" can only pay with its wallet key: make sure ${optionalKeys.join(" or ")} is set for it on ${platform}. Without it the server starts and reads, but cannot post or bond tasks.`);
+    }
+
+    const pkg = mcp.args.find((a) => /^brainchain-mcp(@|$)/.test(a)) ?? "brainchain-mcp";
+    const prefix = `${testnet ? "BRAINCHAIN_NETWORK=testnet " : ""}${base ? "BRAINCHAIN_PAY_ON=base " : ""}BRAINCHAIN_PAYER_KEY_FILE=<key file>`;
+    if (!base) out.manualSteps.push(`Paying in USDG needs a one-time approval per wallet. If this wallet has not paid BrainChain in USDG before, run in your own terminal: ${prefix} npx -y ${pkg} approve`);
+    out.manualSteps.push(`Check the wallet before the agent pays: ${prefix} npx -y ${pkg} wallet (it prints the wallet and what it still needs, never the key).`);
+    if (isBrainChainCommand(mcp.command)) {
+      out.manualSteps.push(`Install BrainChain's MCP server for "${t.name}": npm install -g brainchain-mcp. It needs Node.js 22 or later, and the brainchain-mcp command must be on the PATH ${platform} uses.`);
+    } else {
+      out.manualSteps.push(`"${t.name}" runs BrainChain through npx: ${platform} needs Node.js 22 or later on its PATH.`);
+    }
+  }
+};
+
+/**
+ * Skills that only work with the setup they were written for. Nomad moves them like any skill and
+ * says so in the preview instead of copying them silently.
+ */
+export function knownSkillNotes(skills: Array<{ name: string; frontmatter?: Record<string, unknown> }>, platformId: string, platformName: string): Note[] {
+  const notes: Note[] = [];
+  const fromBrainChain = (s: { frontmatter?: Record<string, unknown> }) => {
+    const home = s.frontmatter?.homepage;
+    if (typeof home !== "string") return false;
+    try {
+      return /(^|\.)usebrainchain\.com$/.test(new URL(home).hostname);
+    } catch {
+      return false;
+    }
+  };
+  for (const s of skills) {
+    if (!fromBrainChain(s)) continue;
+    if (s.name === "brainchain-worker") {
+      notes.push(
+        platformId === "openclaw"
+          ? { level: "warning", category: "skills", message: `The "brainchain-worker" skill reads its key through OpenClaw's secrets settings, which Nomad does not copy, and the worker itself is a program you run. Redo the skill's "For the operator, first" setup on this OpenClaw, then start the worker again.` }
+          : { level: "warning", category: "skills", message: `The "brainchain-worker" skill is written for OpenClaw: it needs the openclaw command, Docker and its key in OpenClaw's secrets settings, so it does not work on ${platformName} as it is. Nomad copies it so nothing is lost.` }
+      );
+    } else if (s.name === "brainchain" && platformId !== "openclaw") {
+      notes.push({ level: "info", category: "skills", message: `The "brainchain" skill is written for OpenClaw: its setup steps use openclaw commands and its wallet check script path is filled in by OpenClaw. The BrainChain MCP tools it describes work the same on ${platformName}.` });
+    }
+  }
+  return notes;
+}
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {
