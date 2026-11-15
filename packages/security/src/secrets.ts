@@ -138,6 +138,34 @@ export function redactLaunchField(text: string): { text: string; count: number }
   return { text: out, count };
 }
 
+/** The rules for wallet key material: kept out even when other secrets are included. */
+const WALLET_RULE_IDS = new Set(["evm-private-key", "bip39-mnemonic"]);
+
+/** Replace only wallet keys and recovery phrases with redaction markers. */
+export function redactWalletText(text: string): { text: string; count: number } {
+  const matches = rawMatches(text).filter((m) => WALLET_RULE_IDS.has(m.rule.id));
+  if (!matches.length) return { text, count: 0 };
+  let out = "";
+  let last = 0;
+  for (const m of matches) {
+    out += text.slice(last, m.start) + `[REDACTED:${m.rule.id}]`;
+    last = m.end;
+  }
+  out += text.slice(last);
+  return { text: out, count: matches.length };
+}
+
+/** Remove wallet keys and recovery phrases from a launch field, with or without surrounding context. */
+export function redactWalletLaunchField(text: string): { text: string; count: number } {
+  const r = redactWalletText(text);
+  let count = r.count;
+  const out = r.text.replace(EVM_KEY, () => {
+    count++;
+    return "[REDACTED:evm-private-key]";
+  });
+  return { text: out, count };
+}
+
 export interface SecretFinding {
   ruleId: string;
   ruleName: string;

@@ -224,7 +224,8 @@ export class Nomad {
       this.store.upsertLocation({ agentId: doc.id, adapter: adapterId, root: r, nativeId, hash: documentHash(clean.doc), role: mapped?.role === "primary" || !this.store.locationsFor(doc.id).length ? "primary" : undefined });
     }
     const out = options.includeSecrets ? sanitizeDocument(doc, { includeSecrets: true }) : clean;
-    return { doc: out.doc, notes: result.notes, scan, sanitize: clean.report, version, sourceFiles: result.sourceFiles, sourceAdapter: adapter };
+    // The report describes what the destination gets: with --include-secrets, only wallet keys are left out.
+    return { doc: out.doc, notes: result.notes, scan, sanitize: out.report, version, sourceFiles: result.sourceFiles, sourceAdapter: adapter };
   }
 
   private signerOf(u: UnpackResult): SignerStatus {
@@ -311,6 +312,9 @@ export class Nomad {
     }
     if (loaded.sanitize.redactedText || loaded.sanitize.strippedEnvValues.length) {
       notes.push({ level: "warning", message: `${loaded.sanitize.redactedText} secret value(s) in text were redacted and ${loaded.sanitize.strippedEnvValues.length} credential(s) were replaced by references.` });
+    }
+    if (loaded.sanitize.walletKeysKept) {
+      notes.push({ level: "warning", message: `${loaded.sanitize.walletKeysKept} wallet key(s) or recovery phrase(s) were left out although secrets are included: Nomad never copies them as values, because a leaked wallet key cannot be revoked. Set them again on the destination.` });
     }
 
     const statusCount = (s: string) => compatibility.categories.filter((c) => c.status === s).length;

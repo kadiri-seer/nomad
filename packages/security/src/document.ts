@@ -1,5 +1,5 @@
 import type { AgentDocument, EnvValue } from "@nomad/schema";
-import { redactText, redactLaunchField, scanText, scanMcpLaunchFields, isSensitiveEnvKey, isRpcEnvKey, isPublicRpcUrl, looksLikeSecretValue, isSensitiveFile, type SecretFinding } from "./secrets";
+import { redactText, redactLaunchField, redactWalletText, redactWalletLaunchField, scanText, scanMcpLaunchFields, isSensitiveEnvKey, isRpcEnvKey, isPublicRpcUrl, looksLikeSecretValue, isSensitiveFile, isMnemonic, type SecretFinding } from "./secrets";
 
 const EVM_KEY_VALUE = /\b0x[0-9a-fA-F]{64}\b/;
 
@@ -7,6 +7,25 @@ const EVM_KEY_VALUE = /\b0x[0-9a-fA-F]{64}\b/;
 export function isSecretEnvEntry(key: string, value: string): boolean {
   if (isSensitiveEnvKey(key) || looksLikeSecretValue(value) || EVM_KEY_VALUE.test(value)) return true;
   return isRpcEnvKey(key) && !isPublicRpcUrl(value);
+}
+
+/** Names that hold wallet key material: PRIVATE_KEY, WALLET_SECRET, SIGNER_KEY, HEDGEHOOD_SESSION_KEY and similar. */
+const WALLET_ENV_NAME = /(PRIVATE|WALLET|SIGNER|MNEMONIC|SEED|OWNER|PAYER|SESSION)/i;
+const BARE_HEX_KEY = /^(?:0x)?[0-9a-fA-F]{64}$/;
+/** A Solana secret key in base58 (64 bytes). */
+const BASE58_KEY = /^[1-9A-HJ-NP-Za-km-z]{86,90}$/;
+/** A Solana secret key as a JSON array of 64 bytes. */
+const BYTE_ARRAY_KEY = /^\[\s*\d{1,3}(?:\s*,\s*\d{1,3}){63}\s*\]$/;
+
+/**
+ * True when an env or header value is wallet key material: a 0x-prefixed 32-byte hex value,
+ * a recovery phrase, or a raw key under a wallet name. These are never written as values,
+ * even with --include-secrets, because a leaked wallet key cannot be revoked.
+ */
+export function isWalletEnvEntry(key: string, value: string): boolean {
+  const v = value.trim();
+  if (EVM_KEY_VALUE.test(v) || isMnemonic(v) || redactWalletText(v).count > 0) return true;
+  return WALLET_ENV_NAME.test(key) && (BARE_HEX_KEY.test(v) || BASE58_KEY.test(v) || BYTE_ARRAY_KEY.test(v));
 }
 
 export interface SensitiveFileFinding {
@@ -88,14 +107,17 @@ export interface SanitizeReport {
   strippedEnvValues: Array<{ tool: string; key: string }>;
   removedFiles: string[];
   includedSecrets: boolean;
+  /** Wallet keys and recovery phrases left out although secrets were included. */
+  walletKeysKept: number;
 }
 
-function stripRecord(tool: string, rec: Record<string, EnvValue>, report: SanitizeReport): Record<string, EnvValue> {
+function stripRecord(tool: string, rec: Record<string, EnvValue>, report: SanitizeReport, isSecret: (k: string, v: string) => boolean): Record<string, EnvValue> {
   const out: Record<string, EnvValue> = {};
   for (const [k, v] of Object.entries(rec)) {
-    if ("value" in v && isSecretEnvEntry(k, v.value)) {
+    if ("value" in v && isSecret(k, v.value)) {
       out[k] = { secretRef: k, redacted: true };
       report.strippedEnvValues.push({ tool, key: k });
+      if (report.includedSecrets) report.walletKeysKept++;
     } else out[k] = v;
   }
   return out;
@@ -105,24 +127,26 @@ function stripRecord(tool: string, rec: Record<string, EnvValue>, report: Saniti
  * Remove credentials from a document. Text secrets are replaced with markers,
  * tool environment secrets become references the user reconnects later, and
  * credential files are dropped. Nothing is removed silently: the report lists it all.
+ * With includeSecrets, other secrets are kept but wallet keys and recovery phrases are
+ * still removed everywhere: they cannot be revoked once they leak.
  */
 export function sanitizeDocument(doc: AgentDocument, options: SanitizeOptions = {}): { doc: AgentDocument; report: SanitizeReport } {
-  const report: SanitizeReport = { redactedText: 0, strippedEnvValues: [], removedFiles: [], includedSecrets: !!options.includeSecrets };
-  if (options.includeSecrets) {
-    if (options.includeSensitiveFiles) return { doc, report };
-  }
+  const include = !!options.includeSecrets;
+  const report: SanitizeReport = { redactedText: 0, strippedEnvValues: [], removedFiles: [], includedSecrets: include, walletKeysKept: 0 };
   const red = (s: string) => {
-    if (options.includeSecrets) return s;
-    const r = redactText(s);
+    const r = include ? redactWalletText(s) : redactText(s);
     report.redactedText += r.count;
+    if (include) report.walletKeysKept += r.count;
     return r.text;
   };
   // Launch fields: a wallet key is removed even without surrounding words.
   const launch = (s: string) => {
-    const r = redactLaunchField(s);
+    const r = include ? redactWalletLaunchField(s) : redactLaunchField(s);
     report.redactedText += r.count;
+    if (include) report.walletKeysKept += r.count;
     return r.text;
   };
+  const isSecret = include ? isWalletEnvEntry : isSecretEnvEntry;
   const keepFile = (path: string) => {
     if (options.includeSensitiveFiles || !isSensitiveFile(path)) return true;
     report.removedFiles.push(path);
@@ -150,15 +174,15 @@ export function sanitizeDocument(doc: AgentDocument, options: SanitizeOptions = 
       actions: w.actions.map((a) => (a.kind === "prompt" ? { ...a, text: red(a.text) } : a))
     })),
     tools: doc.tools.map((t) =>
-      t.mcp && !options.includeSecrets
+      t.mcp
         ? {
             ...t,
             mcp: {
               ...t.mcp,
               args: t.mcp.args.map(launch),
               url: t.mcp.url === undefined ? undefined : launch(t.mcp.url),
-              env: stripRecord(t.name, t.mcp.env, report),
-              headers: stripRecord(t.name, t.mcp.headers, report)
+              env: stripRecord(t.name, t.mcp.env, report, isSecret),
+              headers: stripRecord(t.name, t.mcp.headers, report, isSecret)
             }
           }
         : t

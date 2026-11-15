@@ -236,7 +236,7 @@ program
   .option("--agent <id>", "agent inside the platform")
   .option("--components <list>", `only these components (${COMPONENT_CATEGORIES.join(",")})`)
   .option("--include-files", "include knowledge and other files")
-  .option("--include-secrets", "keep secret values in the package (not recommended)")
+  .option("--include-secrets", "keep secret values in the package, except wallet keys (not recommended)")
   .option("--include-sensitive-files", "keep credential files such as .env (not recommended)")
   .addOption(new Option("--format <format>", "nomad (complete) or jetpack (interchange archive for other tools)").choices(["nomad", "jetpack"]).default("nomad"))
   .option("--sign", "sign the package with your Nomad key so others can verify it came from you")
@@ -245,7 +245,7 @@ program
       const spec = await parseSource(nomad, source, { sourceDir: o.sourceDir, agent: o.agent });
       if (o.includeSecrets && !out().json) process.stderr.write(yellow("Warning: secret values will be stored in the package. Share it only with people who may see them.\n"));
       const r = await nomad.exportAgent(spec, { outPath: resolve(o.out), includeSecrets: o.includeSecrets, includeFiles: o.includeFiles, includeSensitiveFiles: o.includeSensitiveFiles, components: components(o.components), format: o.format === "jetpack" ? "interchange" : "nomad", sign: o.sign });
-      print(out(), () => [green("Exported") + `  ${r.path}`, ...(r.receipt.signedBy ? [`Signed with your key ${r.receipt.signedBy}`] : []), ...(r.receipt.notIncluded.length ? [yellow(`Not representable in this format: ${r.receipt.notIncluded.join(", ")}`)] : []), `${r.files.size} files, ${r.bytes.length} bytes`, ...(r.sanitize.redactedText || r.sanitize.strippedEnvValues.length ? [yellow(`${r.sanitize.redactedText} secret(s) redacted, ${r.sanitize.strippedEnvValues.length} credential(s) replaced by references`)] : []), ...(r.sanitize.removedFiles.length ? [yellow(`Left out credential files: ${r.sanitize.removedFiles.join(", ")}`)] : [])], r.receipt);
+      print(out(), () => [green("Exported") + `  ${r.path}`, ...(r.receipt.signedBy ? [`Signed with your key ${r.receipt.signedBy}`] : []), ...(r.receipt.notIncluded.length ? [yellow(`Not representable in this format: ${r.receipt.notIncluded.join(", ")}`)] : []), `${r.files.size} files, ${r.bytes.length} bytes`, ...(r.sanitize.redactedText || r.sanitize.strippedEnvValues.length ? [yellow(`${r.sanitize.redactedText} secret(s) redacted, ${r.sanitize.strippedEnvValues.length} credential(s) replaced by references`)] : []), ...(r.sanitize.removedFiles.length ? [yellow(`Left out credential files: ${r.sanitize.removedFiles.join(", ")}`)] : []), ...(r.sanitize.walletKeysKept ? [yellow(`Left out ${r.sanitize.walletKeysKept} wallet key(s) or recovery phrase(s): Nomad never stores them as values, even with --include-secrets.`)] : [])], r.receipt);
     })
   );
 
@@ -296,7 +296,7 @@ approvalOptions(
     .option("--name <name>", "name of the new agent in copy mode")
     .option("--components <list>", `only these components (${COMPONENT_CATEGORIES.join(",")})`)
     .option("--include-files", "include knowledge files")
-    .option("--include-secrets", "carry secret values (not recommended)")
+    .option("--include-secrets", "carry secret values, except wallet keys (not recommended)")
 ).action((o) =>
   run(async (nomad) => {
     const spec = await parseSource(nomad, o.from, { sourceDir: o.sourceDir, agent: o.agent });
