@@ -96,6 +96,10 @@ export default function Adapters() {
       <p>
         Oak Agent Kit is a local wallet and tools for Robinhood Chain projects, used by an agent through one MCP server. Nomad moves the Oak MCP entry (<code>oak mcp</code>, <code>npx @oakagentkit/addon</code>, or Oak&apos;s Claude Code plugin) into the destination&apos;s own format, the same entry Oak&apos;s own setup writes. <code>~/.oak</code>, where Oak keeps its wallet and settings, is never read or moved. On another computer, Oak starts with a new wallet unless you restore yours there yourself. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/oak-setups.md">Oak setups guide</a>.
       </p>
+      <h2>Hedgehood setups</h2>
+      <p>
+        Hedgehood is an options market for AI agents on Robinhood Chain, traded through a local MCP server with a session key that can trade but never withdraw. Nomad moves the Hedgehood server (<code>npx @hedgehood-io/mcp</code> or <code>hedgehood-mcp</code>), its hosted read-only server and its Claude Code plugin into the destination&apos;s own format, and the preview says whether each server is on mainnet (real USDG) or the testnet. Key files and <code>~/.hedgehood</code> are never read or moved, and raw keys are never written as values. On another computer, create and authorize a new session there. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/hedgehood-setups.md">Hedgehood setups guide</a>.
+      </p>
       <h3>Guided platforms</h3>
       <p>
         Hosted products (ChatGPT, Claude, Gemini, Grok, Perplexity) do not offer an agent import, and frameworks (CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n, Letta) define agents in code or in their own apps. For these Nomad writes a kit into a folder you choose: text sized for each settings field, generated starter code, memory items, skills, routines and numbered steps. Nothing is sent to those services.

@@ -93,6 +93,24 @@ Not verified:
 - Signing, approvals and anything on chain: no wallet was funded and no transaction was made. Which apps show Oak's approval form (MCP form elicitation) was not tested.
 - Gemini CLI's bare `$NAME` references are read as plain text by Nomad for every server, not only Oak; `${NAME}` works. For Oak this fails safe: Oak rejects the value.
 
+## Hedgehood setups (added)
+
+Written Nov 15, 2026. Hedgehood is an options market for AI agents on Robinhood Chain. Hedgehood and its team have not been contacted and have not reviewed this work. See [docs/guides/hedgehood-setups.md](guides/hedgehood-setups.md).
+
+Tested (automated, every push):
+- Hedgehood setups, mostly mainnet, moving between Claude Code, Codex, Hermes, Cursor and Gemini CLI, including Hedgehood's Claude Code plugin, whose server is declared in `plugin.json` and whose skill is listed by its own folder (`tests/migration/hedgehood.test.ts`).
+- `~/.hedgehood` is never read, followed through a symlink or written; planted keys never appear in plans, receipts, destinations, backups or `.nomad` exports, with or without `--include-secrets`; raw keys in an entry are written only as references, even with `--include-secrets`; sources and `~/.hedgehood` are unchanged after every move; every move is idempotent.
+- Which entries count as Hedgehood, and that the Oak and Priors profiles are unchanged.
+
+Checked with real applications on Nov 15, 2026 (`@hedgehood-io/mcp` 0.5.1 installed in a throwaway folder, throwaway home folders with fake keys, no funds, nothing signed):
+- Hedgehood's own `hedgehood-mcp --check` on every entry Nomad wrote (Codex to Claude Code and Gemini CLI, Claude Code to Codex and Cursor, Gemini CLI to Claude Code, Hermes to Claude Code) resolves mainnet (4663), the owner account, the session key from Hedgehood's folder, no owner key, and the settings carried (dry run off and a 50 USDG cap where the source set them; otherwise Hedgehood's defaults). The same entry on a computer without `~/.hedgehood` stops with "no account", so the check is meaningful.
+- Claude Code 2.1.325 started Hedgehood and connected for the entries Nomad wrote from Codex, Gemini CLI and Hermes, including with the session key variable unset (Hedgehood then uses its settings file).
+
+Not verified:
+- Trading, quotes, deposits and anything on chain: no account was funded and no session was authorized.
+- Codex, Cursor, Gemini CLI and Hermes were not run with the moved entries (only Hedgehood's own check above).
+- The hosted read-only servers were not contacted.
+
 ## Holder vote (added)
 
 - Vote page at `/vote`, vote API under `/api/vote`, round job in `.github/workflows/vote-rounds.yml`, round files in `governance/`. See [governance/README.md](../governance/README.md).

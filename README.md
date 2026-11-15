@@ -35,6 +35,8 @@ We are exploring Priors setups: moving the Priors MCP servers and Hermes plugin 
 
 Oak setups move the same way: the Oak MCP entry (`oak mcp`, `npx @oakagentkit/addon`, or Oak's Claude Code plugin) arrives in the destination's own format, and `~/.oak`, where Oak keeps its wallet, is never read. Oak Agent Kit is a local wallet and tools for Robinhood Chain projects. See [docs/guides/oak-setups.md](docs/guides/oak-setups.md).
 
+Hedgehood setups move too: the local server (`npx @hedgehood-io/mcp` or `hedgehood-mcp`), the hosted read-only server and Hedgehood's Claude Code plugin arrive in each destination's format, with the network named in the preview (mainnet 4663 uses real USDG). Key files and `~/.hedgehood` are never read, and raw keys are never written as values. Hedgehood is an options market for AI agents on Robinhood Chain. See [docs/guides/hedgehood-setups.md](docs/guides/hedgehood-setups.md).
+
 Packages: a `.nomad` file is a small ZIP of plain Markdown and JSON (`nomad.json`, `AGENTS.md`, `SOUL.md`, `MEMORY.md`, `skills/`, `routines/`, `tools.json`) with a SHA-256 for every file. Add `--sign` to sign it with your own Ed25519 key; whoever opens it sees whether it came from you, someone they trust or an unknown key, and any change after signing is reported (`nomad keys`, `nomad trust <file> --name <who>`). Older `.agentpack` files still open. Nomad also reads and writes `.jetpack` interchange archives, the flat layout other agent portability tools use (`nomad export <agent> --format jetpack`, and any `.jetpack` works wherever a package is accepted). Parts that layout has no place for, such as MCP tools, travel in a namespaced manifest key that other readers ignore.
 
 ## Install
