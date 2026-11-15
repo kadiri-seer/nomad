@@ -93,6 +93,25 @@ Not verified:
 - Signing, approvals and anything on chain: no wallet was funded and no transaction was made. Which apps show Oak's approval form (MCP form elicitation) was not tested.
 - Gemini CLI's bare `$NAME` references are read as plain text by Nomad for every server, not only Oak; `${NAME}` works. For Oak this fails safe: Oak rejects the value.
 
+## BrainChain setups (added)
+
+Written Nov 15, 2026. BrainChain verifies AI agent work and settles payments on Robinhood Chain and Base. This follows BrainChain's public docs and repositories; see [docs/guides/brainchain-setups.md](guides/brainchain-setups.md).
+
+Tested (automated, every push, `tests/migration/brainchain.test.ts`):
+- BrainChain setups, mostly mainnet, moving between Claude Code, Codex, Cursor, Gemini CLI, Hermes and OpenClaw: the `claude mcp add` entry, the repository's `mcp.json` paying on Base, a raw key in Codex, the global command on the testnet, references in Hermes, and OpenClaw's `openclaw mcp set` entry with both BrainChain skills.
+- The preview names the network, where it pays and the limits, warns when there is no daily cap, lists the one-time approval and the wallet check, and says what the skills need off OpenClaw.
+- `~/.brainchain` and `~/.config/brainchain-worker` are never read, followed through a link or written; planted keys never appear in plans, receipts, destinations, backups or `.nomad` exports, with or without `--include-secrets`; sources and those folders are unchanged after every move; every move is idempotent.
+- Which entries count as BrainChain (the worker program does not), and that the Hedgehood, Oak and Priors profiles are unchanged.
+
+Checked with real applications on Nov 15, 2026 (`brainchain-mcp` 0.9.3 and Claude Code 2.1.325 in throwaway folders, throwaway homes with fake keys, no funds, nothing paid or signed):
+- BrainChain's own server, started from every entry Nomad wrote (Claude Code to Codex, Cursor, Gemini CLI and OpenClaw; Codex, Gemini CLI, Hermes and OpenClaw to Claude Code; Cursor to Gemini CLI; OpenClaw to Hermes) with the variables the preview asks for, lists its seven tools. Its task tool names the paying wallet of the fake key and the expected chain: Robinhood Chain, Base, or the Robinhood Chain testnet. The Hermes entry, whose key file was an optional reference, starts without a wallet, which the preview now says plainly.
+- Claude Code connected to BrainChain for the entries Nomad wrote from Codex, Gemini CLI, Hermes and OpenClaw.
+
+Not verified:
+- Posting, grading or bonding a task, the approval and anything on chain: no wallet was funded.
+- Codex, Cursor, Gemini CLI, Hermes and OpenClaw were not run with the moved entries (only BrainChain's own server and Claude Code above).
+- The worker program and the skills' scripts were not run.
+
 ## OpenClaw MCP servers (added)
 
 Written Nov 15, 2026. Nomad reads and writes OpenClaw's MCP servers in `openclaw.json` under `mcp.servers`, the block `openclaw mcp set` manages (docs.openclaw.ai/gateway/config-extensions). Before, servers moving to OpenClaw were listed for manual setup through a plugin.
