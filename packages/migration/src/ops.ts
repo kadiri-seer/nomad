@@ -298,6 +298,8 @@ export async function applyOperations(ops: FileOperation[]): Promise<AppliedResu
   const pending = ops.filter((o) => o.action === "create" || o.action === "update");
   const done: FileOperation[] = [];
   const createdDirs: string[] = [];
+  // The permissions each existing file had, so a rollback puts them back exactly.
+  const modes = new Map<string, number>();
   try {
     for (const op of pending) {
       assertNoSymlinks(op.root, op.abs);
@@ -321,21 +323,25 @@ export async function applyOperations(ops: FileOperation[]): Promise<AppliedResu
         createdDirs.push(dir);
       }
       let mode = op.mode;
-      if (current) mode = (await fsp.stat(op.abs)).mode & 0o777;
+      if (current) {
+        mode = (await fsp.stat(op.abs)).mode & 0o777;
+        modes.set(op.abs, mode);
+      }
       await atomicWrite(op.abs, op.after!, mode);
       done.push(op);
     }
   } catch (e) {
-    await rollback(done, createdDirs);
+    await rollback(done, createdDirs, modes);
     throw e;
   }
   return { written: done };
 }
 
-export async function rollback(done: FileOperation[], createdDirs: string[]): Promise<void> {
+export async function rollback(done: FileOperation[], createdDirs: string[], modes: Map<string, number> = new Map()): Promise<void> {
   for (const op of [...done].reverse()) {
     try {
-      if (op.before) await atomicWrite(op.abs, op.before);
+      // Restore with the file's own permissions: a private file (0600) must not come back readable by others.
+      if (op.before) await atomicWrite(op.abs, op.before, modes.get(op.abs) ?? 0o600);
       else await fsp.rm(op.abs, { force: true });
     } catch {
       /* best effort: the backup on disk is the fallback */
