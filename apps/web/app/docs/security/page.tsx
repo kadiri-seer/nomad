@@ -29,7 +29,7 @@ export default function Security() {
 
       <h2>Files</h2>
       <ul>
-        <li>The source agent is only read.</li>
+        <li>The source agent is only read. A linked agent file is followed only to a file in your home folder or inside the agent&apos;s own folder, never to a credential file such as <code>~/.ssh</code>, <code>.netrc</code> or <code>.env</code>; skipped links are listed in the preview.</li>
         <li>Every change is shown as a preview first, with a diff per file.</li>
         <li>Shared files are merged at the key or section level. Content outside Nomad&apos;s marked sections is never removed.</li>
         <li>Nomad records a hash of everything it writes. A file you edit afterwards is detected and not overwritten without approval.</li>

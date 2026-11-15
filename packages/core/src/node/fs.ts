@@ -113,7 +113,60 @@ export async function isFile(p: string): Promise<boolean> {
   }
 }
 
-/** Read a text file. Returns null when missing. Refuses symlinks unless allowed. */
+/**
+ * Credentials a linked agent file must never lead to. A file such as CLAUDE.md may be a link
+ * into a dotfiles folder; a link to one of these is refused, wherever it is.
+ */
+export const CREDENTIAL_LINK_TARGETS: RegExp[] = [
+  /(^|\/)\.(ssh|aws|gnupg|kube|azure|password-store)(\/|$)/,
+  /(^|\/)\.config\/(gh|gcloud|hub)(\/|$)/,
+  /(^|\/)\.docker\/config\.json$/,
+  /(^|\/)\.(netrc|git-credentials|npmrc|pypirc|pgpass|my\.cnf)$/,
+  /(^|\/)\.env(\..+)?$/,
+  /(^|\/)\.?(credentials|secrets?)(\.[a-z]+)?$/i,
+  /(^|\/)auth(-profiles)?\.json$/i,
+  /\.(pem|key|p12|pfx|keystore|jks|kdbx)$/i,
+  /(^|\/)id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$/,
+  /(^|\/)\.[a-z]*_history$/
+];
+
+const skippedLinks = new Set<string>();
+
+/** Linked files refused since the last call (paths only, never content). */
+export function drainSkippedLinks(): string[] {
+  const out = [...skippedLinks].sort();
+  skippedLinks.clear();
+  return out;
+}
+
+/**
+ * A link is followed only to a regular file inside the home folder or below the link's own
+ * folder, and never to a credential file or a folder that can hold wallet keys.
+ */
+async function linkTargetAllowed(p: string): Promise<boolean> {
+  let real: string;
+  try {
+    real = await fsp.realpath(p);
+  } catch {
+    return false;
+  }
+  const posixReal = real.split(sep).join("/");
+  if (CREDENTIAL_LINK_TARGETS.some((re) => re.test(posixReal)) || isKeyMaterialPath(real)) return false;
+  const inside = (dir: string) => {
+    const r = relative(dir, real);
+    return r !== "" && !r.startsWith("..") && !isAbsolute(r);
+  };
+  const realOf = (d: string) => {
+    try {
+      return realpathSync(d);
+    } catch {
+      return d;
+    }
+  };
+  return inside(realOf(home())) || inside(realOf(dirname(p)));
+}
+
+/** Read a text file. Returns null when missing. A symlink is followed only to an allowed target. */
 export async function readTextIfExists(p: string, maxBytes = 10 * 1024 * 1024): Promise<string | null> {
   if (isKeyMaterialPath(p)) {
     if (await pathExists(p)) recordSkippedKeyMaterial(p);
@@ -124,6 +177,11 @@ export async function readTextIfExists(p: string, maxBytes = 10 * 1024 * 1024): 
     if (st.isSymbolicLink()) {
       const real = await fsp.stat(p);
       if (!real.isFile()) return null;
+      if (!(await linkTargetAllowed(p))) {
+        skippedLinks.add(p);
+        return null;
+      }
+      if (real.size > maxBytes) throw new Error(`${p} is larger than ${maxBytes} bytes`);
     } else if (!st.isFile()) return null;
     if (st.size > maxBytes) throw new Error(`${p} is larger than ${maxBytes} bytes`);
     return await fsp.readFile(p, "utf8");
@@ -139,6 +197,10 @@ export async function readBytesIfExists(p: string): Promise<Uint8Array | null> {
     return null;
   }
   try {
+    if ((await fsp.lstat(p)).isSymbolicLink() && !(await linkTargetAllowed(p))) {
+      skippedLinks.add(p);
+      return null;
+    }
     return new Uint8Array(await fsp.readFile(p));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;

@@ -21,7 +21,7 @@ import {
   type VerifyCheck,
   type WriteContext
 } from "@nomad/core";
-import { atomicWrite, displayPath, drainSkippedKeyMaterial, makeTempDir, nomadHome, resolveRoot, safeJoin } from "@nomad/core/node";
+import { atomicWrite, displayPath, drainSkippedKeyMaterial, drainSkippedLinks, makeTempDir, nomadHome, resolveRoot, safeJoin } from "@nomad/core/node";
 import { sanitizeDocument, scanDocument, type DocumentScan, type SanitizeReport } from "@nomad/security";
 import { packAgent, packInterchange, unpackAgent, INTERCHANGE_EXTENSION, PACKAGE_EXTENSION, type UnpackResult } from "@nomad/archive";
 import { analyzeCompatibility, type CompatibilityReport } from "@nomad/compatibility";
@@ -222,11 +222,17 @@ export class Nomad {
     if (!adapter.read) throw new NomadError(`${adapter.info.displayName} cannot be read by Nomad.`, "not-readable", "Guided platforms only accept agents.");
     const r = resolveRoot(root);
     drainSkippedKeyMaterial();
+    drainSkippedLinks();
     const result = await adapter.read(r, nativeId, { includeFiles: options.includeFiles, includeSecrets: options.includeSecrets });
     // Paths that can hold wallet keys were refused by the file helpers. Say so, by path only.
     const skippedKeys = drainSkippedKeyMaterial();
     if (skippedKeys.length) {
       result.notes.push({ level: "info", category: "integrations", message: `Skipped ${skippedKeys.length} path(s) that can hold wallet keys: ${skippedKeys.map(displayPath).join(", ")} (not read, not copied)` });
+    }
+    // Linked files that lead to credentials or outside the home folder were not followed.
+    const skippedLinks = drainSkippedLinks();
+    if (skippedLinks.length) {
+      result.notes.push({ level: "warning", message: `Skipped ${skippedLinks.length} linked file(s) that point to a credential file or outside your home folder: ${skippedLinks.map(displayPath).join(", ")} (not read, not copied)` });
     }
     let doc = parseDocument(result.doc);
     const mapped = this.store.findByLocation(adapterId, r, nativeId);
