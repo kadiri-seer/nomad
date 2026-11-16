@@ -78,6 +78,17 @@ describe("wallet keys with --include-secrets", () => {
     expect(isWalletEnvEntry("CHAIN_ID", "4663")).toBe(false);
   });
 
+  it("a raw key under another name ending in KEY is a wallet key; service keys are not", () => {
+    for (const k of ["AGENT_KEY", "BOT_KEY", "KEY", "TRADER_KEY"]) {
+      expect(isWalletEnvEntry(k, BARE_WALLET_KEY), k).toBe(true);
+      expect(isWalletEnvEntry(k, SOLANA_KEY), k).toBe(true);
+    }
+    for (const k of ["SERVICE_API_KEY", "OPENAI_API_KEY", "ACCESS_KEY", "AUTH_KEY", "TOKEN_KEY", "CLIENT_KEY", "LICENSE_KEY", "PUBLIC_KEY", "PUBKEY"]) expect(isWalletEnvEntry(k, BARE_WALLET_KEY), k).toBe(false);
+    // Values that are not wallet-shaped stay as they are under any name.
+    expect(isWalletEnvEntry("AGENT_KEY", "short")).toBe(false);
+    expect(isWalletEnvEntry("AGENT_KEY", "~/.config/agent.key")).toBe(false);
+  });
+
   it("the sanitizer keeps other secrets but removes wallet keys everywhere", () => {
     const { doc, report } = sanitizeDocument(walletDoc(), { includeSecrets: true, includeSensitiveFiles: true });
     const all = JSON.stringify(doc);

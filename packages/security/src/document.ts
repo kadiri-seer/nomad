@@ -11,6 +11,12 @@ export function isSecretEnvEntry(key: string, value: string): boolean {
 
 /** Names that hold wallet key material: PRIVATE_KEY, WALLET_SECRET, SIGNER_KEY, HEDGEHOOD_SESSION_KEY and similar. */
 const WALLET_ENV_NAME = /(PRIVATE|WALLET|SIGNER|MNEMONIC|SEED|OWNER|PAYER|SESSION)/i;
+/**
+ * Other names that end in KEY (AGENT_KEY, BOT_KEY): a raw wallet-shaped value under them is a wallet key too.
+ * Names that say API, access, auth, token, client, license or public are service keys, not wallets.
+ */
+const KEY_ENV_NAME = /(^|_)KEY$/i;
+const SERVICE_KEY_NAME = /(API|ACCESS|AUTH|TOKEN|CLIENT|LICEN[CS]E|PUBLIC|PUB)/i;
 const BARE_HEX_KEY = /^(?:0x)?[0-9a-fA-F]{64}$/;
 /** A Solana secret key in base58 (64 bytes). */
 const BASE58_KEY = /^[1-9A-HJ-NP-Za-km-z]{86,90}$/;
@@ -19,13 +25,15 @@ const BYTE_ARRAY_KEY = /^\[\s*\d{1,3}(?:\s*,\s*\d{1,3}){63}\s*\]$/;
 
 /**
  * True when an env or header value is wallet key material: a 0x-prefixed 32-byte hex value,
- * a recovery phrase, or a raw key under a wallet name. These are never written as values,
+ * a recovery phrase, or a raw key under a wallet name (or another name ending in KEY that is not a
+ * service key). These are never written as values,
  * even with --include-secrets, because a leaked wallet key cannot be revoked.
  */
 export function isWalletEnvEntry(key: string, value: string): boolean {
   const v = value.trim();
   if (EVM_KEY_VALUE.test(v) || isMnemonic(v) || redactWalletText(v).count > 0) return true;
-  return WALLET_ENV_NAME.test(key) && (BARE_HEX_KEY.test(v) || BASE58_KEY.test(v) || BYTE_ARRAY_KEY.test(v));
+  const walletName = WALLET_ENV_NAME.test(key) || (KEY_ENV_NAME.test(key) && !SERVICE_KEY_NAME.test(key));
+  return walletName && (BARE_HEX_KEY.test(v) || BASE58_KEY.test(v) || BYTE_ARRAY_KEY.test(v));
 }
 
 export interface SensitiveFileFinding {
