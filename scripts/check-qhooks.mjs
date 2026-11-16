@@ -71,11 +71,16 @@ try {
   const token = (content(launches).match(/0x[0-9a-fA-F]{40}/) ?? [])[0];
   if (!token) info("no Robinhood Chain launch to build a sample trade with");
   else {
-    const sample = await tool("prepare_trade", { chain: "4663", token, side: "buy", amountIn: "0.0001", trader: SAMPLE_TRADER });
-    const text = content(sample) + JSON.stringify(sample?.error ?? "");
-    info(text.toLowerCase().includes(REFERRER.toLowerCase().slice(2))
-      ? "a sample trade through ?ref=nomad without a referrer names Nomad's referrer"
-      : `a sample trade through ?ref=nomad without a referrer does not name Nomad's referrer${sample?.error || sample?.result?.isError ? ` (QHooks said: ${text.slice(0, 300)})` : ""}`);
+    // amountIn is in raw units: 0.0001 ETH. The same trade with the referrer passed shows what a credited trade looks like.
+    const trade = { chain: "4663", token, side: "buy", amountIn: "100000000000000", trader: SAMPLE_TRADER };
+    for (const [label, args] of [["without a referrer", trade], ["with Nomad's referrer passed", { ...trade, referrer: REFERRER }]]) {
+      const sample = await tool("prepare_trade", args);
+      const text = content(sample) + JSON.stringify(sample?.error ?? "");
+      const failedCall = !!(sample?.error || sample?.result?.isError);
+      info(failedCall
+        ? `sample trade ${label}: QHooks said ${text.slice(0, 300)}`
+        : `sample trade ${label} through ?ref=nomad ${text.toLowerCase().includes(REFERRER.toLowerCase().slice(2)) ? "names" : "does not name"} Nomad's referrer`);
+    }
   }
 } catch (e) {
   info(`sample trade not checked: ${e}`);
