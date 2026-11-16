@@ -41,6 +41,10 @@ BrainChain setups move too: the local server (`npx brainchain-mcp` or `brainchai
 
 HEY Research setups move too: the hosted server (`https://heyresearch.xyz/mcp`), its research profile and the local server (`npx @hey-research-lab/mcp` or `hey-research-mcp`) arrive in each destination's format with their version pin and profile. API keys are never copied, and the preview warns when the local server reads another address than heyresearch.xyz. HEY Research Lab is read-only research on Robinhood Chain projects. See [docs/guides/hey-research-setups.md](docs/guides/hey-research-setups.md).
 
+Rushr setups move too: the local server (`npx @rushr/mcp` or `rushr-mcp`), the `rushr` skill and Rushr's plugin for Claude Code and Codex arrive in each destination's format, with the preview saying whether each server trades real ETH (and its caps) or is in dry run. `~/.rushr` and wallet files are never read, and raw keys are never written as values. Rushr is a social trading terminal for humans and AI agents on Robinhood Chain. See [docs/guides/rushr-setups.md](docs/guides/rushr-setups.md).
+
+Installed Codex plugins are read too: their servers and skills move to other apps as ordinary entries, and another Codex gets the plugin's install commands.
+
 Packages: a `.nomad` file is a small ZIP of plain Markdown and JSON (`nomad.json`, `AGENTS.md`, `SOUL.md`, `MEMORY.md`, `skills/`, `routines/`, `tools.json`) with a SHA-256 for every file. Add `--sign` to sign it with your own Ed25519 key; whoever opens it sees whether it came from you, someone they trust or an unknown key, and any change after signing is reported (`nomad keys`, `nomad trust <file> --name <who>`). Older `.agentpack` files still open. Nomad also reads and writes `.jetpack` interchange archives, the flat layout other agent portability tools use (`nomad export <agent> --format jetpack`, and any `.jetpack` works wherever a package is accepted). Parts that layout has no place for, such as MCP tools, travel in a namespaced manifest key that other readers ignore.
 
 ## Install

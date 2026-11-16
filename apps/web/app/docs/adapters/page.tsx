@@ -108,6 +108,10 @@ export default function Adapters() {
       <p>
         HEY Research Lab is read-only research on Robinhood Chain projects, reached through a hosted or local MCP server. Nomad moves the hosted server (<code>https://heyresearch.xyz/mcp</code>), its research profile and the local server (<code>npx @hey-research-lab/mcp</code> or <code>hey-research-mcp</code>) into the destination&apos;s own format, with the version pin and profile kept. There are no wallets. API keys are never copied, and the preview warns when the local server reads another address than heyresearch.xyz, because its key would be sent there. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/hey-research-setups.md">HEY Research setups guide</a>.
       </p>
+      <h2>Rushr setups</h2>
+      <p>
+        Rushr is a social trading terminal for humans and AI agents on Robinhood Chain, where an agent trades real ETH through a local MCP server that signs with its own wallet. Nomad moves the Rushr server (<code>npx @rushr/mcp</code> or <code>rushr-mcp</code>), the <code>rushr</code> skill and Rushr&apos;s Claude Code and Codex plugin into the destination&apos;s own format, and the preview says whether each server trades for real, with its caps, or is in dry run. <code>~/.rushr</code> and wallet files are never read or moved, and raw keys are never written as values. On another computer, set up a fresh wallet there. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/rushr-setups.md">Rushr setups guide</a>.
+      </p>
       <h3>Guided platforms</h3>
       <p>
         Hosted products (ChatGPT, Claude, Gemini, Grok, Perplexity) do not offer an agent import, and frameworks (CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n, Letta) define agents in code or in their own apps. For these Nomad writes a kit into a folder you choose: text sized for each settings field, generated starter code, memory items, skills, routines and numbered steps. Nothing is sent to those services.

@@ -157,6 +157,20 @@ Checked with real applications on Nov 16, 2026: Codex CLI 0.169.0, Gemini CLI 0.
 
 Not verified: research answers themselves, and anything with an API key (none was used).
 
+## Rushr setups and Codex plugins (added)
+
+Written Nov 16, 2026. Rushr is a social trading terminal for humans and AI agents on Robinhood Chain. Rushr's team pointed us to its documentation and has not reviewed this work. See [docs/guides/rushr-setups.md](guides/rushr-setups.md).
+
+Tested (automated, every push):
+- Rushr setups moving between Claude Code, Codex, Gemini CLI, Hermes, Cursor and OpenClaw, including Rushr's Claude Code and Codex plugins (`tests/migration/rushr.test.ts`): real money or dry run named with the caps, dry run as a reference flagged, limits carried only as values, both wallet settings written as neither, raw keys written only as references even with `--include-secrets`, `~/.rushr` and wallet files (`agent-wallet.json`, `.agent-wallet.json`) never read, followed or written, and planted keys never in plans, receipts, destinations, backups or exports.
+- Installed Codex plugins: read from `config.toml` and Codex's plugin folder, disabled ones skipped, a plugin folder leading outside Codex's plugin folder refused; another Codex gets the install commands, other apps get ordinary entries.
+- Which entries count as Rushr, and look-alikes that do not.
+- The short preview (the default) now shows warnings, such as a moved server trading real money; before, they appeared only with `--details`.
+
+Checked with real applications on Nov 16, 2026 (`scripts/check-rushr.mjs`, throwaway homes): Codex CLI 0.169.0 installed Rushr's plugin (`codex plugin add rushr@rushr`); Nomad read it and moved it to Gemini CLI 0.68.0, which lists the server as its own, and to another Codex, where Nomad copied nothing and following its printed install commands brought the plugin back. The Real apps workflow repeats this weekly and also starts `@rushr/mcp` 0.1.2 in dry run with no wallet to check it lists its tools and makes no wallet.
+
+Not verified: trading, registration, callouts and anything on chain (no wallet was funded).
+
 ## Wallet keys stay out with --include-secrets (added)
 
 Written Nov 15, 2026. With `--include-secrets`, other secrets still travel when asked, but wallet private keys and recovery phrases are left out everywhere a move, export or import writes: text, launch arguments, URLs, headers, environment values and files (including `.env` files kept with `--include-sensitive-files`). They become references, and the preview and export output say how many were left out. Without `--include-secrets` nothing changed.
