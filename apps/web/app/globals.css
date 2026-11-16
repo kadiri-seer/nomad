@@ -1477,3 +1477,64 @@ details.diff summary {
     grid-column: 1 / -1;
   }
 }
+
+/* ------------------------------ install ------------------------------ */
+
+.install {
+  min-width: 0; /* lets the one-line command scroll instead of widening the page on phones */
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.install-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.install-tabs button {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink);
+  font: 500 0.85rem/1 var(--font);
+  cursor: pointer;
+}
+.install-tabs button[aria-selected="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.install-step {
+  margin: 0 0 12px;
+  color: var(--ink-2);
+}
+.install-cmd {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--ink);
+  border-radius: var(--radius);
+  padding: 12px 12px 12px 18px;
+  margin-bottom: 12px;
+}
+.install-cmd code {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  color: #e9e6dc;
+  font: 0.86rem/1.6 var(--mono);
+}
+.install-note {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.install-note code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+}

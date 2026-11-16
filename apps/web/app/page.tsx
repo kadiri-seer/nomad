@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ALL_INFOS } from "@nomad/adapters/catalog";
 import { CompatDemo } from "@/components/CompatDemo";
+import { InstallNomad } from "@/components/InstallNomad";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Badge } from "@/components/ui";
 
@@ -70,6 +71,22 @@ export default function Home() {
             <span>and {direct.length - 9 + guided.length} more</span>
           </div>
         </div>
+
+        <section className="section" id="download">
+          <div className="wrap split">
+            <div>
+              <p className="label">Download</p>
+              <h2 style={{ marginTop: 12 }}>Install Nomad in one line.</h2>
+              <p className="lede" style={{ marginTop: 18 }}>
+                Paste one line once, and Nomad is on your computer like any other app. No Node.js, no admin rights, nothing to set up. Everything after that is clicks.
+              </p>
+              <p className="muted" style={{ marginTop: 18 }}>
+                Developers can also run it straight from npm: <code>npx thenomad</code>
+              </p>
+            </div>
+            <InstallNomad />
+          </div>
+        </section>
 
         <section className="section" id="how">
           <div className="wrap">
