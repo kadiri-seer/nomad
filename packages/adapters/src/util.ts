@@ -472,8 +472,9 @@ export function integrationStep(i: { name: string; kind: string; notes?: string 
   if (i.kind === "elizaos-plugin") {
     return `${i.name} was an ElizaOS plugin. ${elizaosPluginHint(i.name)}`;
   }
-  if (i.kind === "claude-code-plugin" || i.kind === "hermes-plugin") {
-    return `${i.name} was an installed ${i.kind === "hermes-plugin" ? "Hermes" : "Claude Code"} plugin (installed plugin read, not installed). Its servers and skills are written to ${platformName} as ordinary entries where ${platformName} has a place for them.`;
+  if (i.kind === "claude-code-plugin" || i.kind === "hermes-plugin" || i.kind === "codex-plugin") {
+    const host = i.kind === "hermes-plugin" ? "Hermes" : i.kind === "codex-plugin" ? "Codex" : "Claude Code";
+    return `${i.name} was an installed ${host} plugin (installed plugin read, not installed). Its servers and skills are written to ${platformName} as ordinary entries where ${platformName} has a place for them.`;
   }
   return otherwise;
 }

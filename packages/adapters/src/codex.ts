@@ -1,6 +1,7 @@
-import { basename, join } from "node:path";
+import { realpathSync } from "node:fs";
+import { basename, join, resolve, sep } from "node:path";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
-import type { AgentDocument, PermissionPolicy, PermissionRule, Skill } from "@nomad/schema";
+import type { AgentDocument, Integration, PermissionPolicy, PermissionRule, Skill, Tool } from "@nomad/schema";
 import {
   createDocument,
   extractBlock,
@@ -15,7 +16,7 @@ import {
   type PlannedWrite,
   type VerifyCheck
 } from "@nomad/core";
-import { listDir, pathExists, readTextIfExists } from "@nomad/core/node";
+import { isDirectory, listDir, pathExists, readTextIfExists } from "@nomad/core/node";
 import { CODEX_INFO } from "./catalog";
 import {
   bareModel,
@@ -33,7 +34,9 @@ import {
   integrationStep,
   wants,
   workflowManualSteps,
-  pluginOf
+  pluginOf,
+  readSkillDir,
+  isPlainCliWord
 } from "./util";
 
 const P = "codex";
@@ -54,6 +57,116 @@ async function readConfig(path: string, notes: Note[]): Promise<Record<string, a
     notes.push({ level: "warning", message: `Could not parse ${path}: ${(e as Error).message}` });
     return undefined;
   }
+}
+
+async function readJsonFile(path: string, notes: Note[]): Promise<any> {
+  const text = await readTextIfExists(path);
+  if (text === null) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    notes.push({ level: "warning", message: `Could not parse ${path}: ${(e as Error).message}` });
+    return undefined;
+  }
+}
+
+/** "1.10.0" after "1.9.2": version folders compared part by part, numbers as numbers. */
+const byVersion = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
+
+/** owner/repo for a GitHub source, which is how `codex plugin marketplace add` takes it; otherwise the source as recorded. */
+export function codexMarketplaceSource(source: unknown): string | null {
+  if (typeof source !== "string" || !source) return null;
+  const gh = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(\.git)?\/?$/.exec(source);
+  return gh ? `${gh[1]}/${gh[2]}` : source;
+}
+
+/**
+ * Enabled Codex plugins: config.toml lists them under [plugins."name@marketplace"] and records each
+ * marketplace's source under [marketplaces.<name>]; the files are in plugins/cache/<marketplace>/<name>/<version>.
+ * Their servers and skills are read; plugins are never installed by Nomad.
+ */
+async function readCodexPlugins(root: string, cfg: Record<string, any>, notes: Note[]): Promise<{ tools: Tool[]; skills: Skill[]; integrations: Integration[]; sourceFiles: string[] }> {
+  const out = { tools: [] as Tool[], skills: [] as Skill[], integrations: [] as Integration[], sourceFiles: [] as string[] };
+  const plugins = cfg.plugins && typeof cfg.plugins === "object" ? (cfg.plugins as Record<string, any>) : {};
+  const cache = join(root, "plugins", "cache");
+  let cacheReal: string;
+  try {
+    cacheReal = realpathSync(cache);
+  } catch {
+    cacheReal = cache;
+  }
+  for (const [id, entry] of Object.entries(plugins)) {
+    if (entry?.enabled === false) continue;
+    const [name, market] = id.split("@");
+    if (!name || !market || id.split("@").length !== 2) {
+      notes.push({ level: "warning", category: "integrations", message: `Codex plugin ${JSON.stringify(id)} has an unexpected name, so it was not read.` });
+      continue;
+    }
+    const base = join(cache, market, name);
+    const versions = (await listDir(base)).filter((e) => !e.file).map((e) => e.name).sort(byVersion);
+    const version = versions[versions.length - 1];
+    if (!version) {
+      notes.push({ level: "warning", category: "integrations", message: `Codex plugin ${id} is enabled but its files were not found, so it was not read.` });
+      continue;
+    }
+    let dir: string;
+    try {
+      dir = realpathSync(join(base, version));
+    } catch {
+      continue;
+    }
+    if (!dir.startsWith(cacheReal + sep)) {
+      notes.push({ level: "warning", category: "integrations", message: `Codex plugin ${id} points outside Codex's plugin folder, so it was not read.` });
+      continue;
+    }
+    const provenance = { note: `plugin ${id}`, extra: { plugin: id, pluginHost: P } };
+    let manifest: any = {};
+    for (const m of ["plugin.json", ".codex-plugin/plugin.json"]) {
+      const found = await readJsonFile(join(dir, m), notes);
+      if (found && typeof found === "object") {
+        manifest = found;
+        out.sourceFiles.push(join(dir, m));
+        break;
+      }
+    }
+    const servers: Record<string, unknown> = {};
+    if (manifest.mcpServers && typeof manifest.mcpServers === "object") Object.assign(servers, manifest.mcpServers);
+    const mcpFiles = typeof manifest.mcpServers === "string" ? [manifest.mcpServers] : ["mcp.json", ".mcp.json"];
+    for (const rel of mcpFiles) {
+      const abs = resolve(dir, rel);
+      if (!abs.startsWith(dir + sep)) continue;
+      const file = await readJsonFile(abs, notes);
+      if (file?.mcpServers && typeof file.mcpServers === "object") {
+        out.sourceFiles.push(abs);
+        Object.assign(servers, file.mcpServers);
+        break;
+      }
+    }
+    out.tools.push(...toolsFromMcpServers(servers, P, `plugins/${id}`, { notes, ...provenance }));
+    const skillDirs = Array.isArray(manifest.skills) ? manifest.skills : typeof manifest.skills === "string" ? [manifest.skills] : ["skills"];
+    for (const rel of skillDirs) {
+      if (typeof rel !== "string") continue;
+      const abs = resolve(dir, rel);
+      if (abs !== dir && !abs.startsWith(dir + sep)) continue;
+      if (!(await isDirectory(abs))) continue;
+      const single = abs !== dir ? await readSkillDir(abs, P, notes) : null;
+      for (const sk of single ? [single] : await readSkillsTree(abs, P, notes, 1)) {
+        sk.source = { ...(sk.source ?? { platform: P }), note: provenance.note, ...provenance.extra };
+        out.skills.push(sk);
+      }
+    }
+    const source = codexMarketplaceSource(cfg.marketplaces?.[market]?.source);
+    out.integrations.push({
+      name: id,
+      kind: "codex-plugin",
+      requiresAuth: false,
+      config: { version: typeof manifest.version === "string" ? manifest.version : version, marketplace: market, ...(source ? { marketplaceSource: source } : {}), plugin: name },
+      notes: "Installed Codex plugin",
+      source: { platform: P, path: `plugins/${id}` }
+    });
+    notes.push({ level: "info", category: "integrations", message: `Read installed Codex plugin ${id} (installed plugin read, not installed anywhere by Nomad).` });
+  }
+  return out;
 }
 
 export function policyFromCodexConfig(cfg: Record<string, any>): PermissionPolicy {
@@ -184,6 +297,16 @@ export const codexAdapter: Adapter = {
       if (cfg.profiles) doc.extensions["x-codex"] = { profiles: cfg.profiles };
     }
     doc.skills.push(...(await readSkillsTree(join(root, L.skills), P, notes, 1)));
+    if (cfg && L.user) {
+      const plugins = await readCodexPlugins(root, cfg, notes);
+      for (const t of plugins.tools) {
+        if (doc.tools.some((d) => d.name === t.name)) t.name = `${t.name}-plugin`;
+        doc.tools.push(t);
+      }
+      doc.skills.push(...plugins.skills.filter((sk) => !doc.skills.some((d) => d.name === sk.name)));
+      doc.integrations.push(...plugins.integrations);
+      sourceFiles.push(...plugins.sourceFiles);
+    }
     for (const e of await listDir(join(root, L.prompts))) {
       if (!e.file || !e.name.endsWith(".md")) continue;
       const text = (await readTextIfExists(join(root, L.prompts, e.name)))!;
@@ -225,8 +348,20 @@ export const codexAdapter: Adapter = {
     if (doc.identity.persona) conversions.push({ category: "identity", item: "persona", from: "persona", to: "Persona section in AGENTS.md" });
     if (wants(ctx, "memory") && doc.memory.length) conversions.push({ category: "memory", item: `${doc.memory.length} entries`, from: "structured memory", to: "Memory section in AGENTS.md" });
 
+    // Items from a Codex plugin come back by installing the plugin, not by copying them.
+    const fromPlugins = new Set<string>([...doc.tools, ...doc.skills].map((x) => pluginOf(x, P)).filter((x): x is string => !!x));
+    for (const id of fromPlugins) {
+      const info = doc.integrations.find((i) => i.kind === "codex-plugin" && i.name === id)?.config as Record<string, unknown> | undefined;
+      const source = typeof info?.marketplaceSource === "string" ? info.marketplaceSource : null;
+      manualSteps.push(
+        isPlainCliWord(id, "path") && source && isPlainCliWord(source, "path")
+          ? `Install the plugin ${id} in Codex: codex plugin marketplace add ${source}, then codex plugin add ${id}. Nomad does not copy plugin servers or skills.`
+          : `Install the plugin ${JSON.stringify(id)} in Codex from its marketplace (codex plugin add). Nomad prints no command for it${source ? ", because its name or source has characters a terminal could misread," : ", because the source did not record where its marketplace is,"} and does not copy plugin servers or skills.`
+      );
+    }
+
     if (wants(ctx, "skills")) {
-      for (const s of doc.skills) {
+      for (const s of doc.skills.filter((x) => !pluginOf(x, P))) {
         const isCommand = s.frontmatter["x-codex-prompt"] === true || s.frontmatter["x-claude-code-command"] === true;
         const { "x-codex-prompt": _p, "x-claude-code-command": _c, ...fm } = s.frontmatter;
         if (isCommand) {
@@ -259,7 +394,7 @@ export const codexAdapter: Adapter = {
       conversions.push({ category: "permissions", item: "policy", from: "permission rules", to: `approval_policy=${p.settings.approval_policy}, sandbox_mode=${p.settings.sandbox_mode}` });
     }
     if (wants(ctx, "tools")) {
-      const mcpTools = doc.tools.filter((t) => t.kind === "mcp" && t.mcp);
+      const mcpTools = doc.tools.filter((t) => t.kind === "mcp" && t.mcp && !pluginOf(t, P));
       if (mcpTools.length) {
         const r = mcpServersFromTools(mcpTools, { platformName: "Codex", envRefStyle: "none" });
         const servers: Record<string, any> = {};
@@ -293,7 +428,7 @@ export const codexAdapter: Adapter = {
       for (const w of doc.workflows) unsupported.push({ category: "workflows", item: w.name, reason: "Codex has no scheduler." });
       manualSteps.push(...workflowManualSteps(doc, "Codex"));
     }
-    if (wants(ctx, "integrations")) for (const i of doc.integrations) manualSteps.push(integrationStep(i, "Codex", `Reconnect the ${i.name} integration for Codex.`));
+    if (wants(ctx, "integrations")) for (const i of doc.integrations.filter((x) => !(x.kind === "codex-plugin" && fromPlugins.has(x.name)))) manualSteps.push(integrationStep(i, "Codex", `Reconnect the ${i.name} integration for Codex.`));
     if (wants(ctx, "knowledge") && (doc.knowledge.length || doc.files.length)) manualSteps.push(`Copy ${doc.knowledge.length + doc.files.length} knowledge file(s) into the project and mention them in AGENTS.md.`);
     return { nativeId: "main", files, notes, manualSteps, conversions, unsupported };
   },
