@@ -54,6 +54,7 @@ foreach ($f in @('install.ps1', 'windows\uninstall.ps1')) {
 Write-Host '== install'
 $out = Install
 Write-Host $out
+Write-Host $out
 Check "the nomad command runs version $Version" { (& $cmd --version) -eq $Version -and $LASTEXITCODE -eq 0 }
 Check 'the install folder has one version' { (@(Get-ChildItem -LiteralPath (Join-Path $root 'app') -Directory | ForEach-Object { $_.Name }) -join ',') -eq $Version }
 Check 'install.json names the installer' { (Get-Content -Raw (Join-Path $root 'install.json') | ConvertFrom-Json).by -eq 'nomad-installer' }
@@ -106,6 +107,7 @@ Remove-Item -LiteralPath $badDist -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item -LiteralPath $Dist -Destination $badDist -Recurse
 Get-ChildItem -LiteralPath $badDist -Filter 'nomad-*.zip' | ForEach-Object { Add-Content -LiteralPath $_.FullName -Value 'x' -Encoding Ascii }
 $out = Install $badDist
+Write-Host $out
 Check 'tampered download refused, saying why' { $out -match 'does not match its published fingerprint' }
 Check 'the installed Nomad still runs' { (& $cmd --version) -eq $Version }
 
@@ -142,6 +144,7 @@ $theirs = $wsh.CreateShortcut($shortcut)
 $theirs.TargetPath = Join-Path $env:SystemRoot 'System32\notepad.exe'
 $theirs.Save()
 $out = Install
+Write-Host $out
 Check 'the installer says so' { $out -match 'another program' }
 Check 'their shortcut untouched by the install' { $wsh.CreateShortcut($shortcut).TargetPath -like '*notepad.exe' }
 Check 'Nomad still installed and runs' { (& $cmd --version) -eq $Version }
@@ -153,6 +156,7 @@ Write-Host '== a folder holding something else is never used'
 New-Item -ItemType Directory -Force -Path $root | Out-Null
 Set-Content -LiteralPath (Join-Path $root 'notes.txt') -Value 'theirs'
 $out = Install
+Write-Host $out
 Check 'install refused, saying why' { $out -match 'not from this installer' }
 Check 'their file kept' { Test-Path -LiteralPath (Join-Path $root 'notes.txt') }
 Check 'nothing installed there' { -not (Test-Path -LiteralPath (Join-Path $root 'app')) }
