@@ -53,7 +53,10 @@ writeFileSync(join(home, ".claude.json"), JSON.stringify({
   mcpServers: {
     github: { type: "stdio", command: "npx", args: ["-y", "@modelcontextprotocol/server-github"], env: { GITHUB_TOKEN } },
     docs: { type: "http", url: "https://mcp.example.com/mcp", headers: { Authorization: `Bearer ${API_KEY}` } },
-    notes: { type: "stdio", command: "node", args: ["/opt/notes/server.js", "--readonly"] }
+    notes: { type: "stdio", command: "node", args: ["/opt/notes/server.js", "--readonly"] },
+    // HEY Research Lab, as HEY documents it: the hosted research profile and the pinned local server.
+    "hey-research": { type: "http", url: "https://heyresearch.xyz/mcp/research" },
+    "hey-local": { type: "stdio", command: "npx", args: ["-y", "@hey-research-lab/mcp@0.3.5"], env: { HEY_MCP_PROFILE: "research" } }
   }
 }, null, 2));
 
@@ -78,6 +81,8 @@ try {
     check("codex: github runs npx and forwards GITHUB_TOKEN", by.github?.transport?.command === "npx" && (by.github?.transport?.env_vars ?? []).includes("GITHUB_TOKEN"), JSON.stringify(by.github));
     check("codex: docs points at its URL", by.docs?.transport?.url === "https://mcp.example.com/mcp", JSON.stringify(by.docs));
     check("codex: notes keeps its arguments", by.notes?.transport?.command === "node" && JSON.stringify(by.notes?.transport?.args) === JSON.stringify(["/opt/notes/server.js", "--readonly"]), JSON.stringify(by.notes));
+    check("codex: HEY's hosted research profile", by["hey-research"]?.transport?.url === "https://heyresearch.xyz/mcp/research", JSON.stringify(by["hey-research"]));
+    check("codex: HEY's local server keeps its pin and profile", JSON.stringify(by["hey-local"]?.transport?.args) === JSON.stringify(["-y", "@hey-research-lab/mcp@0.3.5"]) && by["hey-local"]?.transport?.env?.HEY_MCP_PROFILE === "research", JSON.stringify(by["hey-local"]));
     check("codex: instructions arrived", readIf(join(home, ".codex/AGENTS.md")).includes(MARKER));
   }
 
@@ -89,6 +94,8 @@ try {
     check("gemini: github", text.includes("github: npx -y @modelcontextprotocol/server-github (stdio)"), text);
     check("gemini: docs", text.includes("docs: https://mcp.example.com/mcp (http)"), text);
     check("gemini: notes", text.includes("notes: node /opt/notes/server.js --readonly (stdio)"), text);
+    check("gemini: HEY's hosted research profile", text.includes("hey-research: https://heyresearch.xyz/mcp/research (http)"), text);
+    check("gemini: HEY's local server", text.includes("hey-local: npx -y @hey-research-lab/mcp@0.3.5 (stdio)"), text);
     check("gemini: instructions arrived", readIf(join(home, ".gemini/GEMINI.md")).includes(MARKER));
   }
 
@@ -102,6 +109,8 @@ try {
     check("openclaw: github runs npx", by.github?.command === "npx", JSON.stringify(by.github));
     check("openclaw: docs points at its URL", by.docs?.url === "https://mcp.example.com/mcp", JSON.stringify(by.docs));
     check("openclaw: notes keeps its arguments", by.notes?.command === "node" && JSON.stringify(by.notes?.args) === JSON.stringify(["/opt/notes/server.js", "--readonly"]), JSON.stringify(by.notes));
+    check("openclaw: HEY's hosted research profile", by["hey-research"]?.url === "https://heyresearch.xyz/mcp/research", JSON.stringify(by["hey-research"]));
+    check("openclaw: HEY's local server keeps its pin and profile", JSON.stringify(by["hey-local"]?.args) === JSON.stringify(["-y", "@hey-research-lab/mcp@0.3.5"]) && by["hey-local"]?.env?.HEY_MCP_PROFILE === "research", JSON.stringify(by["hey-local"]));
     check("openclaw: instructions arrived", readIf(join(home, ".openclaw/workspace/AGENTS.md")).includes(MARKER));
   }
 

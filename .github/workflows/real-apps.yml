@@ -22,6 +22,7 @@ on:
       - "packages/adapters/**"
       - "packages/migration/**"
       - "scripts/check-real-apps.mjs"
+      - "scripts/check-hey-servers.mjs"
       - ".github/workflows/real-apps.yml"
 permissions:
   contents: read
@@ -55,3 +56,7 @@ jobs:
           npm install --no-fund --no-audit "@openai/codex@$CODEX" "@google/gemini-cli@$GEMINI" "openclaw@$OPENCLAW"
       - name: Check the apps read what Nomad wrote
         run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-real-apps.mjs
+      # Read-only, keyless: HEY Research Lab's hosted and local servers answer as Nomad's profile expects.
+      - name: Check HEY Research Lab's servers
+        working-directory: ${{ runner.temp }}
+        run: node "$GITHUB_WORKSPACE/scripts/check-hey-servers.mjs"
