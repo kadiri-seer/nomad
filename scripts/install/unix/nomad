@@ -1,0 +1,11 @@
+#!/bin/sh
+# Nomad command, added by the Nomad installer. Runs the version named in ../current.
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P) || exit 1
+version=$(cat "$root/current" 2>/dev/null) || version=""
+case "$version" in
+  "" | *[!0-9.]*)
+    echo "Nomad is not installed correctly: its version file is missing. Run the installer again from https://thenomad.website" >&2
+    exit 1
+    ;;
+esac
+exec "$root/app/$version/node" "$root/app/$version/node_modules/thenomad/dist/nomad.js" "$@"

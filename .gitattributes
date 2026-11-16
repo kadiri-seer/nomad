@@ -1,0 +1,5 @@
+# Installer files must keep their line endings on every system.
+scripts/install/windows/*.cmd text eol=crlf
+scripts/install/unix/* text eol=lf
+scripts/install/*.sh text eol=lf
+scripts/install/assets/* binary

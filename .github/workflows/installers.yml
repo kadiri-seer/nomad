@@ -1,0 +1,208 @@
+name: Installers
+# Builds the Nomad bundles the one-line installers download (thenomad.website/install.ps1 and
+# install.sh), installs each one with the real installer on its own system, uses it and removes it.
+#
+# Releasing: after "Publish to npm" succeeds this runs on its own and publishes the bundles as the
+# GitHub release v<version>, which is where the installers download from. It can also be run by
+# hand: Actions -> Installers -> Run workflow, with "release" ticked.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/install/**"
+      - "scripts/build-bundle.mjs"
+      - "scripts/prepare-npm.mjs"
+      - "apps/cli/src/**"
+      - ".github/workflows/installers.yml"
+  pull_request:
+    paths:
+      - "scripts/install/**"
+      - "scripts/build-bundle.mjs"
+      - "scripts/prepare-npm.mjs"
+      - "apps/cli/src/**"
+      - ".github/workflows/installers.yml"
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Publish the bundles as the GitHub release for the version in apps/cli/package.json"
+        type: boolean
+        default: false
+  workflow_run:
+    workflows: ["Publish to npm"]
+    types: [completed]
+permissions:
+  contents: read
+concurrency:
+  group: installers-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: false
+env:
+  REF: ${{ github.event.workflow_run.head_sha || github.sha }}
+jobs:
+  # The npm package, built once, so every bundle carries the same bytes.
+  package:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (v4.4.0)
+        with:
+          ref: ${{ env.REF }}
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (v4.4.0)
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/prepare-npm.mjs
+      - name: Pack
+        working-directory: release/npm
+        run: npm pack && mv thenomad-*.tgz ../thenomad.tgz
+      - id: v
+        run: echo "version=$(node -p "require('./apps/cli/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: package
+          path: release/thenomad.tgz
+          if-no-files-found: error
+
+  # One bundle per system, built on that system with Node.js 24.
+  bundle:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-2025, target: windows-x64, ext: zip }
+          - { runner: windows-11-arm, target: windows-arm64, ext: zip }
+          - { runner: macos-15, target: macos-arm64, ext: tar.gz }
+          - { runner: macos-15-intel, target: macos-x64, ext: tar.gz }
+          - { runner: ubuntu-22.04, target: linux-x64, ext: tar.gz }
+          - { runner: ubuntu-22.04-arm, target: linux-arm64, ext: tar.gz }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (v4.4.0)
+        with:
+          ref: ${{ env.REF }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (v4.4.0)
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: package
+          path: release
+      - run: node scripts/build-bundle.mjs release/thenomad.tgz
+      - name: The bundle is for this matrix entry
+        shell: bash
+        run: test -f "release/bundles/nomad-${{ matrix.target }}.${{ matrix.ext }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bundle-${{ matrix.target }}
+          path: |
+            release/bundles/nomad-${{ matrix.target }}.${{ matrix.ext }}
+            release/bundles/nomad-${{ matrix.target }}.${{ matrix.ext }}.sha256
+          if-no-files-found: error
+
+  # Install each bundle with the real installer, use it, and remove it. Linux bundles are built on
+  # Ubuntu 22.04 and tested on 24.04, so they are known to run beyond the machine that built them.
+  test:
+    needs: [package, bundle]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-2025, shell: powershell }
+          - { runner: windows-11-arm, shell: powershell }
+          - { runner: macos-15, shell: sh }
+          - { runner: macos-15-intel, shell: sh }
+          - { runner: ubuntu-24.04, shell: sh }
+          - { runner: ubuntu-24.04-arm, shell: sh }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (v4.4.0)
+        with:
+          ref: ${{ env.REF }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: bundle-*
+          merge-multiple: true
+          path: dist
+      - name: Fingerprint list
+        shell: bash
+        run: cat dist/*.sha256 > dist/SHA256SUMS && rm dist/*.sha256 && cat dist/SHA256SUMS
+      - name: Install, use and remove (Mac, Linux)
+        if: matrix.shell == 'sh'
+        run: sh scripts/install/test/test-install.sh dist "${{ needs.package.outputs.version }}"
+      - name: Install, use and remove (Windows PowerShell 5.1)
+        if: matrix.shell == 'powershell'
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install/test/test-install.ps1 -Dist dist -Version "${{ needs.package.outputs.version }}"
+
+  release:
+    needs: [package, test]
+    if: (github.event_name == 'workflow_dispatch' && inputs.release) || github.event_name == 'workflow_run'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # create the release
+      id-token: write # sign the build provenance
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: bundle-*
+          merge-multiple: true
+          path: dist
+      - name: Fingerprint list
+        run: cat dist/*.sha256 > dist/SHA256SUMS && rm dist/*.sha256 && cat dist/SHA256SUMS && test "$(wc -l < dist/SHA256SUMS)" -eq 6
+      # Anyone can check a bundle was built here, from this commit: gh attestation verify <file> -R kadiri-seer/nomad
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: "dist/nomad-*"
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          if gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::Release v$VERSION already exists. Bump the version to release again."
+            exit 1
+          fi
+          cat > notes.md <<EOF
+          Install or update Nomad $VERSION:
+
+          - Windows (PowerShell): \`irm https://thenomad.website/install.ps1 | iex\`
+          - Mac and Linux (Terminal): \`curl -fsSL https://thenomad.website/install.sh | sh\`
+          - npm: \`npm install -g thenomad@$VERSION\`
+
+          Already installed with the installer? Run \`nomad update\`, or use Settings > Updates in the dashboard.
+
+          The files below are what the installers download. SHA256SUMS lists their fingerprints, which the installers check before installing.
+          EOF
+          gh release create "v$VERSION" dist/* -R "$GITHUB_REPOSITORY" --target "$REF" --title "Nomad $VERSION" --notes-file notes.md --latest
+
+  # The public path, exactly as a person runs it, against the release that was just published.
+  verify:
+    needs: [package, release]
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-2025, macos-15, ubuntu-24.04]
+    runs-on: ${{ matrix.runner }}
+    env:
+      NOMAD_INSTALL_NO_OPEN: "1"
+      VERSION: ${{ needs.package.outputs.version }}
+    steps:
+      - name: Install from thenomad.website (Mac, Linux)
+        if: runner.os != 'Windows'
+        run: |
+          curl -fsSL https://thenomad.website/install.sh | sh
+          test "$("$HOME/.local/bin/nomad" --version)" = "$VERSION"
+          "$HOME/.local/bin/nomad" uninstall --yes
+      - name: Install from thenomad.website (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          irm https://thenomad.website/install.ps1 | iex
+          $got = & "$env:LOCALAPPDATA\Programs\Nomad\bin\nomad.cmd" --version
+          if ($got -ne $env:VERSION) { Write-Host "Expected $env:VERSION, got $got"; exit 1 }
+          & "$env:LOCALAPPDATA\Programs\Nomad\bin\nomad.cmd" uninstall --yes
