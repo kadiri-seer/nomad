@@ -123,8 +123,8 @@ function renameWithRetry(from: string, to: string) {
       return renameSync(from, to);
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code;
-      if (i >= 20 || (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES")) throw e;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+      if (i >= 40 || (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES")) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
     }
   }
 }

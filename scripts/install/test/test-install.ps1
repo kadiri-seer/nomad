@@ -67,7 +67,7 @@ Check 'Settings > Apps lists Nomad with its version' { (Get-ItemProperty $appsKe
 Check 'Settings > Apps can remove it' { (Get-ItemProperty $appsKey).UninstallString -like '*uninstall.ps1*' }
 
 Write-Host '== install again (repair)'
-[void](Install)
+Write-Host (Install)
 Check 'still runs' { (& $cmd --version) -eq $Version }
 Check 'PATH still has Nomad once' { (PathCount) -eq 1 }
 Check 'no temporary folders left' { @(Get-ChildItem -LiteralPath $root -Directory -Filter 'tmp-*').Count -eq 0 }
@@ -118,7 +118,7 @@ Check 'PATH entry removed' { (PathCount) -eq 0 }
 Check 'library kept' { Test-Path -LiteralPath $data }
 
 Write-Host '== remove data never deletes a folder that is not Nomad''s library'
-[void](Install)
+Write-Host (Install)
 $precious = Join-Path $env:TEMP 'precious-folder'
 New-Item -ItemType Directory -Force -Path $precious | Out-Null
 Set-Content -LiteralPath (Join-Path $precious 'file.txt') -Value 'keep'
@@ -128,7 +128,7 @@ Start-Sleep 2
 Check 'the other folder kept' { Test-Path -LiteralPath (Join-Path $precious 'file.txt') }
 
 Write-Host '== install, then remove from Settings > Apps with the library'
-[void](Install)
+Write-Host (Install)
 $quiet = (Get-ItemProperty $appsKey).QuietUninstallString
 Check 'Settings > Apps has a quiet uninstall' { $quiet -like '*uninstall.ps1*-Yes' }
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $bin 'uninstall.ps1') -Yes -RemoveData | Out-Host

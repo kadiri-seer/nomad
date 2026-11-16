@@ -102,7 +102,7 @@ function Install-Nomad {
     # Antivirus scanners can hold a just-unpacked file for a moment: retry the move.
     for ($i = 0; ; $i++) {
       try { Move-Item -LiteralPath $staged -Destination $app; break }
-      catch { if ($i -ge 20) { throw } ; Start-Sleep -Milliseconds 250 }
+      catch { if ($i -ge 40) { throw "Could not move Nomad into place: $($_.Exception.Message)" } ; Start-Sleep -Milliseconds 500 }
     }
 
     Get-ChildItem -LiteralPath (Join-Path $app 'launcher') -File | Copy-Item -Destination $bin -Force
