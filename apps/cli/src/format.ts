@@ -153,6 +153,11 @@ export function summaryText(p: MigrationPlan): string[] {
   if (p.conversions.length) lines.push(`Adapted: ${p.conversions.map((c) => `${c.item} ${dim("→ " + c.to)}`).join("; ")}.`);
   if (p.unsupported.length) lines.push(yellow(`Can't move: ${p.unsupported.map((u) => u.item).join(", ")}`) + dim(" (kept in the report with setup steps)"));
   if (p.disabledRoutines.length) lines.push(`Routines arrive paused: ${p.disabledRoutines.join(", ")}.`);
+  // Warnings belong in the short preview too: some say a moved tool spends real money.
+  // (The signer warning has its own line below.)
+  const warns = p.notes.filter((n) => n.level === "warning" && !/cannot tell who made it/.test(n.message));
+  for (const n of warns.slice(0, 6)) lines.push(yellow(`Warning: ${n.message}`));
+  if (warns.length > 6) lines.push(dim(`  and ${warns.length - 6} more warning${warns.length - 6 === 1 ? "" : "s"} (use --details)`));
   if (p.source.signer === "unsigned" || p.source.signer === "unknown") lines.push(yellow(p.source.signer === "unsigned" ? "Not signed: Nomad cannot tell who made this package. Move it only if you trust where it came from." : "Signed by a key you have not trusted: Nomad cannot tell who made this package."));
   for (const c of p.commands ?? []) lines.push(yellow(`Starts by itself on ${p.destination.displayName}: "${c.tool}" runs ${c.command}`) + (c.env.length ? dim(` (with ${c.env.join(", ")} set)`) : ""));
   if (p.secrets.findings || p.secrets.strippedEnv.length) {
