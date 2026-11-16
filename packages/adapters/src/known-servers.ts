@@ -355,6 +355,84 @@ const BRAINCHAIN: ServerProfile = {
   }
 };
 
+/** HEY Research Lab's hosted servers: exactly https://heyresearch.xyz/mcp and its research profile, /mcp/research. */
+const isHeyHost = (url: string | undefined) => {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && u.hostname === "heyresearch.xyz" && !u.port && /^\/mcp(\/research)?\/?$/.test(u.pathname);
+  } catch {
+    return false;
+  }
+};
+/** The hey-research-mcp command from @hey-research-lab/mcp (also .cmd or .exe on Windows), alone or as a path. */
+const isHeyCommand = (command: string | undefined) => !!command && /(^|[\\/])hey-research-mcp(\.cmd|\.exe)?$/i.test(command);
+const isHeyPackage = isPackageArg("@hey-research-lab/mcp");
+const HEY_API = "https://heyresearch.xyz";
+
+/**
+ * HEY Research Lab, read-only research on Robinhood Chain projects, as HEY documents it
+ * (heyresearch.xyz/developers/agents and @hey-research-lab/mcp 0.3.5, read Nov 16, 2026): the hosted
+ * servers https://heyresearch.xyz/mcp and /mcp/research (no key needed, an optional
+ * "Authorization: Bearer" API key), and the local server `npx -y @hey-research-lab/mcp` or
+ * `hey-research-mcp`, which reads HEY_API_KEY, HEY_API_URL, HEY_MCP_PROFILE and HEY_MARKET_INTEGRITY.
+ * There are no wallets or wallet keys. API keys are secrets like any other: Nomad's secret handling
+ * already keeps them out by name, and this profile only explains what moved.
+ */
+const HEY: ServerProfile = {
+  id: "hey-research",
+  vendor: "HEY Research Lab",
+  label: "HEY Research Lab (read-only research on Robinhood Chain projects)",
+  matches: (t) => !!t.mcp && (isHeyHost(t.mcp.url) || isHeyCommand(t.mcp.command) || t.mcp.args.some(isHeyPackage)),
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [],
+  looserDefaults: {},
+  apply(t, out, platform) {
+    const mcp = t.mcp!;
+    const lit = (k: string) => {
+      const v = mcp.env[k];
+      return v && "value" in v ? v.value.trim() : undefined;
+    };
+    if (mcp.transport !== "stdio") {
+      const research = /\/mcp\/research\/?$/.test(new URL(mcp.url!).pathname);
+      out.notes.push({
+        level: "info",
+        category: "tools",
+        message: `"${t.name}" is HEY Research Lab's hosted, read-only server${research ? " (the research profile: builder research, without market tools)" : ""}. It needs no key and no wallet; Nomad copies its address.`
+      });
+      if (Object.keys(mcp.headers ?? {}).some((h) => h.toLowerCase() === "authorization")) {
+        out.notes.push({ level: "info", category: "tools", message: `"${t.name}" used a HEY API key in its Authorization header. Keys are never copied: set it again on ${platform} as "Bearer <your key>" (the key is on heyresearch.xyz/account), or leave it out to use HEY without a key.` });
+      }
+      return;
+    }
+    out.notes.push({ level: "info", category: "tools", message: `"${t.name}" runs HEY Research Lab's read-only server on this computer. It needs no wallet; an API key is optional.` });
+    if (mcp.env.HEY_API_KEY) {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" used a HEY API key (HEY_API_KEY). Keys are never copied: set it again on ${platform} (it is on heyresearch.xyz/account), or leave it out to use HEY without a key.` });
+    }
+    // The API key rides on every request to HEY_API_URL, so a different address is worth a look.
+    const api = mcp.env.HEY_API_URL;
+    const apiValue = lit("HEY_API_URL");
+    if (apiValue !== undefined && apiValue.replace(/\/+$/, "") !== HEY_API) {
+      out.notes.push({
+        level: "warning",
+        category: "tools",
+        message: `"${t.name}" reads ${apiValue} instead of ${HEY_API} (HEY_API_URL). Its API key, if it has one, is sent there too. Keep it only if you trust that address.`
+      });
+    } else if (api && !("value" in api)) {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" takes the HEY address it reads from HEY_API_URL, which was a variable on the source. Without it on ${platform}, it reads ${HEY_API}.` });
+    }
+    if (lit("HEY_MCP_PROFILE")?.toLowerCase() === "research") {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" serves HEY's research profile (HEY_MCP_PROFILE=research): builder research, without market tools.` });
+    }
+    if (isHeyCommand(mcp.command)) {
+      out.manualSteps.push(`Install HEY Research Lab's MCP server for "${t.name}": npm install -g @hey-research-lab/mcp. It needs Node.js 20 or later, and the hey-research-mcp command must be on the PATH ${platform} uses.`);
+    } else {
+      out.manualSteps.push(`"${t.name}" runs HEY Research Lab's server through npx: ${platform} needs Node.js 20 or later on its PATH.`);
+    }
+  }
+};
+
 /**
  * Skills that only work with the setup they were written for. Nomad moves them like any skill and
  * says so in the preview instead of copying them silently.
@@ -385,7 +463,7 @@ export function knownSkillNotes(skills: Array<{ name: string; frontmatter?: Reco
   return notes;
 }
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN];
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {
