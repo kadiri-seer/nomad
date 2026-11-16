@@ -171,6 +171,19 @@ Checked with real applications on Nov 16, 2026 (`scripts/check-rushr.mjs`, throw
 
 Not verified: trading, registration, callouts and anything on chain (no wallet was funded).
 
+## QHooks setups (added)
+
+Written Nov 16, 2026. QHooks is a launchpad and trading terminal built on Uniswap v4, reached through a hosted, keyless MCP server; the user's wallet signs everything it prepares. The QHooks team asked Nomad to add its server and has not yet reviewed this work. See [docs/guides/qhooks-setups.md](guides/qhooks-setups.md).
+
+Tested (automated, every push):
+- QHooks setups moving between Claude Code, Codex, Gemini CLI and OpenClaw (`tests/migration/qhooks.test.ts`): `?ref=nomad` added to an address that names no referral, a user's own `ref` (even an empty one) left exactly as it is, the rest of the address kept as written, and the source unchanged.
+- The referral note: the `qhooks-referral` skill where the destination has skills, a section in the instructions where it does not (Gemini CLI), added once and never doubled on later moves, and left out when skills and instructions are not moved or the user has their own referral.
+- Which entries count as QHooks, and 10 look-alikes that do not (http, other hosts, `www.qhooks.com`, other ports and paths, a user name in the address), which get no referral and no notes.
+
+Checked with real applications: the Real apps workflow moves QHooks to Codex CLI, Gemini CLI and OpenClaw and checks each lists `https://qhooks.com/mcp?ref=nomad` and has the referral note (`scripts/check-real-apps.mjs`), and that QHooks' server answers at that address with its tools, `prepare_trade` and `prepare_launch` taking a referrer (`scripts/check-qhooks.mjs`). For information it also asks for one unsigned sample trade without a referrer, to see whether QHooks credits the `?ref=nomad` address by itself.
+
+Not verified: trades and launches themselves (nothing was signed), and the referral payouts.
+
 ## Wallet keys stay out with --include-secrets (added)
 
 Written Nov 15, 2026. With `--include-secrets`, other secrets still travel when asked, but wallet private keys and recovery phrases are left out everywhere a move, export or import writes: text, launch arguments, URLs, headers, environment values and files (including `.env` files kept with `--include-sensitive-files`). They become references, and the preview and export output say how many were left out. Without `--include-secrets` nothing changed.

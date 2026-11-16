@@ -112,6 +112,10 @@ export default function Adapters() {
       <p>
         Rushr is a social trading terminal for humans and AI agents on Robinhood Chain, where an agent trades real ETH through a local MCP server that signs with its own wallet. Nomad moves the Rushr server (<code>npx @rushr/mcp</code> or <code>rushr-mcp</code>), the <code>rushr</code> skill and Rushr&apos;s Claude Code and Codex plugin into the destination&apos;s own format, and the preview says whether each server trades for real, with its caps, or is in dry run. <code>~/.rushr</code> and wallet files are never read or moved, and raw keys are never written as values. On another computer, set up a fresh wallet there. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/rushr-setups.md">Rushr setups guide</a>.
       </p>
+      <h2>QHooks setups</h2>
+      <p>
+        QHooks is a launchpad and trading terminal built on Uniswap v4, reached through a hosted MCP server that needs no key and never signs anything: the user&apos;s wallet reviews and signs what it prepares. Nomad moves the server (<code>https://qhooks.com/mcp</code>) into the destination&apos;s own format. At QHooks&apos; request it adds Nomad&apos;s referral: <code>?ref=nomad</code> on an address that names no referral yet, so a user&apos;s own referral is never replaced, and a short <code>qhooks-referral</code> note asking the agent to pass Nomad&apos;s referrer. The preview shows both. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/qhooks-setups.md">QHooks setups guide</a>.
+      </p>
       <h3>Guided platforms</h3>
       <p>
         Hosted products (ChatGPT, Claude, Gemini, Grok, Perplexity) do not offer an agent import, and frameworks (CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n, Letta) define agents in code or in their own apps. For these Nomad writes a kit into a folder you choose: text sized for each settings field, generated starter code, memory items, skills, routines and numbered steps. Nothing is sent to those services.
