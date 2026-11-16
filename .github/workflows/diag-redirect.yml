@@ -5,23 +5,49 @@ on:
 permissions:
   contents: read
 jobs:
-  linux:
-    runs-on: ubuntu-24.04
+  unix:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    env:
+      NOMAD_INSTALL_NO_OPEN: "1"
     steps:
-      - run: |
-          for u in https://thenomad.website/install.ps1 https://www.thenomad.website/install.ps1 https://thenomad.website/install.sh http://thenomad.website/install.ps1; do
-            echo "== $u"; curl -sS -o /dev/null -D - "$u" | grep -iE "^HTTP|^location|^server|^x-vercel|^content-type"
+      - name: Wait for the new site
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsSL https://www.thenomad.website/install.sh | grep -q "forwards to the release itself" && exit 0
+            sleep 10
           done
-          echo "== github api"; curl -sS -o /dev/null -D - https://api.github.com/repos/kadiri-seer/nomad/releases/latest | grep -iE "^HTTP|x-ratelimit-(limit|remaining)"
-          echo "== github latest redirect"; curl -sS -o /dev/null -D - https://github.com/kadiri-seer/nomad/releases/latest | grep -iE "^HTTP|^location"
+          exit 1
+      - name: GitHub API allowance on this machine
+        run: curl -sS -o /dev/null -D - https://api.github.com/rate_limit | grep -i "x-ratelimit-remaining" || true
+      - name: The public line
+        run: |
+          curl -fsSL https://www.thenomad.website/install.sh | sh
+          "$HOME/.local/bin/nomad" --version
+          test "$("$HOME/.local/bin/nomad" --version)" = "0.5.0"
+          "$HOME/.local/bin/nomad" uninstall --yes
   windows:
     runs-on: windows-2025
+    env:
+      NOMAD_INSTALL_NO_OPEN: "1"
     steps:
-      - shell: powershell
+      - name: Wait for the new site
+        shell: powershell
+        run: |
+          for ($i = 0; $i -lt 60; $i++) {
+            try { if ((irm https://www.thenomad.website/install.ps1) -match 'forwards to the release itself') { exit 0 } } catch { }
+            Start-Sleep 10
+          }
+          exit 1
+      - name: The public line, in Windows PowerShell 5.1
+        shell: powershell
         run: |
           $PSVersionTable.PSVersion.ToString()
-          foreach ($u in @('https://thenomad.website/install.ps1','https://www.thenomad.website/install.ps1')) {
-            Write-Host "== $u"
-            try { $r = Invoke-WebRequest -UseBasicParsing -Uri $u -MaximumRedirection 0 -ErrorAction Stop; Write-Host "status $($r.StatusCode)" }
-            catch { $resp = $_.Exception.Response; if ($resp) { Write-Host "status $([int]$resp.StatusCode) location $($resp.Headers['Location'])" } else { Write-Host "error $($_.Exception.Message)" } }
-          }
+          irm https://www.thenomad.website/install.ps1 | iex
+          $got = & "$env:LOCALAPPDATA\Programs\Nomad\bin\nomad.cmd" --version
+          Write-Host "installed: $got"
+          if ($got -ne '0.5.0') { exit 1 }
+          & "$env:LOCALAPPDATA\Programs\Nomad\bin\nomad.cmd" uninstall --yes
