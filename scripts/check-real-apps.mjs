@@ -110,7 +110,15 @@ try {
     check("openclaw: docs points at its URL", by.docs?.url === "https://mcp.example.com/mcp", JSON.stringify(by.docs));
     check("openclaw: notes keeps its arguments", by.notes?.command === "node" && JSON.stringify(by.notes?.args) === JSON.stringify(["/opt/notes/server.js", "--readonly"]), JSON.stringify(by.notes));
     check("openclaw: HEY's hosted research profile", by["hey-research"]?.url === "https://heyresearch.xyz/mcp/research", JSON.stringify(by["hey-research"]));
-    check("openclaw: HEY's local server keeps its pin and profile", JSON.stringify(by["hey-local"]?.args) === JSON.stringify(["-y", "@hey-research-lab/mcp@0.3.5"]) && by["hey-local"]?.env?.HEY_MCP_PROFILE === "research", JSON.stringify(by["hey-local"]));
+    // Newer OpenClaw hides every setting value when it lists servers, so the value is read from its file.
+    let file = {};
+    try {
+      file = JSON.parse(readIf(join(home, ".openclaw/openclaw.json")));
+    } catch {
+      /* checked below */
+    }
+    const listed = by["hey-local"]?.env?.HEY_MCP_PROFILE;
+    check("openclaw: HEY's local server keeps its pin and profile", JSON.stringify(by["hey-local"]?.args) === JSON.stringify(["-y", "@hey-research-lab/mcp@0.3.5"]) && (listed === "research" || listed === "__OPENCLAW_REDACTED__") && file?.mcp?.servers?.["hey-local"]?.env?.HEY_MCP_PROFILE === "research", JSON.stringify(by["hey-local"]));
     check("openclaw: instructions arrived", readIf(join(home, ".openclaw/workspace/AGENTS.md")).includes(MARKER));
   }
 
