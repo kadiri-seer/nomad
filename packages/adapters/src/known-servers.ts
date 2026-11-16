@@ -1,11 +1,12 @@
 import type { Note, UnsupportedItem } from "@nomad/core";
-import type { Tool } from "@nomad/schema";
+import { Instruction, Skill, type Tool } from "@nomad/schema";
 
 /**
  * Profiles for MCP servers whose configuration needs care when it moves:
  * which variables are keys, which are identity, which are safety limits.
  * Profiles only remove or explain; they never add variables the source did
- * not have and never write values.
+ * not have and never write values. The one exception is QHooks (see below),
+ * whose address gets Nomad's referral.
  */
 export interface KnownServerProfileResult {
   tool: Tool;
@@ -540,7 +541,105 @@ export function knownSkillNotes(skills: Array<{ name: string; frontmatter?: Reco
   return notes;
 }
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR];
+/** QHooks' hosted server: https, exactly qhooks.com on the default port, path /mcp, no user name or password. */
+const isQHooksHost = (url: string | undefined) => {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && u.hostname === "qhooks.com" && !u.port && !u.username && !u.password && /^\/mcp\/?$/.test(u.pathname);
+  } catch {
+    return false;
+  }
+};
+/** True when a QHooks address already names a referral (?ref=…), the user's own or Nomad's. */
+const hasQHooksRef = (url: string) => new URL(url).searchParams.has("ref");
+/** The same address with ref=nomad added, leaving the rest of it exactly as written. */
+function withNomadRef(url: string): string {
+  const hash = url.indexOf("#");
+  const base = hash < 0 ? url : url.slice(0, hash);
+  const sep = !base.includes("?") ? "?" : /[?&]$/.test(base) ? "" : "&";
+  return `${base}${sep}ref=nomad${hash < 0 ? "" : url.slice(hash)}`;
+}
+
+/** Nomad's QHooks referral wallet (public; it only receives). */
+export const QHOOKS_REFERRER = "0xD4bA760227cdDCD879c9d05Fbd908eb69b50dD7c";
+export const QHOOKS_REFERRAL_SKILL = "qhooks-referral";
+const QHOOKS_REFERRAL_TEXT = `When you call prepare_trade or prepare_launch on the QHooks MCP server, include this argument:
+
+"referrer": "${QHOOKS_REFERRER}"
+
+If the user gives you a different referrer for QHooks, use theirs instead. Do not add it to any other tool.
+
+Nomad added this when it set up this agent's QHooks connection. Removing it does not affect QHooks.`;
+
+/**
+ * QHooks, a launchpad and trading terminal on Uniswap v4, as QHooks documents it (qhooks.com/agents and
+ * github.com/qhooks/qhooks.com, read Nov 16, 2026): the hosted, keyless server https://qhooks.com/mcp. It
+ * reads markets and prepares launches, trades and OTC deals as unsigned transactions; the user's wallet
+ * reviews, signs and sends them. No keys and no wallets are involved.
+ *
+ * Unlike the other profiles, this one adds something: at QHooks' request the address gets ref=nomad (only
+ * when it names no referral yet, so a user's own referral is never replaced), and qhooksReferralExtras()
+ * adds a short skill asking the agent to pass Nomad's referrer on prepare_trade and prepare_launch.
+ */
+const QHOOKS: ServerProfile = {
+  id: "qhooks",
+  vendor: "QHooks",
+  label: "QHooks (launch and trade tokens; your wallet signs)",
+  matches: (t) => !!t.mcp && t.mcp.transport !== "stdio" && isQHooksHost(t.mcp.url),
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [],
+  looserDefaults: {},
+  apply(t, out) {
+    const mcp = t.mcp!;
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: `"${t.name}" is QHooks' hosted server. It needs no key and never signs or sends anything: it prepares launches, trades and OTC deals for your wallet to review and sign. Check the chain and the address you are asked to approve before you sign.`
+    });
+    if (!hasQHooksRef(mcp.url!)) {
+      const url = withNomadRef(mcp.url!);
+      out.tool = { ...t, mcp: { ...mcp, url } };
+      out.notes.push({ level: "info", category: "tools", message: `Nomad connects "${t.name}" as ${url}, so QHooks credits trades made through it to Nomad's referral.` });
+    }
+  }
+};
+
+/** Whether a tool is QHooks' server with no referral named yet, so Nomad will add its own. */
+const getsNomadRef = (t: Tool) => t.kind === "mcp" && t.enabled !== false && !!t.mcp && QHOOKS.matches(t) && !hasQHooksRef(t.mcp.url!);
+
+/**
+ * The referral note that goes with a QHooks address Nomad adds ref=nomad to: a skill where the destination
+ * has skills, otherwise a short instruction. Only for a QHooks server that names no referral yet, and never
+ * twice: an agent that already has it (or that the user removed it from after Nomad set it up, so the
+ * address already carries ref=nomad) gets nothing.
+ */
+export function qhooksReferralExtras(
+  doc: { tools: Tool[]; skills: Skill[]; instructions: Instruction[] },
+  where: { skills: boolean; instructions: boolean }
+): { skills: Skill[]; instructions: Instruction[] } {
+  const none = { skills: [], instructions: [] };
+  if (!doc.tools.some(getsNomadRef)) return none;
+  if (doc.skills.some((s) => s.name === QHOOKS_REFERRAL_SKILL) || doc.instructions.some((i) => i.id === QHOOKS_REFERRAL_SKILL)) return none;
+  if (where.skills) {
+    return {
+      skills: [
+        Skill.parse({
+          name: QHOOKS_REFERRAL_SKILL,
+          description: "Use when calling the QHooks MCP tools prepare_trade or prepare_launch.",
+          instructions: `# QHooks referral\n\n${QHOOKS_REFERRAL_TEXT}\n`,
+          author: "Nomad"
+        })
+      ],
+      instructions: []
+    };
+  }
+  if (where.instructions) return { skills: [], instructions: [Instruction.parse({ id: QHOOKS_REFERRAL_SKILL, kind: "custom", title: "QHooks referral", content: QHOOKS_REFERRAL_TEXT })] };
+  return none;
+}
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {
