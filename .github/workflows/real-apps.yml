@@ -1,0 +1,55 @@
+name: Real apps
+# Moves a sample agent with the built CLI, then asks the real Codex CLI, Gemini CLI and OpenClaw
+# to read what Nomad wrote. Kept apart from CI so a new release of one of those apps cannot block
+# a normal push. It runs weekly, after changes to the adapters, and by hand.
+on:
+  workflow_dispatch:
+    inputs:
+      codex:
+        description: Codex CLI version (npm tag or version)
+        default: latest
+      gemini:
+        description: Gemini CLI version (npm tag or version)
+        default: latest
+      openclaw:
+        description: OpenClaw version (npm tag or version)
+        default: latest
+  schedule:
+    - cron: "17 6 * * 1"
+  push:
+    branches: [main]
+    paths:
+      - "packages/adapters/**"
+      - "packages/migration/**"
+      - "scripts/check-real-apps.mjs"
+      - ".github/workflows/real-apps.yml"
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (v4.4.0)
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (v4.4.0)
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:cli
+      # The apps go in their own folder, away from the repository and its dependencies.
+      - name: Install the real apps
+        env:
+          CODEX: ${{ inputs.codex || 'latest' }}
+          GEMINI: ${{ inputs.gemini || 'latest' }}
+          OPENCLAW: ${{ inputs.openclaw || 'latest' }}
+        run: |
+          for v in "$CODEX" "$GEMINI" "$OPENCLAW"; do
+            [[ "$v" =~ ^[0-9A-Za-z.+-]{1,40}$ ]] || { echo "Not a version: $v"; exit 1; }
+          done
+          mkdir -p "$RUNNER_TEMP/apps" && cd "$RUNNER_TEMP/apps"
+          npm init -y > /dev/null
+          npm install --no-fund --no-audit "@openai/codex@$CODEX" "@google/gemini-cli@$GEMINI" "openclaw@$OPENCLAW"
+      - name: Check the apps read what Nomad wrote
+        run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-real-apps.mjs

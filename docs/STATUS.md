@@ -14,6 +14,8 @@ OpenClaw, Claude Code, Codex and Hermes read and write, each with a capability m
 
 Verified with real applications (`scripts/verify-real-apps.sh`): Codex CLI accepts the generated `config.toml` and lists migrated MCP servers; Claude Code shows migrated MCP servers from `~/.claude.json`.
 
+The Real apps workflow (`scripts/check-real-apps.mjs`) installs the current Codex CLI, Gemini CLI and OpenClaw every week and after adapter changes, moves a Claude Code agent with a local server, a web server and a secret to each, and checks that each app lists every server with the right command, arguments and URL, that the instructions arrived, that OpenClaw accepts its config, and that no secret value was written. Checked locally on Nov 16, 2026 with Codex CLI 0.169.0, Gemini CLI 0.68.0 and OpenClaw 2026.9.2.
+
 Not verified with the real application: OpenClaw (its current release needs Node 24.16+, not available in the build environment) and Hermes (Python). Their file formats follow the published documentation; field level details of cron job stores may differ between releases, which is why they are labelled partial.
 
 ## Phase 3: Web application (done)

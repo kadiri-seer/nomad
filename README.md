@@ -109,6 +109,7 @@ pnpm nomad scan    # run the CLI from source
 pnpm build:ui      # export the dashboard, then: pnpm nomad ui
 pnpm nomad ui --dev   # dashboard with live reload
 scripts/verify-real-apps.sh   # check output with real Codex / Claude Code binaries
+node scripts/check-real-apps.mjs   # check output with real Codex CLI, Gemini CLI and OpenClaw (on PATH)
 ```
 
 ## Documentation
