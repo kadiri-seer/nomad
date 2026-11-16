@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { NOMAD_VERSION } from "@nomad/core";
 
@@ -89,10 +89,25 @@ export interface UpdateCheck {
   available?: boolean;
 }
 
+/**
+ * The version the launchers run now. It can be newer than the one running this process, when
+ * Nomad was updated while this window stayed open.
+ */
+export function switchedVersion(install: Install): string {
+  try {
+    const v = readFileSync(join(install.root, "current"), "utf8").trim();
+    if (VERSION_RE.test(v) && newer(v, install.version)) return v;
+  } catch {
+    /* fall back to the running version */
+  }
+  return install.version;
+}
+
 export async function checkForUpdate(install = currentInstall()): Promise<UpdateCheck> {
   if (!install) return { installed: false, current: NOMAD_VERSION };
+  const current = switchedVersion(install);
   const latest = await latestVersion();
-  return { installed: true, current: install.version, latest, available: newer(latest, install.version) };
+  return { installed: true, current, latest, available: newer(latest, current) };
 }
 
 function systemTar(): string {
@@ -142,10 +157,30 @@ function startPowerShell(script: string, env: Record<string, string>): boolean {
   return r.status === 0;
 }
 
-/** Windows cannot delete a folder while a program in it runs: remove it a few seconds after this process exits. */
+/**
+ * The version this process runs from stays until it exits: an open dashboard keeps serving its
+ * pages from it. On Windows it is removed once this process has exited; elsewhere the next update
+ * or install removes it.
+ */
 function removeAfterExit(dir: string) {
-  if (process.platform !== "win32") return removeQuietly(dir);
-  startPowerShell(`Wait-Process -Id ${process.pid} -Timeout 60 -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; Remove-Item -LiteralPath $env:NOMAD_OLD_DIR -Recurse -Force -ErrorAction SilentlyContinue`, { NOMAD_OLD_DIR: dir });
+  if (process.platform !== "win32") return;
+  startPowerShell(`Wait-Process -Id ${process.pid} -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; Remove-Item -LiteralPath $env:NOMAD_OLD_DIR -Recurse -Force -ErrorAction SilentlyContinue`, { NOMAD_OLD_DIR: dir });
+}
+
+/** One update at a time, from the terminal or the dashboard. A lock left by a crash expires after 15 minutes. */
+function takeLock(root: string): () => void {
+  const lock = join(root, "update.lock");
+  try {
+    if (Date.now() - statSync(lock).mtimeMs > 15 * 60 * 1000) rmSync(lock, { recursive: true, force: true });
+  } catch {
+    /* no lock */
+  }
+  try {
+    mkdirSync(lock);
+  } catch {
+    throw new Error("Another Nomad update is running. Try again in a few minutes.");
+  }
+  return () => removeQuietly(lock);
 }
 
 /**
@@ -154,8 +189,12 @@ function removeAfterExit(dir: string) {
  */
 export async function applyUpdate(install: Install, version: string, log: (line: string) => void = () => undefined): Promise<string> {
   if (!VERSION_RE.test(version)) throw new Error(`Not a version: ${version}`);
+  // Already switched to it (for example from another window): nothing to do, and never unpack
+  // over a version that may be running.
+  if (switchedVersion(install) === version && existsSync(join(install.root, "app", version))) return version;
   const asset = assetName(install.target);
   const base = `https://github.com/${REPO}/releases/download/v${version}`;
+  const unlock = takeLock(install.root);
   const work = join(install.root, `tmp-${randomBytes(6).toString("hex")}`);
   mkdirSync(work, { recursive: true });
   try {
@@ -201,7 +240,7 @@ export async function applyUpdate(install: Install, version: string, log: (line:
     writeFileSync(infoPath, JSON.stringify({ ...info, version, updated: new Date().toISOString() }, null, 2) + "\n");
     if (process.platform === "win32") {
       const reg = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "reg.exe");
-      spawnSync(reg, ["add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Nomad", "/v", "DisplayVersion", "/t", "REG_SZ", "/d", version, "/f"], { stdio: "ignore" });
+      spawnSync(reg, ["add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\thenomad.website", "/v", "DisplayVersion", "/t", "REG_SZ", "/d", version, "/f"], { stdio: "ignore" });
     }
 
     // Older versions go; the running one goes after this process exits.
@@ -215,6 +254,7 @@ export async function applyUpdate(install: Install, version: string, log: (line:
     return version;
   } finally {
     removeQuietly(work);
+    unlock();
   }
 }
 

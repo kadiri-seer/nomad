@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { applyUpdate, assetName, checksumFor, currentInstall, newer } from "../../apps/cli/src/install";
+import { applyUpdate, assetName, checkForUpdate, checksumFor, currentInstall, newer, switchedVersion } from "../../apps/cli/src/install";
 
 /** `nomad update` for Nomad installed from thenomad.website: checked, then switched, never half done. */
 
@@ -95,7 +95,7 @@ describe("installer updates", () => {
     expect(readFileSync(join(install.root, "bin", win ? "nomad.cmd" : "nomad"), "utf8")).toContain("launcher 0.4.3");
     expect(existsSync(join(install.root, "app/0.4.2"))).toBe(false);
     expect(existsSync(join(install.root, "app/0.4.3", NODE))).toBe(true);
-    expect(readdirSync(install.root).filter((f) => f.startsWith("tmp-") || f.startsWith("current."))).toEqual([]);
+    expect(readdirSync(install.root).filter((f) => f.startsWith("tmp-") || f.startsWith("current.") || f === "update.lock")).toEqual([]);
   }, 120000);
 
   it("a download that does not match its fingerprint changes nothing", async () => {
@@ -115,6 +115,26 @@ describe("installer updates", () => {
     expect(existsSync(join(install.root, "app/0.4.4"))).toBe(false);
     expect(readdirSync(install.root).filter((f) => f.startsWith("tmp-"))).toEqual([]);
   }, 120000);
+
+  it("an old window does not reinstall over the version already switched to", async () => {
+    const install = fakeInstall("0.4.2");
+    fakeApp(join(install.root, "app/0.4.3"), "0.4.3", false);
+    writeFileSync(join(install.root, "current"), "0.4.3");
+    const calls = release();
+    expect(switchedVersion(install)).toBe("0.4.3");
+    await expect(applyUpdate(install, "0.4.3")).resolves.toBe("0.4.3");
+    expect(calls).toEqual([]);
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ tag_name: "v0.4.3" })));
+    await expect(checkForUpdate(install)).resolves.toMatchObject({ current: "0.4.3", latest: "0.4.3", available: false });
+  });
+
+  it("runs one update at a time", async () => {
+    const install = fakeInstall("0.4.2");
+    mkdirSync(join(install.root, "update.lock"));
+    release();
+    await expect(applyUpdate(install, "0.4.3")).rejects.toThrow("Another Nomad update is running");
+    expect(readFileSync(join(install.root, "current"), "utf8")).toBe("0.4.2");
+  });
 
   it("refuses a version name that is not a version", async () => {
     const install = fakeInstall("0.4.2");
