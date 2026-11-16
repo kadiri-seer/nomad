@@ -31,5 +31,19 @@
     "0xe4862b7605f0cd66796f5d1a9cc936462642b515"
   ],
   "roundIssue": 5,
-  "result": null
+  "result": {
+    "finalizedAt": "2026-11-16T08:13:41.821Z",
+    "totals": {
+      "3": "1537917981364645179276986",
+      "4": "0"
+    },
+    "voters": {
+      "3": 1,
+      "4": 0
+    },
+    "totalWeight": "1537917981364645179276986",
+    "voterCount": 1,
+    "winner": "3",
+    "rejected": 0
+  }
 }
