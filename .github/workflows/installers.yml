@@ -48,22 +48,41 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (v4.4.0)
         with:
           ref: ${{ env.REF }}
+          persist-credentials: false
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (v4.4.0)
         with:
           node-version: 24
           cache: pnpm
+      - id: v
+        run: |
+          version=$(node -p "require('./apps/cli/package.json').version")
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::apps/cli/package.json has an unexpected version."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - run: pnpm install --frozen-lockfile
       - run: node scripts/prepare-npm.mjs
       - name: Pack
         working-directory: release/npm
         run: npm pack && mv thenomad-*.tgz ../thenomad.tgz
-      - id: v
-        run: echo "version=$(node -p "require('./apps/cli/package.json').version")" >> "$GITHUB_OUTPUT"
+      # Resolve the dependencies once, check them, and lock them: every bundle gets exactly these.
+      - name: Lock and audit the dependencies
+        working-directory: release
+        run: |
+          mkdir deps && cd deps
+          echo '{"private":true}' > package.json
+          npm install --omit=dev --ignore-scripts --no-audit --no-fund ../thenomad.tgz
+          npm audit --omit=dev --audit-level=high
+          npm audit signatures
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: package
-          path: release/thenomad.tgz
+          path: |
+            release/thenomad.tgz
+            release/deps/package.json
+            release/deps/package-lock.json
           if-no-files-found: error
 
   # One bundle per system, built on that system with Node.js 24.
@@ -84,6 +103,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (v4.4.0)
         with:
           ref: ${{ env.REF }}
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (v4.4.0)
         with:
           node-version: 24
@@ -91,7 +111,7 @@ jobs:
         with:
           name: package
           path: release
-      - run: node scripts/build-bundle.mjs release/thenomad.tgz
+      - run: node scripts/build-bundle.mjs release/thenomad.tgz --lock release/deps
       - name: The bundle is for this matrix entry
         shell: bash
         run: test -f "release/bundles/nomad-${{ matrix.target }}.${{ matrix.ext }}"
@@ -118,10 +138,13 @@ jobs:
           - { runner: ubuntu-24.04, shell: sh }
           - { runner: ubuntu-24.04-arm, shell: sh }
     runs-on: ${{ matrix.runner }}
+    env:
+      VERSION: ${{ needs.package.outputs.version }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (v4.4.0)
         with:
           ref: ${{ env.REF }}
+          persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: bundle-*
@@ -132,15 +155,18 @@ jobs:
         run: cat dist/*.sha256 > dist/SHA256SUMS && rm dist/*.sha256 && cat dist/SHA256SUMS
       - name: Install, use and remove (Mac, Linux)
         if: matrix.shell == 'sh'
-        run: sh scripts/install/test/test-install.sh dist "${{ needs.package.outputs.version }}"
+        run: sh scripts/install/test/test-install.sh dist "$VERSION"
       - name: Install, use and remove (Windows PowerShell 5.1)
         if: matrix.shell == 'powershell'
         shell: powershell
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install/test/test-install.ps1 -Dist dist -Version "${{ needs.package.outputs.version }}"
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install/test/test-install.ps1 -Dist dist -Version $env:VERSION
 
   release:
     needs: [package, test]
-    if: (github.event_name == 'workflow_dispatch' && inputs.release) || github.event_name == 'workflow_run'
+    # Only from main: a hand run on main with "release" ticked, or "Publish to npm" run by hand on main.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.release && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'workflow_dispatch' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-24.04
     permissions:
       contents: write # create the release

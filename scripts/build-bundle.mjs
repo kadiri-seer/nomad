@@ -4,7 +4,10 @@
 // The one-line installers (scripts/install) download these from the GitHub release.
 //
 //   node scripts/prepare-npm.mjs && (cd release/npm && npm pack)
-//   node scripts/build-bundle.mjs release/npm/thenomad-<version>.tgz
+//   node scripts/build-bundle.mjs release/npm/thenomad-<version>.tgz [--lock <folder>]
+//
+// --lock: a folder with the package.json and package-lock.json made by installing the same .tgz
+// (the release workflow audits that install once), so every bundle gets exactly those versions.
 //
 // Output: release/bundles/nomad-<target>.zip (Windows) or .tar.gz (Mac, Linux), where target is
 // windows-x64, windows-arm64, macos-x64, macos-arm64, linux-x64 or linux-arm64.
@@ -17,8 +20,9 @@ import { fileURLToPath } from "node:url";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const tgz = process.argv[2] ? resolve(process.argv[2]) : "";
-if (!tgz || !existsSync(tgz)) {
-  console.error("Usage: node scripts/build-bundle.mjs <path to thenomad-x.y.z.tgz>");
+const lockAt = process.argv[3] === "--lock" && process.argv[4] ? resolve(process.argv[4]) : null;
+if (!tgz || !existsSync(tgz) || (process.argv[3] && !lockAt) || (lockAt && !existsSync(join(lockAt, "package-lock.json")))) {
+  console.error("Usage: node scripts/build-bundle.mjs <path to thenomad-x.y.z.tgz> [--lock <folder with package.json and package-lock.json>]");
   process.exit(2);
 }
 
@@ -46,8 +50,24 @@ const npmCli = [join(dirname(process.execPath), "node_modules/npm/bin/npm-cli.js
 if (!npmCli) throw new Error("npm was not found next to this Node.js.");
 
 // 1. The package and its dependencies, exactly as npm installs them, without install scripts.
-writeFileSync(join(stage, "package.json"), JSON.stringify({ private: true }) + "\n");
-sh(process.execPath, [npmCli, "install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund", "--no-package-lock", tgz], { cwd: stage });
+if (lockAt) {
+  // The lock names the package as file:../thenomad.tgz; npm ci checks it against the lock's hash.
+  const pkg = JSON.parse(readFileSync(join(lockAt, "package.json"), "utf8"));
+  if (pkg.dependencies?.thenomad !== "file:../thenomad.tgz") throw new Error("The lock folder must come from installing ../thenomad.tgz.");
+  // npm does not check a local .tgz against the lock, so check it here.
+  const lock = JSON.parse(readFileSync(join(lockAt, "package-lock.json"), "utf8"));
+  const want = lock.packages?.["node_modules/thenomad"]?.integrity;
+  const have = `sha512-${createHash("sha512").update(readFileSync(tgz)).digest("base64")}`;
+  if (want !== have) throw new Error("The package does not match the audited lock. Nothing was built.");
+  copyFileSync(tgz, join(dirname(stage), "thenomad.tgz"));
+  copyFileSync(join(lockAt, "package.json"), join(stage, "package.json"));
+  copyFileSync(join(lockAt, "package-lock.json"), join(stage, "package-lock.json"));
+  sh(process.execPath, [npmCli, "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], { cwd: stage });
+  rmSync(join(stage, "package-lock.json"));
+} else {
+  writeFileSync(join(stage, "package.json"), JSON.stringify({ private: true }) + "\n");
+  sh(process.execPath, [npmCli, "install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund", "--no-package-lock", tgz], { cwd: stage });
+}
 rmSync(join(stage, "package.json"));
 rmSync(join(stage, "node_modules", ".bin"), { recursive: true, force: true });
 rmSync(join(stage, "node_modules", ".package-lock.json"), { force: true });
