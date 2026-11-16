@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { applyUpdate, assetName, checkForUpdate, checksumFor, currentInstall, newer, switchedVersion } from "../../apps/cli/src/install";
+import { applyUpdate, assetName, checkForUpdate, checksumFor, currentInstall, latestVersion, newer, switchedVersion } from "../../apps/cli/src/install";
 
 /** `nomad update` for Nomad installed from thenomad.website: checked, then switched, never half done. */
 
@@ -126,6 +126,27 @@ describe("installer updates", () => {
     expect(calls).toEqual([]);
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ tag_name: "v0.4.3" })));
     await expect(checkForUpdate(install)).resolves.toMatchObject({ current: "0.4.3", latest: "0.4.3", available: false });
+  });
+
+  it("finds the newest version from GitHub's release page, and from the API if that fails", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      calls.push(url);
+      return { ok: true, url: "https://github.com/kadiri-seer/nomad/releases/tag/v0.6.1", json: async () => ({}) } as unknown as Response;
+    });
+    await expect(latestVersion()).resolves.toBe("0.6.1");
+    expect(calls).toEqual(["https://github.com/kadiri-seer/nomad/releases/latest"]);
+    calls.length = 0;
+    vi.stubGlobal("fetch", async (url: string) => {
+      calls.push(url);
+      if (url.includes("api.github.com")) return new Response(JSON.stringify({ tag_name: "v0.6.2" }));
+      throw new Error("offline");
+    });
+    await expect(latestVersion()).resolves.toBe("0.6.2");
+    expect(calls).toEqual(["https://github.com/kadiri-seer/nomad/releases/latest", "https://api.github.com/repos/kadiri-seer/nomad/releases/latest"]);
+    // A page that forwards somewhere unexpected is not trusted for the version.
+    vi.stubGlobal("fetch", async (url: string) => (url.includes("api.github.com") ? new Response(JSON.stringify({ tag_name: "v0.6.3" })) : ({ ok: true, url: "https://evil.example/releases/tag/v9.9.9" } as unknown as Response)));
+    await expect(latestVersion()).resolves.toBe("0.6.3");
   });
 
   it("runs one update at a time", async () => {

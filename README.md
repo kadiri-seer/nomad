@@ -47,10 +47,10 @@ One line, nothing to install first (no Node.js, no admin rights). After that, op
 
 ```
 # Windows, in PowerShell
-irm https://thenomad.website/install.ps1 | iex
+irm https://www.thenomad.website/install.ps1 | iex
 
 # Mac and Linux, in Terminal
-curl -fsSL https://thenomad.website/install.sh | sh
+curl -fsSL https://www.thenomad.website/install.sh | sh
 ```
 
 The installer downloads the bundle for your system from this repository's GitHub releases, checks it against the release's `SHA256SUMS`, and installs it in your user folder. Update with `nomad update` (or Settings > Updates in the dashboard); remove with `nomad uninstall` (or Settings > Apps on Windows). Your library in `~/.nomad` is kept unless you ask to delete it. Read the scripts first: [install.ps1](scripts/install/install.ps1), [install.sh](scripts/install/install.sh).

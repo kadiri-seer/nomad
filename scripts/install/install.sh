@@ -1,7 +1,7 @@
 #!/bin/sh
 # Nomad installer for Mac and Linux.
 #
-#   curl -fsSL https://thenomad.website/install.sh | sh
+#   curl -fsSL https://www.thenomad.website/install.sh | sh
 #
 # What it does: downloads Nomad for your system from the project's GitHub releases, checks it
 # against its published SHA-256 fingerprint, and installs it in your user folder. No admin rights.
@@ -66,7 +66,7 @@ main() {
   case "$(uname -s)" in
     Darwin) os=macos ;;
     Linux) os=linux ;;
-    *) fail "this installer is for Mac and Linux. On Windows, run in PowerShell: irm https://thenomad.website/install.ps1 | iex" ;;
+    *) fail "this installer is for Mac and Linux. On Windows, run in PowerShell: irm https://www.thenomad.website/install.ps1 | iex" ;;
   esac
   case "$(uname -m)" in
     x86_64 | amd64) arch=x64 ;;
@@ -95,10 +95,19 @@ main() {
     fail "set NOMAD_INSTALL_VERSION together with NOMAD_INSTALL_SOURCE."
   else
     say "Finding the newest Nomad..."
-    tmpjson=$(mktemp)
-    download "https://api.github.com/repos/$REPO/releases/latest" "$tmpjson" || fail "could not reach GitHub. Check your connection and try again."
-    version=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p' "$tmpjson" | head -n 1)
-    rm -f "$tmpjson"
+    version=""
+    # GitHub's "latest release" address forwards to the release itself. Unlike GitHub's API it has
+    # no small hourly limit, which people on a shared connection can run into.
+    if command -v curl >/dev/null 2>&1; then
+      latest=$(curl -fsSLI --retry 3 --proto '=https' --tlsv1.2 -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" 2>/dev/null || true)
+      version=$(printf '%s' "$latest" | sed -n 's#^https://github.com/[^/]*/[^/]*/releases/tag/v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$#\1#p')
+    fi
+    if [ -z "$version" ]; then
+      tmpjson=$(mktemp)
+      download "https://api.github.com/repos/$REPO/releases/latest" "$tmpjson" || fail "could not reach GitHub. Check your connection and try again."
+      version=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p' "$tmpjson" | head -n 1)
+      rm -f "$tmpjson"
+    fi
   fi
   printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail "could not tell which version to install."
 

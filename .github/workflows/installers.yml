@@ -196,8 +196,8 @@ jobs:
           cat > notes.md <<EOF
           Install or update Nomad $VERSION:
 
-          - Windows (PowerShell): \`irm https://thenomad.website/install.ps1 | iex\`
-          - Mac and Linux (Terminal): \`curl -fsSL https://thenomad.website/install.sh | sh\`
+          - Windows (PowerShell): \`irm https://www.thenomad.website/install.ps1 | iex\`
+          - Mac and Linux (Terminal): \`curl -fsSL https://www.thenomad.website/install.sh | sh\`
           - npm: \`npm install -g thenomad@$VERSION\`
 
           Already installed with the installer? Run \`nomad update\`, or use Settings > Updates in the dashboard.
@@ -221,14 +221,14 @@ jobs:
       - name: Install from thenomad.website (Mac, Linux)
         if: runner.os != 'Windows'
         run: |
-          curl -fsSL https://thenomad.website/install.sh | sh
+          curl -fsSL https://www.thenomad.website/install.sh | sh
           test "$("$HOME/.local/bin/nomad" --version)" = "$VERSION"
           "$HOME/.local/bin/nomad" uninstall --yes
       - name: Install from thenomad.website (Windows)
         if: runner.os == 'Windows'
         shell: powershell
         run: |
-          irm https://thenomad.website/install.ps1 | iex
+          irm https://www.thenomad.website/install.ps1 | iex
           $got = & "$env:LOCALAPPDATA\Programs\Nomad\bin\nomad.cmd" --version
           if ($got -ne $env:VERSION) { Write-Host "Expected $env:VERSION, got $got"; exit 1 }
           & "$env:LOCALAPPDATA\Programs\Nomad\bin\nomad.cmd" uninstall --yes

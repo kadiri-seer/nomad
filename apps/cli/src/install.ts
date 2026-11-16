@@ -74,8 +74,18 @@ async function get(url: string): Promise<Response> {
   return r;
 }
 
-/** The newest released version, from GitHub. */
+/**
+ * The newest released version. GitHub's "latest release" address forwards to the release itself
+ * and, unlike GitHub's API, has no small hourly limit, so it is asked first.
+ */
 export async function latestVersion(): Promise<string> {
+  try {
+    const page = await fetch(`https://github.com/${REPO}/releases/latest`, { method: "HEAD", redirect: "follow", headers: { "User-Agent": `nomad/${NOMAD_VERSION}` }, signal: AbortSignal.timeout(30000) });
+    const m = /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/tag\/v(\d+\.\d+\.\d+)$/.exec(page.url);
+    if (page.ok && m) return m[1];
+  } catch {
+    /* ask the API instead */
+  }
   const data = (await (await get(`https://api.github.com/repos/${REPO}/releases/latest`)).json()) as { tag_name?: unknown };
   const tag = typeof data.tag_name === "string" ? data.tag_name : "";
   if (!/^v\d+\.\d+\.\d+$/.test(tag)) throw new Error("GitHub returned an unexpected release name. Try again later.");

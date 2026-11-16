@@ -1,6 +1,6 @@
 # Nomad installer for Windows.
 #
-#   irm https://thenomad.website/install.ps1 | iex
+#   irm https://www.thenomad.website/install.ps1 | iex
 #
 # What it does: downloads Nomad for your system from the project's GitHub releases, checks it
 # against its published SHA-256 fingerprint, and installs it in your user folder. No admin rights.
@@ -17,7 +17,7 @@ function Install-Nomad {
   $repo = 'kadiri-seer/nomad'
 
   if ([Environment]::OSVersion.Platform -ne 'Win32NT') {
-    throw 'This installer is for Windows. On Mac or Linux, run: curl -fsSL https://thenomad.website/install.sh | sh'
+    throw 'This installer is for Windows. On Mac or Linux, run: curl -fsSL https://www.thenomad.website/install.sh | sh'
   }
   if ([Environment]::OSVersion.Version.Major -lt 10) { throw 'Nomad needs Windows 10 or newer.' }
   # Older Windows PowerShell may not offer TLS 1.2 by default, and GitHub requires it.
@@ -47,9 +47,19 @@ function Install-Nomad {
     throw 'Set NOMAD_INSTALL_VERSION together with NOMAD_INSTALL_SOURCE.'
   } else {
     Write-Host 'Finding the newest Nomad...'
-    try { $release = Invoke-RestMethod -UseBasicParsing -Uri "https://api.github.com/repos/$repo/releases/latest" -Headers @{ 'User-Agent' = 'nomad-installer' } }
-    catch { throw 'Could not reach GitHub. Check your connection and try again.' }
-    $version = ([string]$release.tag_name) -replace '^v', ''
+    $version = $null
+    # GitHub's "latest release" address forwards to the release itself. Unlike GitHub's API it has
+    # no small hourly limit, which people on a shared connection can run into.
+    try {
+      $page = Invoke-WebRequest -UseBasicParsing -Method Head -Uri "https://github.com/$repo/releases/latest" -Headers @{ 'User-Agent' = 'nomad-installer' }
+      $final = if ($page.BaseResponse.ResponseUri) { $page.BaseResponse.ResponseUri.AbsoluteUri } else { [string]$page.BaseResponse.RequestMessage.RequestUri }
+      if ($final -match '^https://github\.com/[^/]+/[^/]+/releases/tag/v([0-9]+\.[0-9]+\.[0-9]+)$') { $version = $Matches[1] }
+    } catch { }
+    if (-not $version) {
+      try { $release = Invoke-RestMethod -UseBasicParsing -Uri "https://api.github.com/repos/$repo/releases/latest" -Headers @{ 'User-Agent' = 'nomad-installer' } }
+      catch { throw 'Could not reach GitHub. Check your connection and try again.' }
+      $version = ([string]$release.tag_name) -replace '^v', ''
+    }
   }
   if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Could not tell which version to install.' }
   if (-not $source) { $source = "https://github.com/$repo/releases/download/v$version" }

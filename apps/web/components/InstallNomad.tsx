@@ -8,21 +8,21 @@ const SYSTEMS: Record<System, { label: string; open: string; command: string; sc
   windows: {
     label: "Windows",
     open: "Press Start, type PowerShell and open it. Paste this line and press Enter.",
-    command: "irm https://thenomad.website/install.ps1 | iex",
+    command: "irm https://www.thenomad.website/install.ps1 | iex",
     script: "/install.ps1",
     after: "After that, open Nomad from the Start menu like any app."
   },
   mac: {
     label: "Mac",
     open: "Open Terminal (press Command and Space, then type Terminal). Paste this line and press Enter.",
-    command: "curl -fsSL https://thenomad.website/install.sh | sh",
+    command: "curl -fsSL https://www.thenomad.website/install.sh | sh",
     script: "/install.sh",
     after: "After that, open Nomad from Applications or Launchpad like any app."
   },
   linux: {
     label: "Linux",
     open: "Open a terminal. Paste this line and press Enter.",
-    command: "curl -fsSL https://thenomad.website/install.sh | sh",
+    command: "curl -fsSL https://www.thenomad.website/install.sh | sh",
     script: "/install.sh",
     after: "After that, open Nomad from your apps menu."
   }
