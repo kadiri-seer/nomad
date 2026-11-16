@@ -76,7 +76,7 @@ jobs:
           npm install --omit=dev --ignore-scripts --no-audit --no-fund ../thenomad.tgz
           npm audit --omit=dev --audit-level=high
           npm audit signatures
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: package
           path: |
@@ -115,7 +115,7 @@ jobs:
       - name: The bundle is for this matrix entry
         shell: bash
         run: test -f "release/bundles/nomad-${{ matrix.target }}.${{ matrix.ext }}"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bundle-${{ matrix.target }}
           path: |
