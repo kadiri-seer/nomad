@@ -31,6 +31,24 @@ interface ServerProfile {
   apply?: (t: Tool, out: KnownServerProfileResult, platform: string) => void;
 }
 
+/**
+ * An npm package as npx runs it: the exact name, optionally with a version, range or tag. Nothing after it,
+ * and no URL or git spec, so a look-alike ("@priors/mcp-evil", "x@priors/mcp", "pkg@https://…") is not the package.
+ */
+const NPM_SPEC = "(@[0-9A-Za-z.^~*+-]{1,64})?";
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+const isPackageArg = (name: string) => {
+  const re = new RegExp(`^${escapeRe(name)}${NPM_SPEC}$`);
+  return (a: string) => re.test(a);
+};
+/** The same package named as one word inside a shell script (Priors documents an `sh -c '… exec npx -y @priors/mcp@…'` wrapper). */
+const isPackageInScript = (name: string) => {
+  const re = new RegExp(`(^|\\s)${escapeRe(name)}${NPM_SPEC}(\\s|$)`);
+  return (a: string) => re.test(a);
+};
+const isPriorsPackage = isPackageArg("@priors/mcp");
+const isPriorsScript = isPackageInScript("@priors/mcp");
+
 const isPriorsHost = (url: string | undefined) => {
   if (!url) return false;
   try {
@@ -44,7 +62,12 @@ const PRIORS: ServerProfile = {
   id: "priors",
   vendor: "Priors",
   label: "Priors (a credit service for agents on Robinhood Chain)",
-  matches: (t) => !!t.mcp && (t.mcp.command === "priors-mcp" || t.mcp.args.some((a) => a.includes("@priors/mcp")) || isPriorsHost(t.mcp.url)),
+  matches: (t) =>
+    !!t.mcp &&
+    (t.mcp.command === "priors-mcp" ||
+      t.mcp.args.some(isPriorsPackage) ||
+      (/(^|[\\/])(ba|z)?sh(\.exe)?$/.test(t.mcp.command ?? "") && t.mcp.args.some(isPriorsScript)) ||
+      isPriorsHost(t.mcp.url)),
   keyVars: ["PRIORS_KEY_FILE", "PRIORS_KEY"],
   emptyOkEnv: ["PRIORS_AGENT_ID"],
   limitVars: [
@@ -105,7 +128,7 @@ const OAK: ServerProfile = {
   id: "oak",
   vendor: "Oak",
   label: "Oak Agent Kit (a local wallet and tools for Robinhood Chain projects)",
-  matches: (t) => !!t.mcp && t.mcp.transport === "stdio" && ((isOakCommand(t.mcp.command) && t.mcp.args[0] === "mcp") || t.mcp.args.some((a) => /^@oakagentkit\/addon(@|$)/.test(a))),
+  matches: (t) => !!t.mcp && t.mcp.transport === "stdio" && ((isOakCommand(t.mcp.command) && t.mcp.args[0] === "mcp") || t.mcp.args.some(isPackageArg("@oakagentkit/addon"))),
   keyVars: [],
   emptyOkEnv: [],
   limitVars: ["OAK_AUTO_DAILY_CAP_USD"],
@@ -165,7 +188,7 @@ const HEDGEHOOD: ServerProfile = {
   id: "hedgehood",
   vendor: "Hedgehood",
   label: "Hedgehood (an options market for AI agents on Robinhood Chain)",
-  matches: (t) => !!t.mcp && (isHedgehoodCommand(t.mcp.command) || t.mcp.args.some((a) => /^@hedgehood-io\/mcp(@|$)/.test(a)) || isHedgehoodHost(t.mcp.url)),
+  matches: (t) => !!t.mcp && (isHedgehoodCommand(t.mcp.command) || t.mcp.args.some(isPackageArg("@hedgehood-io/mcp")) || isHedgehoodHost(t.mcp.url)),
   // Both the file and the raw form of a key may be set (the file wins), so keys are handled in apply().
   keyVars: [],
   emptyOkEnv: [],
