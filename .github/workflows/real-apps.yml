@@ -23,6 +23,7 @@ on:
       - "packages/migration/**"
       - "scripts/check-real-apps.mjs"
       - "scripts/check-hey-servers.mjs"
+      - "scripts/check-rushr.mjs"
       - ".github/workflows/real-apps.yml"
 permissions:
   contents: read
@@ -60,3 +61,6 @@ jobs:
       - name: Check HEY Research Lab's servers
         working-directory: ${{ runner.temp }}
         run: node "$GITHUB_WORKSPACE/scripts/check-hey-servers.mjs"
+      # Rushr's Codex plugin through the real Codex and Gemini CLI, and Rushr's server in dry run with no wallet.
+      - name: Check Rushr
+        run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-rushr.mjs
