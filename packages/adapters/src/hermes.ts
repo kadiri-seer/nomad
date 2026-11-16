@@ -31,6 +31,7 @@ import {
   skillToFiles,
   toolsFromMcpServers,
   pluginOf,
+  isPlainCliWord,
   integrationStep,
   wants,
   workflowPrompt
@@ -351,7 +352,11 @@ async function planHome(doc: AgentDocument, ctx: WriteContext): Promise<PlannedW
   // Servers and skills from a Hermes plugin come back by reinstalling the plugin, not by copying them.
   const fromPlugins = new Set<string>([...doc.tools, ...doc.skills].map((x) => pluginOf(x, P)).filter((x): x is string => !!x));
   for (const name of fromPlugins) {
-    manualSteps.push(`Install and enable the Hermes plugin ${name}: "hermes plugins install ${name}", then "hermes plugins enable ${name}" (portable plugins install disabled). Nomad does not copy plugin servers or skills into config.yaml or skills/.`);
+    manualSteps.push(
+      isPlainCliWord(name, "path")
+        ? `Install and enable the Hermes plugin ${name}: "hermes plugins install ${name}", then "hermes plugins enable ${name}" (portable plugins install disabled). Nomad does not copy plugin servers or skills into config.yaml or skills/.`
+        : `Install and enable the Hermes plugin ${JSON.stringify(name)} from where you got it. Nomad prints no command for it, because its name has characters a terminal could misread, and does not copy plugin servers or skills.`
+    );
   }
   if (wants(ctx, "skills")) {
     for (const s of doc.skills.filter((x) => !pluginOf(x, P))) {

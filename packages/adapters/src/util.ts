@@ -125,6 +125,16 @@ export function skillToFiles(skill: Skill, baseRel: string, extraFrontmatter: Re
   return files;
 }
 
+/**
+ * True when a name read from an agent (a server, a plugin, a marketplace, an environment variable) is
+ * plain enough to print inside a command the user will paste into a terminal. Names come from the agent
+ * being moved, which may be a package from someone else, so a name with any other character is never
+ * printed inside a command: the step says where to set it instead.
+ */
+export function isPlainCliWord(s: string, allow: "name" | "path" = "name"): boolean {
+  return allow === "name" ? /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(s) : /^[A-Za-z0-9][A-Za-z0-9._@\/:+-]{0,255}$/.test(s);
+}
+
 export function safeName(s: string): string {
   return s.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "") || "item";
 }

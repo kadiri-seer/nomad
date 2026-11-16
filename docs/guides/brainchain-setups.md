@@ -26,7 +26,7 @@ BrainChain uses mainnet unless `BRAINCHAIN_NETWORK=testnet`, and pays in USDG on
 - **A new computer.** The key file does not come along. Create it there yourself, for a wallet that holds only what the agent may spend.
 - **The one-time approval.** Paying in USDG on Robinhood Chain needs a Permit2 approval once per wallet: `BRAINCHAIN_PAYER_KEY_FILE=<key file> npx -y brainchain-mcp@0.9.3 approve`. The preview lists it, and the `wallet` command that checks a key is ready to pay. Paying on Base needs no approval.
 - **Limits that were references.** When a limit was a variable on the source, Nomad does not write it and the preview names BrainChain's default: 10 per run, no daily cap, or 10 USDG per bond.
-- **OpenClaw.** Values are never written as `${VAR}` into `openclaw.json`, so each key setting becomes an `openclaw config set mcp.servers.brainchain.env.<VAR> <value>` step. The `brainchain-worker` skill reads its key through OpenClaw's secrets settings, which Nomad does not copy: redo the skill's operator setup on the destination, then start the worker again.
+- **OpenClaw.** Nothing with `${...}` in it is written into `openclaw.json`, so each key setting becomes an `openclaw config set mcp.servers.brainchain.env.<VAR> <value>` step. The `brainchain-worker` skill reads its key through OpenClaw's secrets settings, which Nomad does not copy: redo the skill's operator setup on the destination, then start the worker again.
 - **Install.** Node.js 22 or later for entries that use `npx`, or `npm install -g brainchain-mcp` for the `brainchain-mcp` command.
 
 ## What never moves

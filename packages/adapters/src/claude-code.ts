@@ -39,7 +39,8 @@ import {
   pluginOf,
   integrationStep,
   wants,
-  workflowManualSteps
+  workflowManualSteps,
+  isPlainCliWord
 } from "./util";
 
 const P = "claude-code";
@@ -493,7 +494,11 @@ async function planMain(doc: AgentDocument, ctx: WriteContext, L: Layout): Promi
     const info = doc.integrations.find((i) => i.kind === "claude-code-plugin" && i.name === id)?.config as Record<string, unknown> | undefined;
     const marketName = id.split("@")[1];
     const market = typeof info?.marketplaceRepo === "string" ? info.marketplaceRepo : ((marketName && KNOWN_MARKETPLACE_REPOS[marketName]) ?? marketName ?? "<marketplace>");
-    manualSteps.push(`Install the plugin ${id} in Claude Code: /plugin marketplace add ${market}, then /plugin install ${id}. Nomad does not copy plugin servers or skills.`);
+    manualSteps.push(
+      isPlainCliWord(id, "path") && isPlainCliWord(market, "path")
+        ? `Install the plugin ${id} in Claude Code: /plugin marketplace add ${market}, then /plugin install ${id}. Nomad does not copy plugin servers or skills.`
+        : `Install the plugin ${JSON.stringify(id)} in Claude Code from its marketplace. Nomad prints no command for it, because its name has characters a terminal could misread, and does not copy plugin servers or skills.`
+    );
   }
   if (wants(ctx, "skills")) {
     for (const s of doc.skills.filter((x) => !pluginOf(x, P))) {

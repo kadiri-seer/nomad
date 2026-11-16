@@ -24,6 +24,10 @@ The destination policy is computed before and after (by applying the planned fil
 
 A package can carry local MCP servers: commands the destination app starts by itself. When the agent comes from a package, or from the Nomad library (which also holds imported packages), the preview shows each such command exactly as a shell would, with the names of its environment values, and the move needs the `run-commands` approval (`--approve-commands` in the CLI, a checkbox in the dashboard). Remote servers, disabled servers and moves that leave tools out are not listed. Agents read from apps on this computer need no extra approval.
 
+## Steps you copy
+
+Names in the preview's steps (servers, plugins, marketplaces, variables) come from the agent being moved, which may be a package from someone else. A step prints a command only when every name in it is plain (letters, digits, `-`, `_`, and for plugin and marketplace names `.`, `@`, `/`, `:`, `+`); otherwise it says where to set the value by hand and prints no command. BrainChain's approval and wallet steps print only its own package spec (`brainchain-mcp`, a version or a tag).
+
 ## Files
 
 Source agents are only read. An agent file that is a link (for example a CLAUDE.md kept in a dotfiles folder) is followed only to a file inside the home folder or below the link's own folder, and never to a credential file (`~/.ssh`, `~/.aws`, `.netrc`, `.env`, key files, shell history and similar, listed in `packages/core/src/node/fs.ts`); refused links are listed in the preview by path. Folders of skills and files are walked without following links. Writes are previewed with diffs, backed up, atomic, re-checked against the preview, never follow symlinks below the root, and roll back on failure. Content outside Nomad's sections is never removed. Edited files are detected by hash.

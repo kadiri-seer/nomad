@@ -34,12 +34,21 @@ import {
   integrationStep,
   pluginOf,
   mcpServersFromTools,
-  toolsFromMcpServers
+  toolsFromMcpServers,
+  isPlainCliWord
 } from "./util";
 
 const P = "openclaw";
 
 /* ------------------------------ MCP servers ------------------------------ */
+
+/** A ${...} in a value; $${...} is OpenClaw's escape for literal text. OpenClaw substitutes every string in its config. */
+const hasVar = (v: unknown) => typeof v === "string" && /\$\{[^}]*\}/.test(v.replace(/\$\$\{/g, ""));
+
+/** A server whose command line or address uses a variable is not written to OpenClaw. */
+function launchUsesVar(t: { mcp?: { command?: string; url?: string; args: string[] } }): boolean {
+  return !!t.mcp && (hasVar(t.mcp.command) || hasVar(t.mcp.url) || t.mcp.args.some(hasVar));
+}
 
 /**
  * OpenClaw keeps MCP servers in openclaw.json under mcp.servers (written by `openclaw mcp set`),
@@ -541,13 +550,37 @@ async function planAgent(doc: AgentDocument, ctx: WriteContext): Promise<Planned
       // References are not written: an older OpenClaw refuses to load a config with an unset ${VAR}.
       // Each one becomes an `openclaw config set` step instead.
       const r = mcpServersFromTools(mcpTools, { platformName: "OpenClaw", envRefStyle: "none" });
+      // A value with ${...} anywhere in it is never written either: OpenClaw substitutes every string in its config.
+      const setStep = (name: string, field: "env" | "headers", k: string, why: string) => {
+        const label = field === "env" ? `${k}` : `the ${k} header`;
+        manualSteps.push(
+          isPlainCliWord(name) && isPlainCliWord(k)
+            ? `Set ${label} for the "${name}" MCP server in OpenClaw${why}: openclaw config set mcp.servers.${name}.${field}.${k} <value>`
+            : `Set ${label} for the MCP server ${JSON.stringify(name)} in OpenClaw${why}, under mcp.servers in openclaw.json. Nomad prints no command for it, because its name has characters a terminal could misread.`
+        );
+      };
       for (const [name, server] of Object.entries(r.servers)) {
         const tool = mcpTools.find((t) => t.name === name);
+        if (hasVar(server.command) || hasVar(server.url) || (Array.isArray(server.args) && server.args.some(hasVar))) {
+          delete r.servers[name];
+          unsupported.push({ category: "tools", item: name, reason: "Its command line or address uses a ${...} variable, which an older OpenClaw refuses to load when the variable is unset.", alternative: "Add it yourself with openclaw mcp set, with the variable's value filled in." });
+          continue;
+        }
         if (tool?.mcp?.transport === "http") server.transport = "streamable-http";
         else if (tool?.mcp?.transport === "sse") server.transport = "sse";
         const refs = r.refs[name];
-        for (const k of refs?.env ?? []) manualSteps.push(`Set ${k} for the "${name}" MCP server in OpenClaw: openclaw config set mcp.servers.${name}.env.${k} <value>${refs.optional.includes(k) ? " (optional on the source: only if you use it)" : ""}`);
-        for (const [h] of refs?.headers ?? []) manualSteps.push(`Set the ${h} header for the "${name}" MCP server in OpenClaw: openclaw config set mcp.servers.${name}.headers.${h} <value>`);
+        for (const k of refs?.env ?? []) setStep(name, "env", k, refs.optional.includes(k) ? " (optional on the source: only if you use it)" : "");
+        for (const [h] of refs?.headers ?? []) setStep(name, "headers", h, "");
+        for (const field of ["env", "headers"] as const) {
+          const rec = server[field] as Record<string, string> | undefined;
+          if (!rec) continue;
+          for (const [k, v] of Object.entries(rec)) {
+            if (!hasVar(v)) continue;
+            delete rec[k];
+            setStep(name, field, k, ` (on the source it was ${JSON.stringify(v)}, which uses a variable)`);
+          }
+          if (!Object.keys(rec).length) delete server[field];
+        }
       }
       if (Object.keys(r.servers).length) {
         cfgPatch.mcp = { servers: r.servers };
@@ -630,7 +663,7 @@ export const openclawAdapter: Adapter = {
       const missing = doc.skills.filter((s) => !pluginOf(s, this.info.id) && !names.has(s.name));
       checks.push({ name: "Skills written", ok: !missing.length, detail: missing.length ? `Missing: ${missing.map((s) => s.name).join(", ")}` : undefined });
     }
-    const servers = doc.tools.filter((t) => t.kind === "mcp" && t.mcp && t.enabled !== false && !pluginOf(t, this.info.id));
+    const servers = doc.tools.filter((t) => t.kind === "mcp" && t.mcp && t.enabled !== false && !pluginOf(t, this.info.id) && !launchUsesVar(t));
     if (wants(ctx, "tools") && servers.length) {
       const names = new Set(got.tools.map((t) => t.name));
       const missing = servers.filter((t) => !names.has(t.name));

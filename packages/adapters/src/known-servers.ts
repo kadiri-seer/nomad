@@ -232,6 +232,8 @@ const HEDGEHOOD: ServerProfile = {
   }
 };
 
+/** brainchain-mcp as npx runs it: the bare name, a version or a tag. Anything else (a URL, extra text) is not BrainChain's package. */
+const BRAINCHAIN_PKG = /^brainchain-mcp(@(latest|next|\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?))?$/;
 /** The brainchain-mcp command from the brainchain-mcp package (also .cmd or .exe on Windows), alone or as a path. */
 const isBrainChainCommand = (command: string | undefined) => !!command && /(^|[\\/])brainchain-mcp(\.cmd|\.exe)?$/i.test(command);
 const literal = (t: Tool, k: string) => {
@@ -259,7 +261,7 @@ const BRAINCHAIN: ServerProfile = {
   id: "brainchain",
   vendor: "BrainChain",
   label: "BrainChain (verified AI work, paid on Robinhood Chain or Base)",
-  matches: (t) => !!t.mcp && t.mcp.transport === "stdio" && (isBrainChainCommand(t.mcp.command) || t.mcp.args.some((a) => /^brainchain-mcp(@|$)/.test(a))),
+  matches: (t) => !!t.mcp && t.mcp.transport === "stdio" && (isBrainChainCommand(t.mcp.command) || t.mcp.args.some((a) => BRAINCHAIN_PKG.test(a))),
   keyVars: ["BRAINCHAIN_PAYER_KEY_FILE", "BRAINCHAIN_PAYER_KEY"],
   emptyOkEnv: [],
   limitVars: ["BRAINCHAIN_MAX_PRICE_UNITS", "BRAINCHAIN_BUDGET_UNITS", "BRAINCHAIN_DAILY_UNITS", "BRAINCHAIN_MAX_BOND_UNITS", "BRAINCHAIN_STATE_DIR"],
@@ -317,7 +319,8 @@ const BRAINCHAIN: ServerProfile = {
       out.manualSteps.push(`"${t.name}" can only pay with its wallet key: make sure ${optionalKeys.join(" or ")} is set for it on ${platform}. Without it the server starts and reads, but cannot post or bond tasks.`);
     }
 
-    const pkg = mcp.args.find((a) => /^brainchain-mcp(@|$)/.test(a)) ?? "brainchain-mcp";
+    // Only BrainChain's own package spec is printed in a command the user runs.
+    const pkg = mcp.args.find((a) => BRAINCHAIN_PKG.test(a)) ?? "brainchain-mcp";
     const prefix = `${testnet ? "BRAINCHAIN_NETWORK=testnet " : ""}${base ? "BRAINCHAIN_PAY_ON=base " : ""}BRAINCHAIN_PAYER_KEY_FILE=<key file>`;
     if (!base) out.manualSteps.push(`Paying in USDG needs a one-time approval per wallet. If this wallet has not paid BrainChain in USDG before, run in your own terminal: ${prefix} npx -y ${pkg} approve`);
     out.manualSteps.push(`Check the wallet before the agent pays: ${prefix} npx -y ${pkg} wallet (it prints the wallet and what it still needs, never the key).`);
