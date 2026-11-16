@@ -221,6 +221,12 @@ export async function applyUpdate(install: Install, version: string, log: (line:
     if (resolve(target) === resolve(dirname(process.execPath))) throw new Error(`Nomad ${version} is the version running now.`);
     removeQuietly(target);
     renameWithRetry(staged, target);
+    for (const need of [process.platform === "win32" ? "node.exe" : "node", "launcher", join("node_modules", "thenomad", "dist", "nomad.js")]) {
+      if (!existsSync(join(target, need))) {
+        removeQuietly(target);
+        throw new Error(`The new version is incomplete (${need} is missing). Nothing was changed.`);
+      }
+    }
 
     // Launchers, uninstaller and icon come with each version.
     const launcher = join(target, "launcher");

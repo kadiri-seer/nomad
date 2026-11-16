@@ -86,23 +86,26 @@ function Install-Nomad {
     if ($actual -ne $expected) { throw 'The download does not match its published fingerprint. Nothing was changed.' }
     Write-Host 'Fingerprint checked.'
 
-    # Unpack next to any version already installed, and check it runs before switching to it.
-    $staged = Join-Path $work 'app'
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $work $asset), $staged)
-    $got = & (Join-Path $staged 'node.exe') (Join-Path $staged 'node_modules\thenomad\dist\nomad.js') --version
-    if ($LASTEXITCODE -ne 0) { throw "The downloaded Nomad did not start: $got" }
-    if ("$got".Trim() -ne $version) { throw "The download says it is version $got, not $version." }
-
+    # Unpack straight into its own version folder, next to any version already installed, and check
+    # it runs before switching to it. (No folder move: antivirus scanners can make a move half-fail.)
     $app = Join-Path $root "app\$version"
     if (Test-Path -LiteralPath $app) {
       try { Remove-Item -LiteralPath $app -Recurse -Force }
       catch { throw 'Nomad is open. Close the Nomad window, then run the installer again.' }
     }
-    # Antivirus scanners can hold a just-unpacked file for a moment: retry the move.
-    for ($i = 0; ; $i++) {
-      try { Move-Item -LiteralPath $staged -Destination $app; break }
-      catch { if ($i -ge 40) { throw "Could not move Nomad into place: $($_.Exception.Message)" } ; Start-Sleep -Milliseconds 500 }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $work $asset), $app)
+    $ok = $false
+    try {
+      foreach ($need in @('node.exe', 'launcher\nomad.cmd', 'launcher\uninstall.ps1', 'node_modules\thenomad\dist\nomad.js')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $app $need))) { throw "The download is incomplete ($need is missing)." }
+      }
+      $got = & (Join-Path $app 'node.exe') (Join-Path $app 'node_modules\thenomad\dist\nomad.js') --version
+      if ($LASTEXITCODE -ne 0) { throw "The downloaded Nomad did not start: $got" }
+      if ("$got".Trim() -ne $version) { throw "The download says it is version $got, not $version." }
+      $ok = $true
+    } finally {
+      if (-not $ok) { Remove-Item -LiteralPath $app -Recurse -Force -ErrorAction SilentlyContinue }
     }
 
     Get-ChildItem -LiteralPath (Join-Path $app 'launcher') -File | Copy-Item -Destination $bin -Force
