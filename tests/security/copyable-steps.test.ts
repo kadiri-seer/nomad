@@ -85,4 +85,16 @@ describe("commands people paste", () => {
       expect(steps, to).toContain("Nomad prints no command for it");
     }
   });
+
+  it("plugin steps from a package carry a warning to check the names; agents from this computer do not", async () => {
+    const d = createDocument({ name: "Gift", platform: "generic" });
+    d.instructions.push({ id: "main", kind: "agent", content: "Be helpful." });
+    d.skills.push({ name: "s3", description: "d", instructions: "x", dependencies: [], platforms: [], allowedTools: [], config: {}, references: [], files: [], frontmatter: {}, invocation: "auto", source: { platform: "claude-code", pluginHost: "claude-code", plugin: "helper@helpers" } } as never);
+    const pkg = join(env.home, "gift2.nomad");
+    writeFileSync(pkg, createZip(writeNomadPack(d).files));
+    const plan = await env.nomad.plan({ source: { kind: "package", path: pkg }, destination: { adapter: "claude-code", root: emptyDir(env.home, "w/.claude") } });
+    expect(plan.notes.map((n) => n.message)).toContain("The plugin install steps below come from a package: whoever made it chose the plugin and marketplace names (helper@helpers). Check that they are the ones you expect before you install anything.");
+    const own = await env.nomad.plan({ source: { kind: "location", adapter: "claude-code", root: env.roots.claude, nativeId: "main" }, destination: { adapter: "claude-code", root: emptyDir(env.home, "w2/.claude") } });
+    expect(own.notes.map((n) => n.message).join("\n")).not.toContain("whoever made it chose");
+  });
 });

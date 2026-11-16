@@ -345,6 +345,14 @@ export class Nomad {
     const notes = [...loaded.notes, ...planned.notes];
     // Skills that only work with the setup they were written for are moved, and the preview says so.
     if (components.includes("skills")) notes.push(...knownSkillNotes(doc.skills, adapter.info.id, adapter.info.displayName));
+    // Plugin reinstall steps name a plugin and a marketplace. From a package (or the library, which holds
+    // imported packages), whoever made it chose those names, so the preview says to check them first.
+    if (req.source.kind !== "location") {
+      const plugins = [...new Set([...doc.tools, ...doc.skills].map((x) => (x.source?.pluginHost === adapter.info.id && typeof x.source?.plugin === "string" ? x.source.plugin : null)).filter((x): x is string => !!x))];
+      if (plugins.length) {
+        notes.push({ level: "warning", message: `The plugin install steps below come from ${req.source.kind === "package" ? "a package" : "the Nomad library"}: whoever made it chose the plugin and marketplace names (${plugins.join(", ")}). Check that they are the ones you expect before you install anything.` });
+      }
+    }
     if (!(await adapter.detect(root)).detected && adapter.info.support !== "GUIDED") {
       notes.push({ level: "info", message: `${adapter.info.displayName} was not detected at ${displayPath(root)}. Nomad will create the files there.` });
     }
