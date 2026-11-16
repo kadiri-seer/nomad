@@ -145,6 +145,18 @@ Not verified:
 - Codex, Cursor, Gemini CLI and Hermes were not run with the moved entries (only Hedgehood's own check above).
 - The hosted read-only servers were not contacted.
 
+## HEY Research setups (added)
+
+Written Nov 16, 2026. HEY Research Lab is read-only research on Robinhood Chain projects. HEY Research Lab and its team have not been contacted and have not reviewed this work. See [docs/guides/hey-research-setups.md](guides/hey-research-setups.md).
+
+Tested (automated, every push):
+- HEY setups moving between Claude Code, Codex, Gemini CLI, Hermes and OpenClaw: the hosted server and research profile, the `x-hey-integration` header, the local server with its pin and profile, and the global command (`tests/migration/hey.test.ts`). API keys, in a header or in `HEY_API_KEY`, never appear in destinations, plans, receipts or Nomad's library; sources are unchanged; OpenClaw's file never gets a `${...}` value.
+- Which entries count as HEY: its real addresses, package and command, and 12 look-alikes that do not (other hosts, http, other ports and paths, similar package and command names).
+
+Checked with real applications on Nov 16, 2026: Codex CLI 0.169.0, Gemini CLI 0.68.0 and OpenClaw 2026.9.2 list the moved hosted research profile and the pinned local server with its profile (`scripts/check-real-apps.mjs`). The Real apps workflow also checks every week that HEY's hosted server, its research profile and the local package answer and list their tools without a key (`scripts/check-hey-servers.mjs`).
+
+Not verified: research answers themselves, and anything with an API key (none was used).
+
 ## Wallet keys stay out with --include-secrets (added)
 
 Written Nov 15, 2026. With `--include-secrets`, other secrets still travel when asked, but wallet private keys and recovery phrases are left out everywhere a move, export or import writes: text, launch arguments, URLs, headers, environment values and files (including `.env` files kept with `--include-sensitive-files`). They become references, and the preview and export output say how many were left out. Without `--include-secrets` nothing changed.
