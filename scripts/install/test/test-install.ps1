@@ -35,7 +35,7 @@ function PathCount { @((UserPath) -split ';' | Where-Object { $_.TrimEnd('\') -e
 function Install([string]$source = $Dist) {
   $env:NOMAD_INSTALL_SOURCE = $source
   $text = Get-Content -Raw -LiteralPath (Join-Path $here 'install.ps1')
-  $out = Invoke-Expression $text 6>&1 | Out-String
+  $out = Invoke-Expression $text 6>&1 | Out-String -Width 4096
   $env:NOMAD_INSTALL_SOURCE = $Dist
   return $out
 }
