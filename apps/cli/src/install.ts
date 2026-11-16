@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
@@ -122,12 +122,30 @@ function removeQuietly(p: string) {
   }
 }
 
+const powershell = () => join(process.env.SystemRoot ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+
+/**
+ * Run a PowerShell script in its own hidden window that keeps going after Nomad and its terminal
+ * close. (A process Node starts detached on Windows has no console, and PowerShell quits at once
+ * without one, so Start-Process does the launching.) Values travel in environment variables and
+ * the script is encoded, so no path is ever quoted into a command line.
+ */
+function startPowerShell(script: string, env: Record<string, string>): boolean {
+  const ps = powershell();
+  const launch = "Start-Process -FilePath $env:NOMAD_PS -ArgumentList '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',$env:NOMAD_PS_SCRIPT -WindowStyle Hidden";
+  const r = spawnSync(ps, ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", launch], {
+    env: { ...process.env, ...env, NOMAD_PS: ps, NOMAD_PS_SCRIPT: Buffer.from(script, "utf16le").toString("base64") },
+    stdio: "ignore",
+    windowsHide: true,
+    timeout: 60000
+  });
+  return r.status === 0;
+}
+
 /** Windows cannot delete a folder while a program in it runs: remove it a few seconds after this process exits. */
 function removeAfterExit(dir: string) {
   if (process.platform !== "win32") return removeQuietly(dir);
-  const ps = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-  const script = `Wait-Process -Id ${process.pid} -Timeout 60 -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; Remove-Item -LiteralPath $env:NOMAD_OLD_DIR -Recurse -Force -ErrorAction SilentlyContinue`;
-  spawn(ps, ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], { detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, NOMAD_OLD_DIR: dir } }).unref();
+  startPowerShell(`Wait-Process -Id ${process.pid} -Timeout 60 -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; Remove-Item -LiteralPath $env:NOMAD_OLD_DIR -Recurse -Force -ErrorAction SilentlyContinue`, { NOMAD_OLD_DIR: dir });
 }
 
 /**
@@ -205,12 +223,11 @@ export function runUninstaller(install: Install, opts: { removeData: boolean; da
   if (process.platform === "win32") {
     const script = join(install.root, "bin", "uninstall.ps1");
     if (!existsSync(script)) return false;
-    const ps = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
     // It waits for this process to exit, because Windows cannot delete a running program.
-    const args = ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Yes", "-WaitPid", String(process.pid), "-DataDir", opts.dataDir];
-    if (opts.removeData) args.push("-RemoveData");
-    spawn(ps, args, { detached: true, stdio: "ignore", windowsHide: true }).unref();
-    return true;
+    return startPowerShell(`& $env:NOMAD_UNINSTALL -Yes -WaitPid ${process.pid} -DataDir $env:NOMAD_DATA_DIR${opts.removeData ? " -RemoveData" : ""}`, {
+      NOMAD_UNINSTALL: script,
+      NOMAD_DATA_DIR: opts.dataDir
+    });
   }
   const script = join(install.root, "bin", "uninstall.sh");
   if (!existsSync(script)) return false;
