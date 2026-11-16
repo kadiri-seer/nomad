@@ -9,7 +9,7 @@
 # It does not touch your agents. Remove it any time with: nomad uninstall
 #
 # Options, as environment variables:
-#   NOMAD_INSTALL_VERSION=0.4.3   install this version instead of the newest
+#   NOMAD_INSTALL_VERSION=0.5.0   install this version instead of the newest
 #   NOMAD_INSTALL_NO_OPEN=1       do not open Nomad at the end
 set -eu
 
@@ -100,14 +100,22 @@ main() {
     version=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p' "$tmpjson" | head -n 1)
     rm -f "$tmpjson"
   fi
-  case "$version" in
-    "" | *[!0-9.]* | .* | *.) fail "could not tell which version to install." ;;
-  esac
+  printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail "could not tell which version to install."
 
   if [ "$os" = linux ]; then
     root="${XDG_DATA_HOME:-$HOME/.local/share}/nomad"
   else
     root="$HOME/.local/share/nomad"
+  fi
+  # Never install into, or later delete, a folder that holds something else.
+  if [ -d "$root" ]; then
+    for entry in "$root"/* "$root"/.[!.]*; do
+      [ -e "$entry" ] || continue
+      case "$(basename "$entry")" in
+        app | bin | current | current.* | install.json | update.lock | tmp-*) ;;
+        *) fail "$root already holds files that are not from this installer, so nothing was changed." ;;
+      esac
+    done
   fi
   mkdir -p "$root/app" "$root/bin"
   work=$(mktemp -d "$root/tmp-XXXXXX")
@@ -148,7 +156,7 @@ main() {
   other=$(command -v nomad 2>/dev/null || true)
   mkdir -p "$HOME/.local/bin"
   cmd="$HOME/.local/bin/nomad"
-  if [ -e "$cmd" ] && ! grep -q "$MARK" "$cmd" 2>/dev/null; then
+  if { [ -e "$cmd" ] || [ -L "$cmd" ]; } && ! grep -q "$MARK" "$cmd" 2>/dev/null; then
     say "Note: $cmd already exists and is not from this installer, so it was left alone."
     say "      Run Nomad with: $root/bin/nomad"
   else
@@ -166,7 +174,10 @@ main() {
       fish) rc="" ;;
       *) rc="$HOME/.profile" ;;
     esac
-    if [ -z "$rc" ]; then
+    fishconf="$HOME/.config/fish/conf.d/nomad.fish"
+    if [ -z "$rc" ] && [ -e "$fishconf" ] && ! grep -q "$MARK" "$fishconf" 2>/dev/null; then
+      say "Note: $fishconf is not from this installer, so it was left alone. Add ~/.local/bin to your PATH to use the nomad command."
+    elif [ -z "$rc" ]; then
       mkdir -p "$HOME/.config/fish/conf.d"
       # shellcheck disable=SC2016 # written as is, for the shell to expand later
       printf '# Added by the %s (remove with: nomad uninstall)\nfish_add_path -g "$HOME/.local/bin"\n' "$MARK" >"$HOME/.config/fish/conf.d/nomad.fish"
@@ -181,11 +192,13 @@ main() {
   fi
 
   # Nomad in Applications (Mac) or the apps menu (Linux)
+  shortcut=0
   if [ "$os" = macos ]; then
     app="$HOME/Applications/Nomad.app"
     if [ -e "$app" ] && ! grep -q "website.thenomad.app" "$app/Contents/Info.plist" 2>/dev/null; then
-      say "Note: $app already exists and is not from this installer, so it was left alone."
+      say "Note: $app belongs to another program called Nomad, so it was left alone."
     else
+      shortcut=1
       rm -rf "$app"
       mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
       cp "$root/bin/nomad.icns" "$app/Contents/Resources/nomad.icns"
@@ -214,9 +227,17 @@ PLIST
     fi
   else
     apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-    case "$root" in
+    if [ -e "$apps/nomad.desktop" ] && ! grep -q "$MARK" "$apps/nomad.desktop" 2>/dev/null; then
+      menu_ok=0
+      say "Note: $apps/nomad.desktop belongs to another program called Nomad, so no menu entry was added."
+    else
+      menu_ok=1
+    fi
+    case "$menu_ok$root" in
+      0*) ;;
       *[\"\`\$\\%]*) say "Note: no apps menu entry, because the folder name $root has characters menus cannot use." ;;
       *)
+        shortcut=1
         mkdir -p "$apps"
         cat >"$apps/nomad.desktop" <<DESKTOP
 [Desktop Entry]
@@ -236,7 +257,9 @@ DESKTOP
 
   say ""
   say "Nomad $version is installed."
-  if [ "$os" = macos ]; then
+  if [ "$shortcut" -eq 0 ]; then
+    say "Open it any time with: nomad ui"
+  elif [ "$os" = macos ]; then
     say "Open it any time from Nomad in your Applications folder or Launchpad."
   else
     say "Open it any time from Nomad in your apps menu."
@@ -248,10 +271,10 @@ DESKTOP
   fi
   say "Remove it with: nomad uninstall"
   if [ -n "$other" ] && [ "$other" != "$cmd" ] && ! grep -q "$MARK" "$other" 2>/dev/null; then
-    say "Note: another nomad command is at $other (probably from npm). The one found first in PATH runs."
+    say "Note: another program called nomad is at $other. Typing nomad runs whichever comes first in your PATH; the Nomad app is not affected."
   fi
 
-  if [ -z "${NOMAD_INSTALL_NO_OPEN:-}" ] && [ "$os" = macos ] && [ -d "$HOME/Applications/Nomad.app" ]; then
+  if [ -z "${NOMAD_INSTALL_NO_OPEN:-}" ] && [ "$os" = macos ] && [ "$shortcut" -eq 1 ]; then
     say "Opening Nomad..."
     /usr/bin/open "$HOME/Applications/Nomad.app" >/dev/null 2>&1 || true
   fi

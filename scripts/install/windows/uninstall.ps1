@@ -15,7 +15,9 @@ function Finish([int]$code) {
   exit $code
 }
 
-if (-not (Test-Path -LiteralPath (Join-Path $root 'install.json'))) {
+$info = $null
+try { $info = Get-Content -Raw -LiteralPath (Join-Path $root 'install.json') | ConvertFrom-Json } catch { }
+if (-not $info -or $info.by -ne 'nomad-installer') {
   Write-Host "This folder does not look like a Nomad install: $root"
   Finish 1
 }
@@ -39,12 +41,15 @@ if ($WaitPid -gt 0) {
 }
 Set-Location -LiteralPath $env:TEMP
 
-# Start menu shortcut
+# Start menu shortcut, only if it opens this Nomad (another program may also be called Nomad).
 $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'Nomad.lnk'
-if (Test-Path -LiteralPath $shortcut) { Remove-Item -LiteralPath $shortcut -Force }
+if (Test-Path -LiteralPath $shortcut) {
+  $target = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcut).TargetPath
+  if ($target -and $target.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { Remove-Item -LiteralPath $shortcut -Force }
+}
 
 # Settings > Apps entry
-$appsKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Nomad'
+$appsKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\thenomad.website'
 if (Test-Path -LiteralPath $appsKey) { Remove-Item -LiteralPath $appsKey -Recurse -Force }
 
 # The nomad command: take Nomad's folder out of your PATH, keeping every other entry as it was.
@@ -69,13 +74,13 @@ for ($i = 0; $i -lt 20 -and (Test-Path -LiteralPath $root); $i++) {
 }
 $failed = Test-Path -LiteralPath $root
 
-# Library, backups and history, only when asked.
+# Library, backups and history, only when asked, and only from a folder that holds Nomad's library.
 $dataRemoved = $false
 if ($RemoveData -and (Test-Path -LiteralPath $DataDir)) {
   $full = [IO.Path]::GetFullPath($DataDir).TrimEnd('\')
   $unsafe = @([IO.Path]::GetPathRoot($full).TrimEnd('\'), $HOME.TrimEnd('\'), $env:USERPROFILE.TrimEnd('\'))
-  if ($unsafe -contains $full) {
-    Write-Host "Not deleting $full : it is not a Nomad data folder."
+  if (($unsafe -contains $full) -or -not (Test-Path -LiteralPath (Join-Path $full 'nomad.db') -PathType Leaf)) {
+    Write-Host "Not deleting $full : it does not look like Nomad's data folder (no nomad.db in it)."
   } else {
     Remove-Item -LiteralPath $full -Recurse -Force -ErrorAction SilentlyContinue
     $dataRemoved = -not (Test-Path -LiteralPath $full)

@@ -24,7 +24,7 @@ $root = Join-Path $env:LOCALAPPDATA 'Programs\Nomad'
 $bin = Join-Path $root 'bin'
 $cmd = Join-Path $bin 'nomad.cmd'
 $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'Nomad.lnk'
-$appsKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Nomad'
+$appsKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\thenomad.website'
 $data = Join-Path $HOME '.nomad'
 $env:NOMAD_INSTALL_SOURCE = $Dist
 $env:NOMAD_INSTALL_VERSION = $Version
@@ -117,6 +117,16 @@ Check 'Settings > Apps entry removed' { -not (Test-Path $appsKey) }
 Check 'PATH entry removed' { (PathCount) -eq 0 }
 Check 'library kept' { Test-Path -LiteralPath $data }
 
+Write-Host '== remove data never deletes a folder that is not Nomad''s library'
+[void](Install)
+$precious = Join-Path $env:TEMP 'precious-folder'
+New-Item -ItemType Directory -Force -Path $precious | Out-Null
+Set-Content -LiteralPath (Join-Path $precious 'file.txt') -Value 'keep'
+& $cmd --home $precious uninstall --yes --remove-data
+Check 'program removed' { WaitGone $root }
+Start-Sleep 2
+Check 'the other folder kept' { Test-Path -LiteralPath (Join-Path $precious 'file.txt') }
+
 Write-Host '== install, then remove from Settings > Apps with the library'
 [void](Install)
 $quiet = (Get-ItemProperty $appsKey).QuietUninstallString
@@ -125,6 +135,28 @@ Check 'Settings > Apps has a quiet uninstall' { $quiet -like '*uninstall.ps1*-Ye
 Check 'program removed' { WaitGone $root }
 Check 'library removed' { -not (Test-Path -LiteralPath $data) }
 Check 'Settings > Apps entry removed' { -not (Test-Path $appsKey) }
+
+Write-Host '== another program called Nomad is left alone'
+$wsh = New-Object -ComObject WScript.Shell
+$theirs = $wsh.CreateShortcut($shortcut)
+$theirs.TargetPath = Join-Path $env:SystemRoot 'System32\notepad.exe'
+$theirs.Save()
+$out = Install
+Check 'the installer says so' { $out -match 'another program' }
+Check 'their shortcut untouched by the install' { $wsh.CreateShortcut($shortcut).TargetPath -like '*notepad.exe' }
+Check 'Nomad still installed and runs' { (& $cmd --version) -eq $Version }
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $bin 'uninstall.ps1') -Yes | Out-Host
+Check 'their shortcut untouched by the uninstall' { (Test-Path -LiteralPath $shortcut) -and $wsh.CreateShortcut($shortcut).TargetPath -like '*notepad.exe' }
+Remove-Item -LiteralPath $shortcut -Force
+
+Write-Host '== a folder holding something else is never used'
+New-Item -ItemType Directory -Force -Path $root | Out-Null
+Set-Content -LiteralPath (Join-Path $root 'notes.txt') -Value 'theirs'
+$out = Install
+Check 'install refused, saying why' { $out -match 'not from this installer' }
+Check 'their file kept' { Test-Path -LiteralPath (Join-Path $root 'notes.txt') }
+Check 'nothing installed there' { -not (Test-Path -LiteralPath (Join-Path $root 'app')) }
+Remove-Item -LiteralPath $root -Recurse -Force
 
 if ($script:failures -gt 0) {
   Write-Host "$($script:failures) check(s) failed."

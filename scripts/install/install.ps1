@@ -8,7 +8,7 @@
 # Settings > Apps so you can remove it like any app. It does not touch your agents.
 #
 # Options, as environment variables:
-#   $env:NOMAD_INSTALL_VERSION = '0.4.3'   install this version instead of the newest
+#   $env:NOMAD_INSTALL_VERSION = '0.5.0'   install this version instead of the newest
 #   $env:NOMAD_INSTALL_NO_OPEN = '1'       do not open Nomad at the end
 
 function Install-Nomad {
@@ -51,11 +51,16 @@ function Install-Nomad {
     catch { throw 'Could not reach GitHub. Check your connection and try again.' }
     $version = ([string]$release.tag_name) -replace '^v', ''
   }
-  if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Could not tell which version to install.' }
+  if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Could not tell which version to install.' }
   if (-not $source) { $source = "https://github.com/$repo/releases/download/v$version" }
 
   $root = Join-Path $env:LOCALAPPDATA 'Programs\Nomad'
   $bin = Join-Path $root 'bin'
+  # Never install into, or later delete, a folder that holds something else.
+  if (Test-Path -LiteralPath $root) {
+    $foreign = Get-ChildItem -LiteralPath $root -Force | Where-Object { $_.Name -notin @('app', 'bin', 'current', 'install.json', 'update.lock') -and $_.Name -notlike 'tmp-*' -and $_.Name -notlike 'current.*' }
+    if ($foreign) { throw "$root already holds files that are not from this installer, so nothing was changed." }
+  }
   New-Item -ItemType Directory -Force -Path (Join-Path $root 'app'), $bin | Out-Null
   $work = Join-Path $root ('tmp-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
   New-Item -ItemType Directory -Path $work | Out-Null
@@ -127,21 +132,29 @@ function Install-Nomad {
   if (-not (($env:Path -split ';') | Where-Object { $_.TrimEnd('\') -eq $bin })) { $env:Path = "$env:Path;$bin" }
 
   # Start menu shortcut. It opens a small window running Nomad: close that window to stop it.
+  # A shortcut called Nomad that opens another program is left alone.
   $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'Nomad.lnk'
   $shell = New-Object -ComObject WScript.Shell
   $link = $shell.CreateShortcut($shortcut)
-  $link.TargetPath = Join-Path $bin 'nomad-app.cmd'
-  $link.WorkingDirectory = $HOME
-  $link.IconLocation = (Join-Path $bin 'nomad.ico') + ',0'
-  $link.Description = 'Move your AI agents between platforms'
-  $link.WindowStyle = 7
-  $link.Save()
+  $hasShortcut = $true
+  if ((Test-Path -LiteralPath $shortcut) -and $link.TargetPath -and -not $link.TargetPath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+    $hasShortcut = $false
+    Write-Host "Note: the Start menu already has a Nomad shortcut for another program, so it was left alone."
+  } else {
+    $link.TargetPath = Join-Path $bin 'nomad-app.cmd'
+    $link.WorkingDirectory = $HOME
+    $link.IconLocation = (Join-Path $bin 'nomad.ico') + ',0'
+    $link.Description = 'Move your AI agents between platforms'
+    $link.WindowStyle = 7
+    $link.Save()
+  }
 
   # Settings > Apps entry, so Nomad can be removed like any app.
-  $appsKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Nomad'
+  $appsKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\thenomad.website'
   New-Item -Path $appsKey -Force | Out-Null
   $size = [int]((Get-ChildItem -LiteralPath $root -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum / 1KB)
   $uninstall = Join-Path $bin 'uninstall.ps1'
+  $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
   $values = [ordered]@{
     DisplayName = 'Nomad'
     DisplayVersion = $version
@@ -150,8 +163,8 @@ function Install-Nomad {
     InstallLocation = $root
     URLInfoAbout = 'https://thenomad.website'
     HelpLink = 'https://github.com/kadiri-seer/nomad'
-    UninstallString = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$uninstall`""
-    QuietUninstallString = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$uninstall`" -Yes"
+    UninstallString = "`"$ps`" -NoProfile -ExecutionPolicy Bypass -File `"$uninstall`""
+    QuietUninstallString = "`"$ps`" -NoProfile -ExecutionPolicy Bypass -File `"$uninstall`" -Yes"
   }
   foreach ($k in $values.Keys) { New-ItemProperty -Path $appsKey -Name $k -Value $values[$k] -PropertyType String -Force | Out-Null }
   foreach ($k in @('NoModify', 'NoRepair')) { New-ItemProperty -Path $appsKey -Name $k -Value 1 -PropertyType DWord -Force | Out-Null }
@@ -159,13 +172,13 @@ function Install-Nomad {
 
   Write-Host ''
   Write-Host "Nomad $version is installed." -ForegroundColor Green
-  Write-Host 'Open it any time from Nomad in the Start menu.'
+  if ($hasShortcut) { Write-Host 'Open it any time from Nomad in the Start menu.' } else { Write-Host 'Open it any time with: nomad ui' }
   Write-Host 'In a terminal, type: nomad'
   Write-Host 'Remove it from Settings > Apps, or with: nomad uninstall'
-  if ($other) { Write-Host "Note: another nomad command is at $($other.Source) (probably from npm). The one found first in PATH runs." }
+  if ($other) { Write-Host "Note: another program called nomad is at $($other.Source). Typing nomad runs whichever comes first in your PATH; the Start menu shortcut is not affected." }
   if (-not $env:NOMAD_INSTALL_NO_OPEN) {
     Write-Host 'Opening Nomad...'
-    Start-Process -FilePath $shortcut
+    if ($hasShortcut) { Start-Process -FilePath $shortcut } else { Start-Process -FilePath (Join-Path $bin 'nomad-app.cmd') }
   }
 }
 

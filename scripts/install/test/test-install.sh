@@ -90,19 +90,57 @@ if NOMAD_INSTALL_SOURCE="$bad_dist" sh "$here/install.sh" >"$HOME/bad.log" 2>&1;
 check "it says why" grep -q "does not match its published fingerprint" "$HOME/bad.log"
 check "the installed Nomad still runs" test "$("$cmd" --version)" = "$version"
 
-echo "== uninstall, keeping the library"
+echo "== uninstall, keeping the library and your own lines"
+# A line of yours under a copy of the installer's marker must survive.
+printf '# Added by the Nomad installer (remove with: nomad uninstall)\nexport MY_OWN_LINE=1\n' >>"$rc"
 "$cmd" uninstall --yes
 check "program removed" test ! -e "$root"
 check "command removed" test ! -e "$cmd"
 check "PATH line removed" test "$(grep -c 'Added by the Nomad installer' "$rc" || true)" = 0
 check "Nomad.app or menu entry removed" test ! -e "$HOME/Applications/Nomad.app" -a ! -e "$HOME/.local/share/applications/nomad.desktop"
 check "library kept" test -d "$HOME/.nomad"
+check "your own line kept" grep -q "export MY_OWN_LINE=1" "$rc"
+
+echo "== remove data never deletes a folder that is not Nomad's library"
+sh "$here/install.sh" >/dev/null
+mkdir -p "$HOME/precious" && echo keep >"$HOME/precious/file"
+"$cmd" --home "$HOME/precious" uninstall --yes --remove-data >"$HOME/u.log" 2>&1
+check "program removed" test ! -e "$root"
+check "the other folder kept" test -f "$HOME/precious/file"
+check "it says why" grep -q "does not look like Nomad's data folder" "$HOME/u.log"
 
 echo "== install, then uninstall with the library"
 sh "$here/install.sh" >/dev/null
 "$cmd" uninstall --yes --remove-data
 check "program removed" test ! -e "$root"
 check "library removed" test ! -e "$HOME/.nomad"
+
+echo "== another program called Nomad is left alone"
+if [ "$(uname -s)" = Darwin ]; then
+  theirs="$HOME/Applications/Nomad.app"
+  mkdir -p "$theirs/Contents"
+  printf '<plist><dict><key>CFBundleIdentifier</key><string>com.example.other</string></dict></plist>\n' >"$theirs/Contents/Info.plist"
+  marker="$theirs/Contents/Info.plist"
+else
+  theirs="$HOME/.local/share/applications/nomad.desktop"
+  mkdir -p "$(dirname "$theirs")"
+  printf '[Desktop Entry]\nType=Application\nName=Other Nomad\nExec=other-nomad\n' >"$theirs"
+  marker="$theirs"
+fi
+before=$(cat "$marker")
+sh "$here/install.sh" >"$HOME/other.log" 2>&1
+check "theirs untouched by the install" test "$(cat "$marker")" = "$before"
+check "the installer says so" grep -q "another program called Nomad" "$HOME/other.log"
+check "Nomad still installed and runs" test "$("$cmd" --version)" = "$version"
+"$cmd" uninstall --yes >/dev/null
+check "theirs untouched by the uninstall" test "$(cat "$marker")" = "$before"
+rm -rf "$theirs"
+
+echo "== a folder holding something else is never used"
+mkdir -p "$root" && echo theirs >"$root/notes.txt"
+if sh "$here/install.sh" >"$HOME/folder.log" 2>&1; then bad "install refused"; else ok "install refused"; fi
+check "it says why" grep -q "not from this installer" "$HOME/folder.log"
+check "their file kept" test -f "$root/notes.txt"
 
 rm -rf "$HOME" "$bad_dist"
 if [ "$failures" -gt 0 ]; then

@@ -666,7 +666,7 @@ program
         process.exitCode = EXIT.approval;
         return;
       }
-      if (!removeData && existsSync(dataDir)) removeData = await confirm(`Also delete the library, backups and history in ${displayPath(dataDir)}? Backups cannot be restored after this.`);
+      if (!removeData && existsSync(join(dataDir, "nomad.db"))) removeData = await confirm(`Also delete the library, backups and history in ${displayPath(dataDir)}? Backups cannot be restored after this.`);
     }
     if (!runUninstaller(install, { removeData, dataDir })) {
       process.stderr.write(red("Error: ") + `The uninstaller is missing from ${displayPath(join(install.root, "bin"))}. Delete ${displayPath(install.root)} to remove Nomad.\n`);

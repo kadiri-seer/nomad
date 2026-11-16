@@ -18,7 +18,7 @@ done
 
 MARK="Nomad installer"
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P) || exit 1
-if [ ! -f "$root/install.json" ]; then
+if ! grep -q '"by": "nomad-installer"' "$root/install.json" 2>/dev/null; then
   echo "This folder does not look like a Nomad install: $root" >&2
   exit 1
 fi
@@ -54,7 +54,8 @@ if [ -f "$cmd" ] && grep -q "$MARK" "$cmd" 2>/dev/null; then rm -f "$cmd"; fi
 for rc in "${ZDOTDIR:-$HOME}/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; do
   if [ -f "$rc" ] && grep -q "# Added by the $MARK" "$rc" 2>/dev/null; then
     tmp=$(mktemp) || continue
-    awk -v mark="# Added by the $MARK" 'skip { skip = 0; next } index($0, mark) == 1 { skip = 1; next } { print }' "$rc" >"$tmp" && cat "$tmp" >"$rc"
+    # Drop the marker and the PATH line under it, and only that exact line: anything else stays.
+    awk -v mark="# Added by the $MARK" -v line='export PATH="$HOME/.local/bin:$PATH"' 'skip { skip = 0; if ($0 == line) next } index($0, mark) == 1 { skip = 1; next } { print }' "$rc" >"$tmp" && cat "$tmp" >"$rc"
     rm -f "$tmp"
   fi
 done
@@ -70,13 +71,13 @@ if [ -f "$desktop" ] && grep -q "$MARK" "$desktop" 2>/dev/null; then rm -f "$des
 # The program
 rm -rf "$root"
 
-# Library, backups and history, only when asked
+# Library, backups and history, only when asked, and only from a folder that holds Nomad's library.
 data_removed=0
 if [ "$remove_data" -eq 1 ] && [ -d "$data_dir" ]; then
   full=$(CDPATH='' cd -- "$data_dir" && pwd -P)
   home=$(CDPATH='' cd -- "$HOME" && pwd -P)
-  if [ -z "$full" ] || [ "$full" = "/" ] || [ "$full" = "$home" ]; then
-    echo "Not deleting $data_dir: it is not a Nomad data folder."
+  if [ -z "$full" ] || [ "$full" = "/" ] || [ "$full" = "$home" ] || [ ! -f "$full/nomad.db" ]; then
+    echo "Not deleting $data_dir: it does not look like Nomad's data folder (no nomad.db in it)."
   else
     rm -rf "$full" && data_removed=1
   fi
