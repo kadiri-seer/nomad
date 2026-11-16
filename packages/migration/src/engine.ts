@@ -105,7 +105,7 @@ export interface MigrationPlan {
   createdAt: string;
   kind: "migrate" | "sync" | "import";
   agent: { id: string; name: string; version?: number };
-  source: { label: string; adapter: string | null; root?: string; nativeId?: string };
+  source: { label: string; adapter: string | null; root?: string; nativeId?: string; /** For a package: who signed it ("unsigned", "unknown", "trusted", "you"). */ signer?: SignerStatus["state"] };
   destination: { adapter: string; displayName: string; root: string; nativeId: string; support: string; guided: boolean };
   mode: ConflictMode;
   components: ComponentCategory[];
@@ -345,6 +345,10 @@ export class Nomad {
     const notes = [...loaded.notes, ...planned.notes];
     // Skills that only work with the setup they were written for are moved, and the preview says so.
     if (components.includes("skills")) notes.push(...knownSkillNotes(doc.skills, adapter.info.id, adapter.info.displayName));
+    // A package nobody you trust signed could come from anyone and could have been changed on the way.
+    if (req.source.kind === "package" && (loaded.signer?.state === "unsigned" || loaded.signer?.state === "unknown")) {
+      notes.push({ level: "warning", message: `${loaded.signer.state === "unsigned" ? "This package is not signed" : "This package is signed by a key you have not trusted"}, so Nomad cannot tell who made it. Move it only if you trust where it came from, and read the preview before you approve.` });
+    }
     // Plugin reinstall steps name a plugin and a marketplace. From a package (or the library, which holds
     // imported packages), whoever made it chose those names, so the preview says to check them first.
     if (req.source.kind !== "location") {
@@ -375,7 +379,7 @@ export class Nomad {
       createdAt: new Date().toISOString(),
       kind: req.kind ?? "migrate",
       agent: { id: doc.id, name: doc.name, version: loaded.version },
-      source: { label: loaded.label, adapter: loaded.sourceAdapter?.info.id ?? null, root: req.source.kind === "location" ? resolveRoot(req.source.root) : undefined, nativeId: req.source.kind === "location" ? req.source.nativeId : undefined },
+      source: { label: loaded.label, adapter: loaded.sourceAdapter?.info.id ?? null, root: req.source.kind === "location" ? resolveRoot(req.source.root) : undefined, nativeId: req.source.kind === "location" ? req.source.nativeId : undefined, ...(loaded.signer ? { signer: loaded.signer.state } : {}) },
       destination: { adapter: adapter.info.id, displayName: adapter.info.displayName, root, nativeId: planned.nativeId, support: adapter.info.support, guided: adapter.info.support === "GUIDED" },
       mode,
       components,

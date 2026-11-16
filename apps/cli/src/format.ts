@@ -153,6 +153,7 @@ export function summaryText(p: MigrationPlan): string[] {
   if (p.conversions.length) lines.push(`Adapted: ${p.conversions.map((c) => `${c.item} ${dim("→ " + c.to)}`).join("; ")}.`);
   if (p.unsupported.length) lines.push(yellow(`Can't move: ${p.unsupported.map((u) => u.item).join(", ")}`) + dim(" (kept in the report with setup steps)"));
   if (p.disabledRoutines.length) lines.push(`Routines arrive paused: ${p.disabledRoutines.join(", ")}.`);
+  if (p.source.signer === "unsigned" || p.source.signer === "unknown") lines.push(yellow(p.source.signer === "unsigned" ? "Not signed: Nomad cannot tell who made this package. Move it only if you trust where it came from." : "Signed by a key you have not trusted: Nomad cannot tell who made this package."));
   for (const c of p.commands ?? []) lines.push(yellow(`Starts by itself on ${p.destination.displayName}: "${c.tool}" runs ${c.command}`) + (c.env.length ? dim(` (with ${c.env.join(", ")} set)`) : ""));
   if (p.secrets.findings || p.secrets.strippedEnv.length) {
     const parts = [p.secrets.findings ? `${p.secrets.findings} found in text and removed` : "", p.secrets.strippedEnv.length ? `you will reconnect ${p.secrets.strippedEnv.map((s) => s.split(":")[1]).join(", ")}` : ""].filter(Boolean);
