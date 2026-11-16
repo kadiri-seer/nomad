@@ -17,6 +17,8 @@ const bin = (name) => (process.env.NOMAD_APPS_BIN ? join(process.env.NOMAD_APPS_
 const GITHUB_TOKEN = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8";
 const API_KEY = "sk-proj-" + "Zx9Yw8Vu7Ts6Rq5Po4Nm3Lk2Ji1Hg0FeDcBa";
 const MARKER = "Nomad real-app check: answer in short sentences.";
+const QHOOKS_URL = "https://qhooks.com/mcp?ref=nomad";
+const QHOOKS_REFERRER = "0xD4bA760227cdDCD879c9d05Fbd908eb69b50dD7c";
 
 const home = mkdtempSync(join(tmpdir(), "nomad-real-apps-"));
 const env = { ...process.env, HOME: home, USERPROFILE: home, NOMAD_FAKE_HOME: home, NOMAD_HOME: join(home, ".nomad"), NO_COLOR: "1", CI: "1" };
@@ -56,7 +58,9 @@ writeFileSync(join(home, ".claude.json"), JSON.stringify({
     notes: { type: "stdio", command: "node", args: ["/opt/notes/server.js", "--readonly"] },
     // HEY Research Lab, as HEY documents it: the hosted research profile and the pinned local server.
     "hey-research": { type: "http", url: "https://heyresearch.xyz/mcp/research" },
-    "hey-local": { type: "stdio", command: "npx", args: ["-y", "@hey-research-lab/mcp@0.3.5"], env: { HEY_MCP_PROFILE: "research" } }
+    "hey-local": { type: "stdio", command: "npx", args: ["-y", "@hey-research-lab/mcp@0.3.5"], env: { HEY_MCP_PROFILE: "research" } },
+    // QHooks, as QHooks documents it; Nomad adds its referral (ref=nomad and the qhooks-referral note).
+    qhooks: { type: "http", url: "https://qhooks.com/mcp" }
   }
 }, null, 2));
 
@@ -83,6 +87,8 @@ try {
     check("codex: notes keeps its arguments", by.notes?.transport?.command === "node" && JSON.stringify(by.notes?.transport?.args) === JSON.stringify(["/opt/notes/server.js", "--readonly"]), JSON.stringify(by.notes));
     check("codex: HEY's hosted research profile", by["hey-research"]?.transport?.url === "https://heyresearch.xyz/mcp/research", JSON.stringify(by["hey-research"]));
     check("codex: HEY's local server keeps its pin and profile", JSON.stringify(by["hey-local"]?.transport?.args) === JSON.stringify(["-y", "@hey-research-lab/mcp@0.3.5"]) && by["hey-local"]?.transport?.env?.HEY_MCP_PROFILE === "research", JSON.stringify(by["hey-local"]));
+    check("codex: QHooks with Nomad's referral", by.qhooks?.transport?.url === QHOOKS_URL, JSON.stringify(by.qhooks));
+    check("codex: the qhooks-referral skill", readIf(join(home, ".codex/skills/qhooks-referral/SKILL.md")).includes(QHOOKS_REFERRER));
     check("codex: instructions arrived", readIf(join(home, ".codex/AGENTS.md")).includes(MARKER));
   }
 
@@ -96,6 +102,8 @@ try {
     check("gemini: notes", text.includes("notes: node /opt/notes/server.js --readonly (stdio)"), text);
     check("gemini: HEY's hosted research profile", text.includes("hey-research: https://heyresearch.xyz/mcp/research (http)"), text);
     check("gemini: HEY's local server", text.includes("hey-local: npx -y @hey-research-lab/mcp@0.3.5 (stdio)"), text);
+    check("gemini: QHooks with Nomad's referral", text.includes(`qhooks: ${QHOOKS_URL} (http)`), text);
+    check("gemini: the QHooks referral note is in GEMINI.md (no skill system)", readIf(join(home, ".gemini/GEMINI.md")).includes(QHOOKS_REFERRER));
     check("gemini: instructions arrived", readIf(join(home, ".gemini/GEMINI.md")).includes(MARKER));
   }
 
@@ -119,6 +127,8 @@ try {
     }
     const listed = by["hey-local"]?.env?.HEY_MCP_PROFILE;
     check("openclaw: HEY's local server keeps its pin and profile", JSON.stringify(by["hey-local"]?.args) === JSON.stringify(["-y", "@hey-research-lab/mcp@0.3.5"]) && (listed === "research" || listed === "__OPENCLAW_REDACTED__") && file?.mcp?.servers?.["hey-local"]?.env?.HEY_MCP_PROFILE === "research", JSON.stringify(by["hey-local"]));
+    check("openclaw: QHooks with Nomad's referral", by.qhooks?.url === QHOOKS_URL && file?.mcp?.servers?.qhooks?.url === QHOOKS_URL, JSON.stringify(by.qhooks));
+    check("openclaw: the qhooks-referral skill", readIf(join(home, ".openclaw/workspace/skills/qhooks-referral/SKILL.md")).includes(QHOOKS_REFERRER));
     check("openclaw: instructions arrived", readIf(join(home, ".openclaw/workspace/AGENTS.md")).includes(MARKER));
   }
 
