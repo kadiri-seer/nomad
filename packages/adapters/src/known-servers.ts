@@ -433,6 +433,83 @@ const HEY: ServerProfile = {
   }
 };
 
+/** The rushr-mcp command from @rushr/mcp (also .cmd or .exe on Windows), alone or as a path. */
+const isRushrCommand = (command: string | undefined) => !!command && /(^|[\\/])rushr-mcp(\.cmd|\.exe)?$/i.test(command);
+const isRushrPackage = isPackageArg("@rushr/mcp");
+const RUSHR_LIMITS = ["RUSHR_MAX_TRADE_USD", "RUSHR_DAILY_USD", "RUSHR_DRY_RUN", "RUSHR_MAX_SIZE_IMPACT_BPS", "RUSHR_MAX_TOTAL_IMPACT_BPS", "RUSHR_SLIPPAGE_BPS", "RUSHR_GAS_RESERVE_ETH", "RUSHR_STATE_DIR"];
+
+/**
+ * Rushr, a non-custodial social trading terminal on Robinhood Chain (4663), as Rushr documents it
+ * (docs.rushr.trade/agents/mcp, rushr.trade/skill.md and @rushr/mcp 0.1.2, read Nov 16, 2026): the local
+ * server `npx -y @rushr/mcp` or `rushr-mcp`, which signs and sends real trades from the agent's own
+ * wallet. The wallet is RUSHR_WALLET_FILE (a JSON key file) or RUSHR_PRIVATE_KEY, never both; with
+ * neither, ~/.rushr/agent-wallet.json. ~/.rushr also holds the API key and the daily spend ledger.
+ * Trades are real unless RUSHR_DRY_RUN=1. Defaults: $10 per buy, $50 per 24 hours.
+ */
+const RUSHR: ServerProfile = {
+  id: "rushr",
+  vendor: "Rushr",
+  label: "Rushr (a social trading terminal for humans and AI agents on Robinhood Chain)",
+  matches: (t) => !!t.mcp && t.mcp.transport === "stdio" && (isRushrCommand(t.mcp.command) || t.mcp.args.some(isRushrPackage)),
+  keyVars: ["RUSHR_WALLET_FILE", "RUSHR_PRIVATE_KEY"],
+  emptyOkEnv: [],
+  limitVars: RUSHR_LIMITS,
+  looserDefaults: {
+    RUSHR_MAX_TRADE_USD: "$10 per buy",
+    RUSHR_DAILY_USD: "$50 per 24 hours",
+    RUSHR_DRY_RUN: "real trades, signed and sent",
+    RUSHR_MAX_SIZE_IMPACT_BPS: "3% price impact from the trade's size",
+    RUSHR_MAX_TOTAL_IMPACT_BPS: "5% total price impact",
+    RUSHR_SLIPPAGE_BPS: "1.5% slippage",
+    RUSHR_GAS_RESERVE_ETH: "0.001 ETH kept for gas",
+    RUSHR_STATE_DIR: "~/.rushr"
+  },
+  apply(t, out, platform) {
+    const mcp = t.mcp!;
+    const lit = (k: string) => {
+      const v = mcp.env[k];
+      return v && "value" in v ? v.value.trim() : undefined;
+    };
+    out.notes.push({
+      level: "info",
+      category: "integrations",
+      message: "Rushr's wallet, API key and daily spend record stay on this computer in ~/.rushr (and in any agent-wallet.json key file). Nomad never reads them, and never moves holdings, trades, callouts or the agent's registration."
+    });
+    // A raw key is a wallet private key: never written as a value, even with --include-secrets.
+    const raw = mcp.env.RUSHR_PRIVATE_KEY;
+    if (raw && "value" in raw) mcp.env.RUSHR_PRIVATE_KEY = { secretRef: "RUSHR_PRIVATE_KEY", redacted: true };
+    // (When both were set, the both-keys step already says what to do.)
+    const hadWallet = out.unsupported.some((u) => u.item === `${t.name}: RUSHR_WALLET_FILE` || u.item === `${t.name}: RUSHR_PRIVATE_KEY`);
+    if (!hadWallet && !mcp.env.RUSHR_WALLET_FILE && !mcp.env.RUSHR_PRIVATE_KEY) {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" names no wallet, so Rushr uses ~/.rushr/agent-wallet.json on the computer ${platform} runs on (made by its create_wallet tool). Without that file it can only read.` });
+    }
+
+    // Real money unless dry run is on, and say how much.
+    const dryRef = out.unsupported.some((u) => u.item === `${t.name}: RUSHR_DRY_RUN`);
+    const dry = lit("RUSHR_DRY_RUN");
+    const perBuy = lit("RUSHR_MAX_TRADE_USD") ?? "10";
+    const perDay = lit("RUSHR_DAILY_USD") ?? "50";
+    if (dryRef) {
+      out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" took RUSHR_DRY_RUN from a variable on the source. Without it on ${platform}, Rushr trades for real: it signs and sends trades with real ETH on Robinhood Chain mainnet (4663). Set RUSHR_DRY_RUN=1 there to keep it in dry run.` });
+    } else if (dry === "1") {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" is in dry run (RUSHR_DRY_RUN=1): it quotes, builds and simulates trades but never signs or sends them, and cannot register.` });
+    } else {
+      out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" trades real ETH on Robinhood Chain mainnet (4663): up to $${perBuy} per buy and $${perDay} per 24 hours. Set RUSHR_DRY_RUN=1 on ${platform} to try it without signing anything.` });
+    }
+
+    out.notes.push({
+      level: "warning",
+      category: "tools",
+      message: `Rushr: if ${platform} runs on another computer, the wallet and its API key do not come along, and the daily spend count starts again there. Set up a fresh wallet with small funds on that computer (or have the agent call create_wallet), fund it with a little ETH on Robinhood Chain, and register it. Its rank on the leaderboard belongs to the wallet.`
+    });
+    if (isRushrCommand(mcp.command)) {
+      out.manualSteps.push(`Install Rushr's MCP server for "${t.name}": npm install -g @rushr/mcp. It needs Node.js 20 or later, and the rushr-mcp command must be on the PATH ${platform} uses.`);
+    } else {
+      out.manualSteps.push(`"${t.name}" runs Rushr through npx: ${platform} needs Node.js 20 or later on its PATH.`);
+    }
+  }
+};
+
 /**
  * Skills that only work with the setup they were written for. Nomad moves them like any skill and
  * says so in the preview instead of copying them silently.
@@ -463,7 +540,7 @@ export function knownSkillNotes(skills: Array<{ name: string; frontmatter?: Reco
   return notes;
 }
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY];
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {
@@ -477,7 +554,7 @@ export function applyKnownServerProfile(tool: Tool, platformName = "the destinat
   if (keys.length > 1) {
     for (const k of keys) delete env[k];
     out.manualSteps.push(
-      `"${tool.name}" listed both ${keys.join(" and ")}, which ${profile.id === "priors" ? "Priors" : "the server"} refuses together, so Nomad wrote neither. Set one: ${keys[0]} (recommended: a path to an owner-only key file, chmod 600, for a dedicated wallet) or ${keys[1]}.`
+      `"${tool.name}" listed both ${keys.join(" and ")}, which ${profile.id === "priors" || profile.id === "rushr" ? profile.vendor : "the server"} refuses together, so Nomad wrote neither. Set one: ${keys[0]} (recommended: a path to an owner-only key file, chmod 600, for a dedicated wallet) or ${keys[1]}.`
     );
   }
   for (const k of profile.keyVars) {

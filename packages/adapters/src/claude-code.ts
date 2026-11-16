@@ -51,7 +51,8 @@ const P = "claude-code";
  */
 const KNOWN_MARKETPLACE_REPOS: Record<string, string> = {
   "oak-agent-kit": "OakAgentKit/oak",
-  hedgehood: "0xHedgeHood/hedgehood-agent-kit"
+  hedgehood: "0xHedgeHood/hedgehood-agent-kit",
+  rushr: "rushr-dev/platform"
 };
 
 interface Layout {
