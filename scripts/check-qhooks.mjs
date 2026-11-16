@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Checks that QHooks' hosted server answers the way Nomad's QHooks profile expects, through the address
 // Nomad writes (https://qhooks.com/mcp?ref=nomad): it lists its tools, including the ones the referral
-// note names. Then, for information only, it asks for one unsigned sample trade without a referrer to see
-// whether QHooks fills in Nomad's referrer for that address, and reads agent_stats for Nomad's wallet.
+// note names. Then, for information only, it asks for an unsigned sample trade without a referrer and with
+// Nomad's, to see whether QHooks credits that address by itself, and reads agent_stats for Nomad's wallet.
 // Keyless; nothing is signed or sent, and nothing is written anywhere. Runs in the Real apps workflow.
 
 const URL_NOMAD = "https://qhooks.com/mcp?ref=nomad";
