@@ -15,6 +15,7 @@ import type { SourceSpec } from "@nomad/migration";
 import { approvalQuestion, CMD, bold, comparisonText, compatibilityText, dim, docText, green, planText, print, receiptText, red, restoreText, summaryText, table, yellow, type Output } from "./format";
 import { remoteMigrate } from "./remote";
 import { findSite, startUi } from "./ui";
+import { applyUpdate, checkForUpdate, currentInstall, runUninstaller } from "./install";
 
 export const EXIT = { ok: 0, error: 1, usage: 2, approval: 3, invalid: 4, verification: 5, rolledBack: 6 } as const;
 
@@ -604,16 +605,90 @@ program
   });
 
 program
+  .command("update")
+  .description("update Nomad to the newest version (when installed from thenomad.website)")
+  .option("--check", "only check whether a newer version exists")
+  .option("-y, --yes", "update without asking")
+  .action(async (o) => {
+    const install = currentInstall();
+    if (!install) {
+      const npx = process.env.npm_command === "exec";
+      process.stderr.write(
+        npx
+          ? `npx runs the newest version each time, or add @latest: ${bold("npx thenomad@latest")}\n`
+          : `This copy of Nomad was not installed with the installer from thenomad.website.\nIf you installed it with npm, update with: ${bold("npm install -g thenomad@latest")}\n`
+      );
+      return;
+    }
+    try {
+      const c = await checkForUpdate(install);
+      if (!c.available) {
+        process.stderr.write(`${green("Nomad is up to date")} (${install.version}).\n`);
+        return;
+      }
+      process.stderr.write(`Nomad ${bold(c.latest!)} is available. You have ${install.version}.\n`);
+      if (o.check) return;
+      if (!o.yes && !(await confirm("Update now?", true))) {
+        process.exitCode = EXIT.approval;
+        return;
+      }
+      const v = await applyUpdate(install, c.latest!, (l) => process.stderr.write(dim(l) + "\n"));
+      process.stderr.write(`${green("Updated")} to Nomad ${v}. If the dashboard is open, close it and open Nomad again.\n`);
+    } catch (e) {
+      process.stderr.write(red("Error: ") + (e as Error).message + "\n");
+      process.exitCode = EXIT.error;
+    }
+  });
+
+program
+  .command("uninstall")
+  .description("remove Nomad from this computer (your agents are not touched)")
+  .option("-y, --yes", "do not ask; keeps your library, backups and history")
+  .option("--remove-data", "also delete the library, backups and history")
+  .action(async (o) => {
+    const install = currentInstall();
+    const dataDir = program.opts().home ? resolve(program.opts().home) : nomadHome();
+    if (!install) {
+      process.stderr.write(
+        `This copy of Nomad was not installed with the installer from thenomad.website.\nIf you installed it with npm, remove it with: ${bold("npm uninstall -g thenomad")}\nYour library, backups and history stay in ${displayPath(dataDir)} until you delete that folder.\n`
+      );
+      return;
+    }
+    let removeData = !!o.removeData;
+    if (!o.yes) {
+      if (!process.stdin.isTTY) {
+        process.stderr.write(`Run ${bold("nomad uninstall --yes")} to remove Nomad without questions.\n`);
+        process.exitCode = EXIT.approval;
+        return;
+      }
+      process.stderr.write(`This removes Nomad ${install.version} from ${displayPath(install.root)}, with its shortcut and the nomad command.\nYour agents are not touched.\n`);
+      if (!(await confirm("Remove Nomad?"))) {
+        process.exitCode = EXIT.approval;
+        return;
+      }
+      if (!removeData && existsSync(dataDir)) removeData = await confirm(`Also delete the library, backups and history in ${displayPath(dataDir)}? Backups cannot be restored after this.`);
+    }
+    if (!runUninstaller(install, { removeData, dataDir })) {
+      process.stderr.write(red("Error: ") + `The uninstaller is missing from ${displayPath(join(install.root, "bin"))}. Delete ${displayPath(install.root)} to remove Nomad.\n`);
+      process.exitCode = EXIT.error;
+      return;
+    }
+    if (process.platform === "win32") process.stderr.write(`${green("Removing Nomad.")} It will be gone in a few seconds.${removeData ? "" : ` Your library, backups and history stay in ${displayPath(dataDir)}.`}\n`);
+  });
+
+program
   .command("ui")
   .description("open the dashboard in your browser (only this computer can reach it)")
   .option("-p, --port <port>", "port", "4317")
   .option("--no-open", "do not open a browser")
   .option("--dev", "developers: run the Next.js app from the repository with live reload")
+  // Used by the Nomad shortcut the installer adds: find a free port, and say how to stop.
+  .addOption(new Option("--app").hideHelp())
   .action(async (o) => {
     const here = dirname(fileURLToPath(import.meta.url));
     const token = randomBytes(24).toString("base64url");
-    const port = Number(o.port);
-    const url = `http://127.0.0.1:${port}/app/session?token=${token}`;
+    let port = Number(o.port);
+    let url = `http://127.0.0.1:${port}/app/session?token=${token}`;
     const openBrowser = () => {
       if (!o.open) return;
       const [cmd, args] = process.platform === "darwin" ? ["open", [url]] : process.platform === "win32" ? ["cmd", ["/c", "start", "", url]] : ["xdg-open", [url]];
@@ -643,7 +718,17 @@ program
     }
     const nomad = engine();
     try {
-      await startUi({ nomad, site, port, token });
+      for (let tries = 0; ; tries++) {
+        try {
+          await startUi({ nomad, site, port, token, appUpdates: !!currentInstall() });
+          break;
+        } catch (e) {
+          // The shortcut may be opened while Nomad already runs: use the next port instead of failing.
+          if (!o.app || tries >= 20 || (e as NodeJS.ErrnoException).code !== "EADDRINUSE") throw e;
+          port += 1;
+          url = `http://127.0.0.1:${port}/app/session?token=${token}`;
+        }
+      }
     } catch (e) {
       nomad.close();
       const busy = (e as NodeJS.ErrnoException).code === "EADDRINUSE";
@@ -651,7 +736,9 @@ program
       process.exitCode = 1;
       return;
     }
-    process.stderr.write(`${bold("Nomad")} is open at ${url}\n${dim("Only this computer can reach it. Press Ctrl+C to stop.")}\n`);
+    process.stderr.write(
+      `${bold("Nomad")} is open at ${url}\n${dim(o.app ? "Only this computer can reach it. Keep this window open while you use Nomad, and close it to stop." : "Only this computer can reach it. Press Ctrl+C to stop.")}\n`
+    );
     openBrowser();
     const stop = () => {
       nomad.close();

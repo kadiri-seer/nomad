@@ -1,8 +1,73 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, useApi } from "@/lib/client";
 import { Notice, PageHead, Skeleton } from "@/components/ui";
+
+type UpdateState = { installed: boolean; current?: string; latest?: string; available?: boolean; updated?: boolean; error?: string };
+
+async function updateCall(method: "GET" | "POST", check = false): Promise<UpdateState | null> {
+  const res = await fetch(`/api/app/update${check ? "?check=1" : ""}`, { method, headers: { "x-nomad": "1" }, credentials: "same-origin", cache: "no-store" });
+  if (!(res.headers.get("content-type") ?? "").includes("application/json")) return null;
+  const data = (await res.json()) as UpdateState;
+  if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+  return data;
+}
+
+/** Shown only when Nomad was installed from thenomad.website. Contacts GitHub only when asked. */
+function Updates() {
+  const [state, setState] = useState<UpdateState | null>(null);
+  const [busy, setBusy] = useState<"check" | "update" | null>(null);
+  const [msg, setMsg] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
+  useEffect(() => {
+    updateCall("GET")
+      .then(setState)
+      .catch(() => setState(null));
+  }, []);
+  if (!state?.installed) return null;
+
+  const go = async (kind: "check" | "update") => {
+    setBusy(kind);
+    setMsg(null);
+    try {
+      const r = await updateCall(kind === "check" ? "GET" : "POST", kind === "check");
+      if (!r) throw new Error("This dashboard cannot update Nomad.");
+      setState(r);
+      if (kind === "check" && !r.available) setMsg({ tone: "ok", text: `Nomad is up to date (${r.current}).` });
+      if (kind === "update" && r.updated) setMsg({ tone: "ok", text: `Updated to Nomad ${r.current}. Close the Nomad window and open Nomad again to use it.` });
+    } catch (e) {
+      setMsg({ tone: "bad", text: (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <h3>Updates</h3>
+      </div>
+      <div className="panel-body stack">
+        <p className="muted">
+          You have Nomad {state.current}. Checking asks GitHub for the newest release, only when you press the button. Updates are checked against their published fingerprint before anything changes.
+        </p>
+        <div className="row">
+          {state.available && !state.updated ? (
+            <button className="btn" onClick={() => go("update")} disabled={busy !== null}>
+              {busy === "update" ? "Updating..." : `Update to ${state.latest}`}
+            </button>
+          ) : (
+            <button className="btn" onClick={() => go("check")} disabled={busy !== null || !!state.updated}>
+              {busy === "check" ? "Checking..." : "Check for updates"}
+            </button>
+          )}
+        </div>
+        {state.available && !state.updated && !msg && <Notice tone="ok">Nomad {state.latest} is available.</Notice>}
+        {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
+      </div>
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const s = useApi<Record<string, any>>("settings");
@@ -73,6 +138,7 @@ export default function SettingsPage() {
               {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
             </div>
           </div>
+          <Updates />
         </div>
       ) : null}
     </>

@@ -1,7 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize, resolve, sep } from "node:path";
-import { handleLocalApi, hostAllowed, sessionResponse } from "@nomad/local";
+import { checkRequest, handleLocalApi, hostAllowed, sessionResponse } from "@nomad/local";
+import { applyUpdate, checkForUpdate, currentInstall } from "./install";
 import type { Nomad } from "@nomad/migration";
 
 /**
@@ -88,7 +89,30 @@ async function send(res: ServerResponse, r: Response) {
   res.end(r.body ? Buffer.from(await r.arrayBuffer()) : undefined);
 }
 
-export function startUi(opts: { nomad: Nomad; site: string; port: number; token: string }) {
+/**
+ * Updates for Nomad installed from thenomad.website. Nothing is fetched until the person asks:
+ * GET says whether this install can update, GET ?check=1 asks GitHub for a newer version, POST installs it.
+ */
+async function appUpdate(req: Request, ctx: { token: string; port: number }): Promise<Response> {
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  const ok = checkRequest(req, ctx);
+  if (!ok.ok) return json({ error: ok.error }, ok.status);
+  const install = currentInstall();
+  if (!install) return json({ installed: false });
+  try {
+    if (req.method === "GET") return json(new URL(req.url).searchParams.get("check") === "1" ? await checkForUpdate(install) : { installed: true, current: install.version });
+    if (req.method === "POST") {
+      const c = await checkForUpdate(install);
+      if (!c.available || !c.latest) return json({ ...c, updated: false });
+      return json({ ...c, updated: true, current: await applyUpdate(install, c.latest) });
+    }
+    return json({ error: "Method not allowed." }, 405);
+  } catch (e) {
+    return json({ error: (e as Error).message }, 502);
+  }
+}
+
+export function startUi(opts: { nomad: Nomad; site: string; port: number; token: string; appUpdates?: boolean }) {
   const { nomad, site, port, token } = opts;
   const ctx = { nomad, token, port };
   const server = createServer(async (req, res) => {
@@ -101,6 +125,7 @@ export function startUi(opts: { nomad: Nomad; site: string; port: number; token:
         return;
       }
       if (url.pathname === "/app/session") return send(res, sessionResponse(await toRequest(req, url), ctx));
+      if (opts.appUpdates && url.pathname === "/api/app/update") return send(res, await appUpdate(await toRequest(req, url), ctx));
       if (url.pathname.startsWith("/api/local/")) {
         const path = url.pathname.slice("/api/local/".length).split("/").filter(Boolean).map(decodeURIComponent);
         return send(res, await handleLocalApi(await toRequest(req, url), ctx, path));
