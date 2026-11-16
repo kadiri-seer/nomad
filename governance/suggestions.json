@@ -19,8 +19,8 @@
     {
       "issue": 3,
       "name": "Oak Agent Kit OakAgentKit",
-      "approved": true,
-      "won": false,
+      "approved": false,
+      "won": true,
       "thumbs": 0,
       "source": "site"
     },
