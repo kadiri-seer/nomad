@@ -148,3 +148,61 @@ describe("OpenClaw MCP servers", () => {
     expect(allText(join(env.home, "d-oc")).includes(FAKE_API_KEY)).toBe(false);
   });
 });
+
+describe("OpenClaw-only server settings", () => {
+  function openclawWithSettings(home: string) {
+    const r = join(home, ".openclaw");
+    put(
+      join(r, "openclaw.json"),
+      `{
+  mcp: {
+    servers: {
+      docs: {
+        url: "https://mcp.example.com/mcp",
+        transport: "streamable-http",
+        auth: "oauth",
+        oauth: { scope: "docs.read" },
+        requestTimeoutMs: 20000,
+        toolFilter: { include: ["search_*"], exclude: ["admin_*"] },
+        codex: { agents: ["main"], defaultToolsApprovalMode: "approve" },
+      },
+    },
+  },
+}
+`
+    );
+    put(join(r, "workspace/AGENTS.md"), "# AGENTS.md\n");
+    return r;
+  }
+
+  it("OpenClaw to OpenClaw: the settings come back as they were; sign-in is a step", async () => {
+    const root = openclawWithSettings(join(env.home, "s1"));
+    const oc = join(env.home, "s1-oc/.openclaw");
+    put(join(oc, "workspace/AGENTS.md"), "# AGENTS.md\n");
+    const plan = await env.nomad.plan({ source: { kind: "location", adapter: "openclaw", root, nativeId: "main" }, destination: { adapter: "openclaw", root: oc } });
+    const receipt = await env.nomad.execute(plan.id, { broaderPermissions: true });
+    expect(receipt.status).toBe("success");
+    expect(JSON5.parse(read(join(oc, "openclaw.json"))).mcp.servers.docs).toEqual({
+      url: "https://mcp.example.com/mcp",
+      transport: "streamable-http",
+      auth: "oauth",
+      requestTimeoutMs: 20000,
+      toolFilter: { include: ["search_*"], exclude: ["admin_*"] },
+      codex: { agents: ["main"], defaultToolsApprovalMode: "approve" }
+    });
+    expect(plan.manualSteps).toContain('Sign in to the "docs" MCP server again: openclaw mcp login docs (sign-ins are not copied).');
+    expect(plan.manualSteps.join("\n")).toContain("had OAuth overrides");
+  });
+
+  it("OpenClaw to Claude Code: a tool filter that is not carried is named as a permissions item", async () => {
+    const root = openclawWithSettings(join(env.home, "s2"));
+    const dest = emptyDir(env.home, "s2-cc/.claude");
+    const plan = await env.nomad.plan({ source: { kind: "location", adapter: "openclaw", root, nativeId: "main" }, destination: { adapter: "claude-code", root: dest } });
+    const receipt = await env.nomad.execute(plan.id, { broaderPermissions: true });
+    expect(receipt.status).toBe("success");
+    expect(plan.unsupported.find((u) => u.category === "permissions" && u.item.startsWith("docs: OpenClaw limited"))?.item).toBe("docs: OpenClaw limited the tools the agent could use from this server (only search_*; not admin_*)");
+    expect(plan.manualSteps).toContain('Sign in to the "docs" MCP server in Claude Code: it signs in with OAuth on OpenClaw, and sign-ins are not copied.');
+    const s = JSON.parse(read(join(env.home, "s2-cc/.claude.json"))).mcpServers.docs;
+    expect(s).toEqual({ type: "http", url: "https://mcp.example.com/mcp" });
+  });
+});

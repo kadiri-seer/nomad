@@ -45,6 +45,21 @@ const P = "openclaw";
 /** A ${...} in a value; $${...} is OpenClaw's escape for literal text. OpenClaw substitutes every string in its config. */
 const hasVar = (v: unknown) => typeof v === "string" && /\$\{[^}]*\}/.test(v.replace(/\$\$\{/g, ""));
 
+/**
+ * OpenClaw-only settings of a server (docs.openclaw.ai/gateway/config-extensions): kept with the server
+ * so a move back to OpenClaw restores them, and reported when the destination cannot hold them.
+ * OAuth overrides are not carried (only that the server signs in with OAuth); sign-in tokens never move.
+ */
+const OPENCLAW_SERVER_SETTINGS = ["toolFilter", "codex", "auth", "requestTimeoutMs", "connectionTimeoutMs", "supportsParallelToolCalls"] as const;
+
+function openclawSettingsOf(cfg: Record<string, unknown>): Record<string, unknown> | null {
+  const out: Record<string, unknown> = {};
+  for (const k of OPENCLAW_SERVER_SETTINGS) if (cfg[k] !== undefined) out[k] = cfg[k];
+  if (cfg.oauth !== undefined) out.hadOauthOverrides = true;
+  // A setting with ${...} in it would not load on an older OpenClaw: it is left out, like any such value.
+  return Object.keys(out).length && !hasVar(JSON.stringify(out)) ? out : null;
+}
+
 /** A server whose command line or address uses a variable is not written to OpenClaw. */
 function launchUsesVar(t: { mcp?: { command?: string; url?: string; args: string[] } }): boolean {
   return !!t.mcp && (hasVar(t.mcp.command) || hasVar(t.mcp.url) || t.mcp.args.some(hasVar));
@@ -373,7 +388,12 @@ async function readAgent(root: string, agentId: string, notes: Note[], prefer?: 
   doc.skills.push(...(await readSkillsTree(join(ws, "skills"), P, notes, 1)));
 
   // MCP servers are shared by every agent of this OpenClaw, so each agent carries them.
-  doc.tools.push(...toolsFromMcpServers(openclawServersForRead(cfg?.mcp?.servers), P, "openclaw.json"));
+  const rawServers = (cfg?.mcp?.servers && typeof cfg.mcp.servers === "object" ? cfg.mcp.servers : {}) as Record<string, Record<string, unknown>>;
+  for (const t of toolsFromMcpServers(openclawServersForRead(rawServers), P, "openclaw.json")) {
+    const settings = rawServers[t.name] && typeof rawServers[t.name] === "object" ? openclawSettingsOf(rawServers[t.name]) : null;
+    if (settings) (t as Record<string, unknown>).extensions = { ...((t as Record<string, unknown>).extensions as object), "x-openclaw": settings };
+    doc.tools.push(t);
+  }
 
   const m = modelOf(cfg, agentId);
   if (m.primary) doc.models.preferred = m.primary;
@@ -568,6 +588,13 @@ async function planAgent(doc: AgentDocument, ctx: WriteContext): Promise<Planned
         }
         if (tool?.mcp?.transport === "http") server.transport = "streamable-http";
         else if (tool?.mcp?.transport === "sse") server.transport = "sse";
+        // Settings that came from OpenClaw go back as they were.
+        const oc = ((tool as Record<string, unknown> | undefined)?.extensions as Record<string, Record<string, unknown>> | undefined)?.["x-openclaw"];
+        if (oc) {
+          for (const k of OPENCLAW_SERVER_SETTINGS) if (oc[k] !== undefined) server[k] = oc[k];
+          if (oc.auth === "oauth") manualSteps.push(isPlainCliWord(name) ? `Sign in to the "${name}" MCP server again: openclaw mcp login ${name} (sign-ins are not copied).` : `Sign in to the MCP server ${JSON.stringify(name)} again in OpenClaw (sign-ins are not copied).`);
+          if (oc.hadOauthOverrides) manualSteps.push(`The "${name}" MCP server had OAuth overrides in openclaw.json (scope, redirect or client metadata). Nomad does not copy them; add them again if you need them.`);
+        }
         const refs = r.refs[name];
         for (const k of refs?.env ?? []) setStep(name, "env", k, refs.optional.includes(k) ? " (optional on the source: only if you use it)" : "");
         for (const [h] of refs?.headers ?? []) setStep(name, "headers", h, "");

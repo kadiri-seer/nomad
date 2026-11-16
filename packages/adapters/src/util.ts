@@ -532,6 +532,21 @@ export function mcpServersFromTools(tools: Tool[], opts: McpWriteOptions): McpWr
     if (trust === "untrusted") {
       out.unsupported.push({ category: "permissions", item: `${t.name}: Hermes asked before every call that is not read-only (trust: untrusted)`, reason: "Destination approvals are not copied.", alternative: `Set ${opts.platformName} to ask before using "${t.name}" tools, before using real funds.` });
     }
+    // OpenClaw-only server settings (openclaw.ts writes them back on OpenClaw); elsewhere, say what does not carry.
+    const oc = ((t as Record<string, unknown>).extensions as Record<string, Record<string, unknown>> | undefined)?.["x-openclaw"];
+    if (oc && opts.platformName !== "OpenClaw") {
+      const filter = oc.toolFilter as { include?: unknown; exclude?: unknown } | undefined;
+      const list = (v: unknown) => (Array.isArray(v) ? v.map(String).join(", ") : "");
+      if (filter && (list(filter.include) || list(filter.exclude))) {
+        out.unsupported.push({
+          category: "permissions",
+          item: `${t.name}: OpenClaw limited the tools the agent could use from this server (${[list(filter.include) && `only ${list(filter.include)}`, list(filter.exclude) && `not ${list(filter.exclude)}`].filter(Boolean).join("; ")})`,
+          reason: `Nomad does not write a per-server tool filter on ${opts.platformName}, so every tool of this server is available there.`,
+          alternative: `Block the tools you do not want in ${opts.platformName}'s permissions or approvals.`
+        });
+      }
+      if (oc.auth === "oauth") out.manualSteps.push(`Sign in to the "${t.name}" MCP server in ${opts.platformName}: it signs in with OAuth on OpenClaw, and sign-ins are not copied.`);
+    }
     const mcp = t.mcp!;
     const s: Record<string, unknown> = {};
     if (mcp.transport === "stdio") {
