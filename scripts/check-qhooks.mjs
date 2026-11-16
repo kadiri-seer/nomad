@@ -67,10 +67,9 @@ check("prepare_trade and prepare_launch take a referrer, as the referral note as
 
 // For information: does the ?ref=nomad address alone credit Nomad? Not a failure until QHooks confirms it does.
 try {
-  const launches = await tool("list_launches", { chain: "4663", limit: 1 });
-  const token = (content(launches).match(/0x[0-9a-fA-F]{40}/) ?? [])[0];
-  if (!token) info("no Robinhood Chain launch to build a sample trade with");
-  else {
+  // QHooks' own token on Robinhood Chain, a market QHooks always lists (qhooks.com/contracts).
+  const token = "0x20429Af7cA3b0cE4d99EDBAA0693f26C5df05195";
+  {
     // amountIn is in raw units: 0.0001 ETH. The same trade with the referrer passed shows what a credited trade looks like.
     const trade = { chain: "4663", token, side: "buy", amountIn: "100000000000000", trader: SAMPLE_TRADER };
     for (const [label, args] of [["without a referrer", trade], ["with Nomad's referrer passed", { ...trade, referrer: REFERRER }]]) {
