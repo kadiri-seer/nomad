@@ -43,7 +43,19 @@ Packages: a `.nomad` file is a small ZIP of plain Markdown and JSON (`nomad.json
 
 ## Install
 
-Requires Node.js 22 or newer.
+One line, nothing to install first (no Node.js, no admin rights). After that, open Nomad from the Start menu, Applications or your apps menu like any app.
+
+```
+# Windows, in PowerShell
+irm https://thenomad.website/install.ps1 | iex
+
+# Mac and Linux, in Terminal
+curl -fsSL https://thenomad.website/install.sh | sh
+```
+
+The installer downloads the bundle for your system from this repository's GitHub releases, checks it against the release's `SHA256SUMS`, and installs it in your user folder. Update with `nomad update` (or Settings > Updates in the dashboard); remove with `nomad uninstall` (or Settings > Apps on Windows). Your library in `~/.nomad` is kept unless you ask to delete it. Read the scripts first: [install.ps1](scripts/install/install.ps1), [install.sh](scripts/install/install.sh).
+
+With Node.js 22 or newer you can also use npm:
 
 ```
 npx thenomad          # start, nothing to install first
@@ -79,6 +91,8 @@ npm publish --access public
 ```
 
 Pass another name if needed: `node scripts/prepare-npm.mjs nomad-agent`. Bump `version` in `apps/cli/package.json` before each new release.
+
+When "Publish to npm" succeeds, the "Installers" workflow builds a bundle for Windows, Mac and Linux (x64 and arm64), installs and removes each one with the real installer on its own system, and publishes them as the GitHub release `v<version>`, which is where the one-line installers download from. Each bundle carries signed build provenance: `gh attestation verify <file> -R kadiri-seer/nomad`.
 
 ## Repository layout
 

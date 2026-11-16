@@ -48,4 +48,8 @@ Read only by default. `--allow-writes` lets an assistant apply a preview only wi
 
 `nomad remote push` uses the system `ssh` and `scp` with `StrictHostKeyChecking=yes` and `BatchMode=yes`. Unknown hosts fail with instructions; private keys are never read by Nomad.
 
+## Installer and updates
+
+The one-line installers (`install.ps1`, `install.sh`) are served by thenomad.website from this repository and can be read before running. They download a bundle from this repository's GitHub releases over HTTPS and refuse it unless its SHA-256 fingerprint matches the release's `SHA256SUMS`, so a corrupted or swapped download installs nothing. The fingerprints come from the same release, so they do not protect against someone who controls the repository; the signed build provenance does tie each bundle to the workflow and commit that built it (`gh attestation verify <file> -R kadiri-seer/nomad`). Everything goes into your user folder: no admin rights, no system settings, no agent files. A new version is unpacked next to the current one and run once before Nomad switches to it, so a failed update leaves the working version in place. Nomad never checks for updates by itself: `nomad update` and the dashboard's Check for updates button contact GitHub only when you ask.
+
 Report vulnerabilities privately through GitHub security advisories: https://github.com/kadiri-seer/nomad/security/advisories/new
