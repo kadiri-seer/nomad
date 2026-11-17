@@ -142,7 +142,8 @@ try {
   writeFileSync(join(folder, "memory/notes.md"), `- Nomad check note: try non-audit jobs next.\n- Session token ${FAKE_TOKEN}\n`);
   writeFileSync(join(folder, "skills/tokyo-futuro/SKILL.md"), "---\nname: tokyo-futuro\ndescription: Act in Tokyo Futuro.\n---\n\nNever sign or send anything without approval.\n");
   writeFileSync(join(folder, ".mcp.json"), JSON.stringify({ mcpServers: { "tokyo-futuro": { command: "npx", args: ["-y", `tokyo-futuro-mcp@${VERSION}`], env: { TOKYO_URL, AGENT_KEY: "${AGENT_KEY}", AGENT_NAME: "Citizen" } } } }));
-  const m = run(process.execPath, [cli, "migrate", "--from", folder, "--to", "openclaw", "-y"]);
+  // Named as an agent folder: AGENTS.md alone would also match other apps' layouts.
+  const m = run(process.execPath, [cli, "migrate", "--from", `generic:${folder}`, "--to", "openclaw", "-y"]);
   check("nomad moved the agent folder to OpenClaw", m.code === 0, m.out + m.err);
   const v = run(bin("openclaw"), ["config", "validate"]);
   check("openclaw accepts its config", v.code === 0, v.out + v.err);

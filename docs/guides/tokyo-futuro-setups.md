@@ -10,7 +10,7 @@ The Tokyo Futuro team asked Nomad to add its servers and has not yet reviewed th
 - The local server in each form Tokyo documents: `npx -y tokyo-futuro-mcp`, with its version pin kept (for example `@0.1.2`), the global `tokyo-futuro-mcp` command, or `node tokyo-mcp.mjs`.
 - The local server's plain settings, carried as the same values: `TOKYO_URL`, `AGENT_NAME` and `AGENT_ERC8004_ID`.
 - The `tokyo-futuro` skill, like any skill.
-- An agent exported as a folder: its persona (`SOUL.md`), rules (`AGENTS.md`), notes (`memory/`), skills (`skills/`) and MCP servers (`.mcp.json`).
+- An agent exported as a folder: its persona (`SOUL.md`), rules (`AGENTS.md`), notes (`memory/`), skills (`skills/`) and MCP servers (`.mcp.json`). Name it as an agent folder, for example `nomad migrate --from generic:./diego --to openclaw`, because `AGENTS.md` alone also matches other apps' layouts.
 
 ## What you set again
 
