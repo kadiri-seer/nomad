@@ -416,6 +416,9 @@ function envRecord(raw: unknown, refsOptional = false): EnvParse {
   return out;
 }
 
+/** Object keys that would change how a settings object behaves instead of naming a server. */
+const RESERVED_NAMES = new Set(["__proto__", "constructor", "prototype"]);
+
 export interface McpReadOptions {
   notes?: Note[];
   /** The source drops stdio env entries whose reference is unset (Hermes), so every reference is optional. */
@@ -432,6 +435,10 @@ export function toolsFromMcpServers(raw: unknown, platform: string, path: string
   const tools: Tool[] = [];
   for (const [name, cfg] of Object.entries(raw as Record<string, any>)) {
     if (!cfg || typeof cfg !== "object") continue;
+    if (RESERVED_NAMES.has(name)) {
+      opts.notes?.push({ level: "warning", category: "tools", message: `An MCP server named ${JSON.stringify(name)} was not read: that name cannot be written safely.` });
+      continue;
+    }
     const url = cfg.url ?? cfg.httpUrl ?? cfg.serverUrl;
     const transport = cfg.type === "sse" || cfg.transport === "sse" ? "sse" : url ? "http" : "stdio";
     const env = envRecord(cfg.env, opts.refsOptional && transport === "stdio");
@@ -520,6 +527,10 @@ export function mcpServersFromTools(tools: Tool[], opts: McpWriteOptions): McpWr
   const seenNotes = new Set<string>();
   for (const original of tools) {
     if (original.kind !== "mcp" || !original.mcp) continue;
+    if (RESERVED_NAMES.has(original.name)) {
+      out.unsupported.push({ category: "tools", item: original.name, reason: "That name cannot be written safely as a server name.", alternative: "Add the server yourself under another name." });
+      continue;
+    }
     if (original.enabled === false) {
       out.unsupported.push({ category: "tools", item: original.name, reason: "Disabled on the source, so it is not added.", alternative: "Add it yourself if you want it active here." });
       continue;
