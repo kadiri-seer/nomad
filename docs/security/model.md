@@ -22,7 +22,9 @@ The destination policy is computed before and after (by applying the planned fil
 
 ## Commands from packages
 
-A package can carry local MCP servers: commands the destination app starts by itself. When the agent comes from a package, or from the Nomad library (which also holds imported packages), the preview shows each such command exactly as a shell would, with the names of its environment values, and the move needs the `run-commands` approval (`--approve-commands` in the CLI, a checkbox in the dashboard). Remote servers, disabled servers and moves that leave tools out are not listed. Agents read from apps on this computer need no extra approval.
+A package can carry local MCP servers: commands the destination app starts by itself. When the agent comes from a package, from the Nomad library (which also holds imported packages) or from an agent folder (its `.mcp.json`, or an unpacked package, often a folder someone else sent), the preview shows each such command exactly as a shell would, with the names of its environment values, and the move needs the `run-commands` approval (`--approve-commands` in the CLI, a checkbox in the dashboard). Remote servers, disabled servers and moves that leave tools out are not listed. Agents read from apps on this computer need no extra approval.
+
+MCP servers named `__proto__`, `constructor` or `prototype` are neither read nor written: those names would change how a settings object behaves instead of naming a server.
 
 ## Steps you copy
 

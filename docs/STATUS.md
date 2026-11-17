@@ -193,7 +193,7 @@ Tested (automated, every push):
 - Tokyo's sign-in token (`<wallet>.<expiry>.<epoch>.<hmac>`) is a secret rule of its own: it is removed from notes and other text, while wallet addresses and job ids are left alone.
 - `TOKYO_URL` pointing elsewhere warns; the testnet, a reference or no address each get their own note; the global command and the one-file script get install steps.
 - Which entries count as Tokyo Futuro, and 12 look-alikes that do not.
-- Agent folders read MCP servers from `.mcp.json`.
+- Agent folders read MCP servers from `.mcp.json`. A folder is often one someone else sent, so its local servers are shown and need the `run-commands` approval, as for packages; without it nothing is written.
 
 Checked with real applications: the Real apps workflow lists the tools of Tokyo's hosted server (no key, no sign-in) and of `tokyo-futuro-mcp` 0.1.2 started with no wallet key, then moves an agent folder into the real OpenClaw, which must accept its config and list the server, with the notes there and the planted token nowhere (`scripts/check-tokyo.mjs`).
 
