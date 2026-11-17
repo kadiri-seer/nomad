@@ -144,7 +144,7 @@ const approvalOptions = (cmd: Command) =>
     .option("--approve-replace", "allow replacing content Nomad did not write")
     .option("--approve-modified", "allow overwriting files edited after Nomad wrote them")
     .option("--approve-permissions", "allow a destination policy broader than the current one")
-    .option("--approve-commands", "allow commands from a package or the library that the destination app will start");
+    .option("--approve-commands", "allow commands from a package, an agent folder or the library that the destination app will start");
 
 /* ------------------------------ discovery ------------------------------ */
 

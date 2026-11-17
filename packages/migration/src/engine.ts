@@ -72,7 +72,7 @@ export type ApprovalKind = "replace" | "overwrite-modified" | "broader-permissio
 export interface PlannedCommand {
   tool: string;
   /** Where it came from. */
-  from: "package" | "library";
+  from: "package" | "library" | "folder";
   command: string;
   env: string[];
 }
@@ -345,14 +345,17 @@ export class Nomad {
     if (changing.some((o) => o.userModified)) approvalsRequired.push("overwrite-modified");
     if (widened.length) approvalsRequired.push("broader-permissions");
     // A package (or the library, which also holds imported packages) can carry local MCP servers:
-    // commands the destination app starts by itself. Each one is shown and needs approval.
+    // commands the destination app starts by itself. Each one is shown and needs approval. So can an
+    // agent folder (its .mcp.json, or an unpacked package): it is often one someone else sent.
     const toolsWritten = ["full", "convert"].includes(compatibility.categories.find((c) => c.category === "tools")?.status ?? "");
+    const fromFolder = req.source.kind === "location" && req.source.adapter === "generic";
+    const commandSource = req.source.kind === "package" ? ("package" as const) : fromFolder ? ("folder" as const) : ("library" as const);
     const commands: PlannedCommand[] =
-      req.source.kind === "location" || !toolsWritten
+      (req.source.kind === "location" && !fromFolder) || !toolsWritten
         ? []
         : doc.tools
             .filter((t) => t.enabled !== false && t.mcp?.transport === "stdio" && t.mcp.command)
-            .map((t) => ({ tool: t.name, from: req.source.kind === "package" ? ("package" as const) : ("library" as const), command: commandLine(t.mcp!.command!, t.mcp!.args), env: Object.keys(t.mcp!.env) }));
+            .map((t) => ({ tool: t.name, from: commandSource, command: commandLine(t.mcp!.command!, t.mcp!.args), env: Object.keys(t.mcp!.env) }));
     if (commands.length && changing.length) approvalsRequired.push("run-commands");
 
     const notes = [...loaded.notes, ...planned.notes];
@@ -381,7 +384,7 @@ export class Nomad {
     }
 
     for (const c of commands) {
-      notes.push({ level: "warning", message: `"${c.tool}" comes from ${c.from === "package" ? "a package" : "the Nomad library"} and ${adapter.info.displayName} will start it by itself: ${c.command}${c.env.length ? ` (with ${c.env.join(", ")} set)` : ""}. Approve only if you trust where it came from.` });
+      notes.push({ level: "warning", message: `"${c.tool}" comes from ${c.from === "package" ? "a package" : c.from === "folder" ? "an agent folder" : "the Nomad library"} and ${adapter.info.displayName} will start it by itself: ${c.command}${c.env.length ? ` (with ${c.env.join(", ")} set)` : ""}. Approve only if you trust where it came from.` });
     }
 
     const statusCount = (s: string) => compatibility.categories.filter((c) => c.status === s).length;
