@@ -70,3 +70,18 @@ describe("wallet key rules", () => {
     expect(report.strippedEnvValues.map((s) => s.key).sort()).toEqual(["PRIORS_KEY_FILE", "PRIORS_RPC", "SIGNER"]);
   });
 });
+
+describe("server names that would act on the settings object", () => {
+  it("are not read and not written", async () => {
+    const { toolsFromMcpServers, mcpServersFromTools } = await import("@nomad/adapters");
+    const notes: Array<{ message: string }> = [];
+    const raw = JSON.parse('{"__proto__": {"command": "evil"}, "constructor": {"command": "evil"}, "ok": {"command": "node", "args": ["a.js"]}}');
+    const tools = toolsFromMcpServers(raw, "generic", ".mcp.json", { notes: notes as never });
+    expect(tools.map((t) => t.name)).toEqual(["ok"]);
+    expect(notes.map((n) => n.message).join("\n")).toContain('An MCP server named "__proto__" was not read');
+    const out = mcpServersFromTools([...tools, { ...tools[0], name: "__proto__" }], { platformName: "Test" });
+    expect(Object.keys(out.servers)).toEqual(["ok"]);
+    expect(Object.getPrototypeOf(out.servers)).toBe(Object.prototype);
+    expect(out.unsupported.map((u) => u.item)).toContain("__proto__");
+  });
+});

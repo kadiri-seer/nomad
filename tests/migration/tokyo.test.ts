@@ -4,7 +4,7 @@ import { join } from "node:path";
 import JSON5 from "json5";
 import { parse as parseToml } from "smol-toml";
 import { applyKnownServerProfile, knownServerId } from "@nomad/adapters";
-import { scanText } from "@nomad/security";
+import { redactText, scanText } from "@nomad/security";
 import type { Tool } from "@nomad/schema";
 import { emptyDir, read, setup, treeHash, type Env } from "../helpers";
 import { FAKE_TOKYO_SECRETS, FAKE_TOKYO_TOKEN, TOKYO_HOSTED, TOKYO_TEST_HOSTED, TOKYO_URL, buildClaudeCodeTokyo, buildTokyoAgentFolder } from "../fixtures/tokyo";
@@ -25,10 +25,10 @@ afterEach(() => env.cleanup());
 
 type Loc = { adapter: string; root: string; nativeId: string };
 
-async function migrate(source: Loc, dest: { adapter: string; root: string }, opts: { includeSecrets?: boolean } = {}) {
+async function migrate(source: Loc, dest: { adapter: string; root: string }, opts: { includeSecrets?: boolean; runCommands?: boolean } = {}) {
   const plan = await env.nomad.plan({ source: { kind: "location", ...source }, destination: dest, includeSecrets: opts.includeSecrets });
   expect(plan.blocked).toEqual([]);
-  const receipt = await env.nomad.execute(plan.id, { broaderPermissions: true });
+  const receipt = await env.nomad.execute(plan.id, { broaderPermissions: true, runCommands: opts.runCommands });
   expect(receipt.status, receipt.verification.filter((v) => !v.ok).map((v) => `${v.name}: ${v.detail ?? ""}`).join("; ")).toBe("success");
   return { plan, receipt };
 }
@@ -92,7 +92,11 @@ describe("Tokyo Futuro setups", () => {
     const folder = buildTokyoAgentFolder(join(src, "diego"));
     const before = treeHash(folder);
     const oc = emptyDir(env.home, "f2o/.openclaw");
-    const { plan, receipt } = await migrate({ adapter: "generic", root: folder, nativeId: "folder" }, { adapter: "openclaw", root: oc });
+    const { plan, receipt } = await migrate({ adapter: "generic", root: folder, nativeId: "folder" }, { adapter: "openclaw", root: oc }, { runCommands: true });
+    // A folder is often one someone else sent: the command OpenClaw will start is shown and needs approval.
+    expect(plan.approvalsRequired).toContain("run-commands");
+    expect(plan.commands).toEqual([{ tool: "tokyo-futuro", from: "folder", command: "npx -y tokyo-futuro-mcp@0.1.2", env: ["TOKYO_URL", "AGENT_KEY", "AGENT_NAME"] }]);
+    expect(warnings(plan)).toContain(`"tokyo-futuro" comes from an agent folder and OpenClaw will start it by itself: npx -y tokyo-futuro-mcp@0.1.2`);
     const text = read(join(oc, "openclaw.json"));
     const cfg = JSON5.parse(text) as any;
     const server = cfg.mcp.servers["tokyo-futuro"];
@@ -108,6 +112,15 @@ describe("Tokyo Futuro setups", () => {
     expect(steps(plan)).toContain("AGENT_KEY");
     expectNoLeak(allText(oc), JSON.stringify(plan), JSON.stringify(receipt), allText(env.nomadHome));
     expect(treeHash(folder)).toBe(before);
+  });
+
+  it("an agent folder's server is not written without approval", async () => {
+    const folder = buildTokyoAgentFolder(join(src, "diego"));
+    const oc = emptyDir(env.home, "f2o-no/.openclaw");
+    const plan = await env.nomad.plan({ source: { kind: "location", adapter: "generic", root: folder, nativeId: "folder" }, destination: { adapter: "openclaw", root: oc } });
+    expect(plan.approvalsRequired).toContain("run-commands");
+    await expect(env.nomad.execute(plan.id, { broaderPermissions: true })).rejects.toThrow();
+    expect(existsSync(join(oc, "openclaw.json"))).toBe(false);
   });
 
   it("TOKYO_URL elsewhere is a warning; the testnet, a reference or no address each get their own note", () => {
@@ -172,6 +185,9 @@ describe("Tokyo Futuro recognition", () => {
 
   it("finds Tokyo's sign-in token in text, and leaves addresses and job ids alone", () => {
     expect(scanText(`token: ${FAKE_TOKYO_TOKEN}`, "t").map((f) => f.ruleId)).toContain("tokyo-futuro-token");
+    // A standard base64 signature is caught whole, not cut at its first + or /.
+    const b64 = "0x2d6f3da021226fc62579099d05b1a27f72484081.1795497600.3.k3J9+Q2m/7vR4tW8yZ1bC5dF6gH0jL2n=";
+    expect(redactText(`token ${b64} end`).text).toBe("token [REDACTED:tokyo-futuro-token] end");
     expect(scanText("Diego's wallet is 0x2D6f3da021226fC62579099D05b1A27f72484081, job 8143.", "t")).toEqual([]);
   });
 
