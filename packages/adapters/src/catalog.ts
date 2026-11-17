@@ -19,7 +19,7 @@ export const GENERIC_INFO: AdapterInfo = {
   adapterVersion: "1.0.0",
   supportedVersions: "Universal Agent Format 1.0, plus Markdown agent folders",
   description:
-    "An unpacked Nomad package, or any folder of Markdown agent files (AGENTS.md, SOUL.md, MEMORY.md, skills/). Lossless for packages.",
+    "An unpacked Nomad package, or any folder of Markdown agent files (AGENTS.md, SOUL.md, MEMORY.md, skills/, and MCP servers in .mcp.json). Lossless for packages.",
   defaultLocations: [],
   multiAgent: false,
   configFormats: ["JSON", "Markdown"],

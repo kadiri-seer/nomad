@@ -5,7 +5,7 @@ import { createDocument, firstHeading, parseFrontmatter, type Adapter, type Note
 import { readTextIfExists, walkFiles, pathExists } from "@nomad/core/node";
 import { PACKAGE_FORMAT, type AgentDocument, type Instruction } from "@nomad/schema";
 import { GENERIC_INFO } from "./catalog";
-import { parseMemoryMarkdown, readSkillsTree } from "./util";
+import { parseMemoryMarkdown, readSkillsTree, toolsFromMcpServers } from "./util";
 
 const INSTRUCTION_FILES: Array<{ file: string; kind: Instruction["kind"] }> = [
   { file: "SYSTEM.md", kind: "system" },
@@ -137,7 +137,17 @@ export const genericAdapter: Adapter = {
       });
     }
     doc.skills.push(...(await readSkillsTree(join(root, "skills"), "generic", notes)));
-    if (!doc.instructions.length && !doc.identity.persona && !doc.memory.length) {
+    // MCP servers in the folder's .mcp.json ({ "mcpServers": { ... } }), the layout Claude Code and others use.
+    const mcpText = await readTextIfExists(join(root, ".mcp.json"));
+    if (mcpText !== null) {
+      sourceFiles.push(join(root, ".mcp.json"));
+      try {
+        doc.tools.push(...toolsFromMcpServers(JSON.parse(mcpText)?.mcpServers, "generic", ".mcp.json", { notes }));
+      } catch {
+        notes.push({ level: "warning", message: ".mcp.json in this folder is not valid JSON, so its servers were not read." });
+      }
+    }
+    if (!doc.instructions.length && !doc.identity.persona && !doc.memory.length && !doc.tools.length) {
       notes.push({ level: "warning", message: "No recognised agent files were found in this folder." });
     }
     return { doc, sourceFiles, notes };
