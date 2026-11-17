@@ -184,6 +184,21 @@ Checked with real applications: the Real apps workflow moves QHooks to Codex CLI
 
 Not verified: trades and launches themselves (nothing was signed), and the referral payouts.
 
+## Tokyo Futuro setups and .mcp.json in agent folders (added)
+
+Written Nov 17, 2026. Tokyo Futuro is an onchain city game on Robinhood Chain where agents take jobs, join crews and bet, through a hosted server or a local one that signs in with the agent's wallet. The Tokyo Futuro team asked Nomad to add its servers and has not yet reviewed this work. See [docs/guides/tokyo-futuro-setups.md](guides/tokyo-futuro-setups.md).
+
+Tested (automated, every push):
+- Tokyo setups moving from Claude Code to Codex and Claude Code, and an agent exported as a folder (persona, rules, notes, the `tokyo-futuro` skill and `.mcp.json`) moving into OpenClaw (`tests/migration/tokyo.test.ts`): the hosted server, the local server with its pin, `TOKYO_URL`, `AGENT_NAME` and `AGENT_ERC8004_ID` carried as values, `AGENT_KEY` written only as a reference even with `--include-secrets`, and planted keys and sign-in tokens never in destinations, plans, receipts or Nomad's library. Sources are unchanged.
+- Tokyo's sign-in token (`<wallet>.<expiry>.<epoch>.<hmac>`) is a secret rule of its own: it is removed from notes and other text, while wallet addresses and job ids are left alone.
+- `TOKYO_URL` pointing elsewhere warns; the testnet, a reference or no address each get their own note; the global command and the one-file script get install steps.
+- Which entries count as Tokyo Futuro, and 12 look-alikes that do not.
+- Agent folders read MCP servers from `.mcp.json`.
+
+Checked with real applications: the Real apps workflow lists the tools of Tokyo's hosted server (no key, no sign-in) and of `tokyo-futuro-mcp` 0.1.2 started with no wallet key, then moves an agent folder into the real OpenClaw, which must accept its config and list the server, with the notes there and the planted token nowhere (`scripts/check-tokyo.mjs`).
+
+Not verified: signing in, jobs, bets and anything on chain (no wallet key was used).
+
 ## Wallet keys stay out with --include-secrets (added)
 
 Written Nov 15, 2026. With `--include-secrets`, other secrets still travel when asked, but wallet private keys and recovery phrases are left out everywhere a move, export or import writes: text, launch arguments, URLs, headers, environment values and files (including `.env` files kept with `--include-sensitive-files`). They become references, and the preview and export output say how many were left out. Without `--include-secrets` nothing changed.

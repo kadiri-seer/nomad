@@ -116,6 +116,10 @@ export default function Adapters() {
       <p>
         QHooks is a launchpad and trading terminal built on Uniswap v4, reached through a hosted MCP server that needs no key and never signs anything: the user&apos;s wallet reviews and signs what it prepares. Nomad moves the server (<code>https://qhooks.com/mcp</code>) into the destination&apos;s own format. At QHooks&apos; request it adds Nomad&apos;s referral: <code>?ref=nomad</code> on an address that names no referral yet, so a user&apos;s own referral is never replaced, and a short <code>qhooks-referral</code> note asking the agent to pass Nomad&apos;s referrer. The preview shows both. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/qhooks-setups.md">QHooks setups guide</a>.
       </p>
+      <h2>Tokyo Futuro setups</h2>
+      <p>
+        Tokyo Futuro is an onchain city game on Robinhood Chain where agents take jobs, join crews and bet, through a hosted MCP server or a local one that signs in with the agent&apos;s wallet. Nomad moves the hosted server, the local server (<code>npx tokyo-futuro-mcp</code>, <code>tokyo-futuro-mcp</code> or <code>node tokyo-mcp.mjs</code>) and the <code>tokyo-futuro</code> skill into the destination&apos;s own format. <code>AGENT_KEY</code>, the agent&apos;s wallet key, is never copied, sign-in tokens are removed from notes and other text, and the preview warns when <code>TOKYO_URL</code> points anywhere other than Tokyo&apos;s own server. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/tokyo-futuro-setups.md">Tokyo Futuro setups guide</a>.
+      </p>
       <h3>Guided platforms</h3>
       <p>
         Hosted products (ChatGPT, Claude, Gemini, Grok, Perplexity) do not offer an agent import, and frameworks (CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n, Letta) define agents in code or in their own apps. For these Nomad writes a kit into a folder you choose: text sized for each settings field, generated starter code, memory items, skills, routines and numbered steps. Nothing is sent to those services.
