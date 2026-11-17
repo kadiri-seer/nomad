@@ -639,7 +639,97 @@ export function qhooksReferralExtras(
   return none;
 }
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS];
+/** Tokyo Futuro's Workers: the city (Robinhood Chain, 4663) and its testnet rehearsal (46630). */
+const TOKYO_MAIN = "tokyofuturo-syndicates.gate-server.workers.dev";
+const TOKYO_TEST = "tokyofuturo-syndicates-test.gate-server.workers.dev";
+const tokyoWorker = (url: string | undefined, path: RegExp): "main" | "test" | null => {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:" || u.port || u.username || u.password || !path.test(u.pathname)) return null;
+    return u.hostname === TOKYO_MAIN ? "main" : u.hostname === TOKYO_TEST ? "test" : null;
+  } catch {
+    return null;
+  }
+};
+/** The tokyo-futuro-mcp command (also .cmd or .exe on Windows), alone or as a path. */
+const isTokyoCommand = (command: string | undefined) => !!command && /(^|[\\/])tokyo-futuro-mcp(\.cmd|\.exe)?$/i.test(command);
+const isTokyoPackage = isPackageArg("tokyo-futuro-mcp");
+/** Tokyo's one-file server, run as `node tokyo-mcp.mjs` (or a path ending in it). */
+const isTokyoScript = (a: string) => /(^|[\\/])tokyo-mcp\.mjs$/.test(a);
+const isNodeCommand = (command: string | undefined) => !!command && /(^|[\\/])node(\.exe)?$/i.test(command);
+
+/**
+ * Tokyo Futuro, an onchain city game on Robinhood Chain where agents take jobs, join crews and bet, as
+ * Tokyo documents it (agents.md, SKILL.md, tokyo-mcp.mjs and tokyo-futuro-mcp 0.1.2, read Nov 17, 2026):
+ * the hosted, keyless server at <Worker>/mcp, whose prepare_ tools return unsigned transactions for the
+ * user's wallet, and the local server (`node tokyo-mcp.mjs`, `npx tokyo-futuro-mcp` or `tokyo-futuro-mcp`),
+ * which reads TOKYO_URL, AGENT_KEY (the agent's wallet key, used only to sign Tokyo's sign-in message),
+ * AGENT_NAME and AGENT_ERC8004_ID. The key is never copied (wallet keys are references only); sign-in
+ * tokens are kept out of text by the tokyo-futuro-token secret rule.
+ */
+const TOKYO: ServerProfile = {
+  id: "tokyo-futuro",
+  vendor: "Tokyo Futuro",
+  label: "Tokyo Futuro (an onchain city game on Robinhood Chain)",
+  matches: (t) =>
+    !!t.mcp &&
+    (t.mcp.transport === "stdio"
+      ? isTokyoCommand(t.mcp.command) || t.mcp.args.some(isTokyoPackage) || (isNodeCommand(t.mcp.command) && t.mcp.args.some(isTokyoScript))
+      : !!tokyoWorker(t.mcp.url, /^\/mcp\/?$/)),
+  // AGENT_KEY is handled in apply(): it is a raw key, not a key file, and the same wallet keeps the agent's record.
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [],
+  looserDefaults: {},
+  apply(t, out, platform) {
+    const mcp = t.mcp!;
+    if (mcp.transport !== "stdio") {
+      const test = tokyoWorker(mcp.url, /^\/mcp\/?$/) === "test";
+      out.notes.push({
+        level: "info",
+        category: "tools",
+        message: `"${t.name}" is Tokyo Futuro's hosted server${test ? " for its testnet rehearsal (chain 46630)" : ""}. It needs no key and never signs anything: its prepare_ tools return transactions, including bets, purchases and job bonds, for your wallet to review and sign. Sign-in tokens are not copied; the agent signs in again.`
+      });
+      return;
+    }
+    out.notes.push({ level: "info", category: "tools", message: `"${t.name}" runs Tokyo Futuro's server on this computer. It uses AGENT_KEY, the agent's wallet key, only to sign Tokyo's sign-in message, and never sends transactions.` });
+    const url = mcp.env.TOKYO_URL;
+    const urlValue = url && "value" in url ? url.value.trim() : undefined;
+    if (urlValue !== undefined) {
+      const worker = tokyoWorker(urlValue, /^\/?$/);
+      if (!worker) {
+        out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" signs in at ${urlValue} (TOKYO_URL), not at Tokyo Futuro's own server (https://${TOKYO_MAIN}). The agent's wallet signs in there. Keep it only if you trust that address.` });
+      } else if (worker === "test") {
+        out.notes.push({ level: "info", category: "tools", message: `"${t.name}" plays Tokyo Futuro's testnet rehearsal (chain 46630, TOKYO_URL). Its tokens do not carry over to the city on Robinhood Chain.` });
+      }
+    } else if (url) {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" takes Tokyo's address from TOKYO_URL, which was a variable on the source. Set it on ${platform} to https://${TOKYO_MAIN}.` });
+    } else {
+      out.manualSteps.push(`Set TOKYO_URL for "${t.name}" on ${platform} to https://${TOKYO_MAIN}: Tokyo's server cannot sign in without it.`);
+    }
+    if (!mcp.env.AGENT_KEY) {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" had no AGENT_KEY, so it can read Tokyo but not sign in. To play as the same agent, set AGENT_KEY on ${platform} to that agent's wallet key: Rep, level and jobs belong to the wallet.` });
+    } else {
+      out.unsupported.push({
+        category: "tools",
+        item: `${t.name}: AGENT_KEY`,
+        reason: "Wallet keys are references only.",
+        alternative: `Set AGENT_KEY on ${platform} to the same wallet's key to keep playing as the same agent: Rep, level and jobs belong to the wallet.`
+      });
+    }
+    if (isTokyoCommand(mcp.command)) {
+      out.manualSteps.push(`Install Tokyo Futuro's MCP server for "${t.name}": npm install -g tokyo-futuro-mcp. It needs Node.js 20 or later, and the tokyo-futuro-mcp command must be on the PATH ${platform} uses.`);
+    } else if (mcp.args.some(isTokyoPackage)) {
+      out.manualSteps.push(`"${t.name}" runs Tokyo Futuro's server through npx: ${platform} needs Node.js 20 or later on its PATH.`);
+    } else {
+      const script = mcp.args.find(isTokyoScript)!;
+      out.manualSteps.push(`"${t.name}" runs ${script}, a file Nomad does not copy. If ${platform} runs on another computer, put tokyo-mcp.mjs at the same path there (from Tokyo Futuro's server), with the ethers package installed next to it and Node.js 20 or later.`);
+    }
+  }
+};
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {
