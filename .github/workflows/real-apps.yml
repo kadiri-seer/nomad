@@ -26,6 +26,7 @@ on:
       - "scripts/check-rushr.mjs"
       - "scripts/check-qhooks.mjs"
       - "scripts/check-tokyo.mjs"
+      - "scripts/check-ostra.mjs"
       - ".github/workflows/real-apps.yml"
 permissions:
   contents: read
@@ -73,3 +74,6 @@ jobs:
       # Keyless: Tokyo Futuro's hosted server and npm package list their tools, and an agent folder moves into OpenClaw.
       - name: Check Tokyo Futuro
         run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-tokyo.mjs
+      # Ostra's package in a throwaway vault folder with its services off, its connector, and a move to the real Codex and OpenClaw.
+      - name: Check Ostra
+        run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-ostra.mjs

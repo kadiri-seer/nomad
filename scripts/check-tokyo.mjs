@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cli = join(repo, "apps/cli/dist/nomad.js");
 const bin = (name) => (process.env.NOMAD_APPS_BIN ? join(process.env.NOMAD_APPS_BIN, name) : name);
-const VERSION = process.env.TOKYO_MCP_VERSION ?? "0.1.2";
+const VERSION = process.env.TOKYO_MCP_VERSION ?? "0.2.0";
 const TOKYO_URL = "https://tokyofuturo-syndicates.gate-server.workers.dev";
 // Fake, shaped like Tokyo's sign-in token (<wallet>.<expiry>.<epoch>.<hmac>).
 const FAKE_TOKEN = "0x2d6f3da021226fc62579099d05b1a27f72484081.1795497600.3.k3J9xQ2mP7vR4tW8yZ1bC5dF6gH0jL2n";
@@ -132,6 +132,7 @@ try {
   // 2. The npm package, with no wallet key.
   const l = await local();
   check(`tokyo-futuro-mcp@${VERSION} lists its tools (${l.tools.length}) with no wallet key`, l.tools.length > 0, l.err);
+  for (const n of ["tokyo_take_job", "tokyo_deliver_job", "tokyo_post_decision", "tokyo_post_note", "tokyo_my_notes"]) check(`tokyo-futuro-mcp@${VERSION} offers ${n}`, l.tools.includes(n), l.tools.join(", "));
 
   // 3. An agent folder into the real OpenClaw.
   const folder = join(home, "diego");
