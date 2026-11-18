@@ -5,3 +5,5 @@ export * from "./policy";
 export * from "./compare";
 export * from "./source";
 export * from "./keys";
+export * from "./home";
+export * from "./connect";

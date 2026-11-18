@@ -28,6 +28,8 @@ on:
       - "scripts/check-tokyo.mjs"
       - "scripts/check-ostra.mjs"
       - "scripts/check-stoa.mjs"
+      - "scripts/check-your-nomad.mjs"
+      - "packages/mcp/**"
       - ".github/workflows/real-apps.yml"
 permissions:
   contents: read
@@ -81,3 +83,7 @@ jobs:
       # Keyless and read-only: Stoa's hosted server lists its tools and router, and a setup moves to the real Codex and OpenClaw.
       - name: Check Stoa
         run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-stoa.mjs
+      # Your Nomad: nomad connect adds the server to the real Codex, Gemini CLI and OpenClaw, the server answers
+      # when started exactly as Codex starts it, and nomad connect --remove takes it out again.
+      - name: Check Your Nomad
+        run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-your-nomad.mjs

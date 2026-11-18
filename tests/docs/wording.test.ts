@@ -11,6 +11,8 @@ const FILES = [
   "apps/web/app/page.tsx",
   "docs/STATUS.md",
   "docs/guides/priors-setups.md",
+  "docs/guides/your-nomad.md",
+  "apps/web/app/app/home/page.tsx",
   "docs/security/model.md",
   "packages/adapters/src/catalog.ts",
   "packages/adapters/src/known-servers.ts",

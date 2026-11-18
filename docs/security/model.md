@@ -46,6 +46,13 @@ Bound to 127.0.0.1, token exchanged for an httpOnly SameSite strict cookie, Host
 
 Read only by default. `--allow-writes` lets an assistant apply a preview only with its token. Replace mode, edited files, broader permissions and commands from packages need `--allow-replace`.
 
+## Your Nomad
+
+- `show_agents` and `borrow_agent` write nothing. `gather_agents` writes only Nomad's own library, the same as reading an agent; the apps are only read.
+- Borrowed text is built from the library, which holds agents with secrets redacted; it says that it does not approve file changes, moves, payments or trades and never asks for secrets. An agent from a package or an agent folder is marked as made by others, and its text says to check with the user before acting on its rules.
+- `bring_agent` is a migration preview from the library: the same approvals, commands shown for approval, backups and checks. `send_back` previews; `apply_send_back` needs `--allow-writes` and the preview's token, refuses while an entry changed in two places has no choice, and refuses when the home changed since the preview. Send back never deletes from the home, redacts secrets, and brings skills and tools only when asked.
+- `nomad connect` writes only the `nomad` entry in each app's settings file, after a preview and a backup, and checks that every other setting reads the same afterwards; a file it cannot edit that way is left alone. A `nomad` skill it did not write is never replaced, and `--remove` deletes only skill files it wrote and that are unchanged. The server it adds is read only unless the user chose `--allow-writes`.
+
 ## SSH
 
 `nomad remote push` uses the system `ssh` and `scp` with `StrictHostKeyChecking=yes` and `BatchMode=yes`. Unknown hosts fail with instructions; private keys are never read by Nomad.

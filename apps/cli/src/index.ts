@@ -16,6 +16,7 @@ import { approvalQuestion, CMD, bold, comparisonText, compatibilityText, dim, do
 import { remoteMigrate } from "./remote";
 import { findSite, startUi } from "./ui";
 import { applyUpdate, checkForUpdate, currentInstall, runUninstaller } from "./install";
+import { registerHomeCommands } from "./home";
 
 export const EXIT = { ok: 0, error: 1, usage: 2, approval: 3, invalid: 4, verification: 5, rolledBack: 6 } as const;
 
@@ -533,6 +534,19 @@ approvalOptions(
   })
 );
 
+/* ------------------------------ your Nomad: home and connect ------------------------------ */
+
+registerHomeCommands(program, {
+  run,
+  out,
+  confirm,
+  approvalOptions,
+  bring: (nomad, agentId, to, o) => moveTo(nomad, { kind: "stored", agentId }, parseDestination(to), o),
+  home: () => (program.opts().home ? resolve(program.opts().home) : undefined),
+  installRoot: () => currentInstall()?.root ?? null,
+  EXIT
+});
+
 /* ------------------------------ remote (experimental) ------------------------------ */
 
 const remote = program.command("remote").description("experimental: migrate to another machine over SSH");
@@ -599,9 +613,10 @@ program
   .description("run the Nomad MCP server on stdio")
   .option("--allow-writes", "allow executing approved migrations and restores")
   .option("--allow-replace", "allow replace mode and overwriting edited files (requires --allow-writes)")
+  .option("--app <id>", "the app this server runs in (nomad connect sets it)")
   .action(async (o) => {
     const { startMcpServer } = await import("@nomad/mcp");
-    await startMcpServer({ home: program.opts().home, allowWrites: !!o.allowWrites, allowReplace: !!o.allowReplace && !!o.allowWrites });
+    await startMcpServer({ home: program.opts().home, allowWrites: !!o.allowWrites, allowReplace: !!o.allowReplace && !!o.allowWrites, app: o.app });
   });
 
 program

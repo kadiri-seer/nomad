@@ -16,6 +16,19 @@ nomad restore <backup-id>            undo
 
 Every move shows a short summary first (`--details` for every file and diff, `--dry-run` to stop there) and asks one question. A backup is taken before anything is written.
 
+### Your Nomad
+
+One home for all your agents, reachable from inside the app you are in. `nomad connect` adds Nomad to Claude Code, Codex, OpenClaw, Hermes, Gemini CLI, Cursor and the Claude desktop app, with a preview first. Then ask the app "Nomad, show my agents" and pick one: borrow it for this chat (nothing is written), bring it in for good (the usual preview and approval), and send back what it learned, as a new version in the home, ready for its other copies.
+
+```
+nomad connect                        add Nomad to your apps (nomad connect --remove takes it out)
+nomad home                           every agent, where it lives, and copies that are behind
+nomad home borrow kestrel            the agent as text for any chat, including on the web
+nomad home send-back kestrel --from claude-code:~/project   save what it learned there
+```
+
+See [docs/guides/your-nomad.md](docs/guides/your-nomad.md).
+
 ## What it supports
 
 | Platform | Support | Notes |
@@ -149,6 +162,7 @@ node scripts/check-real-apps.mjs   # check output with real Codex CLI, Gemini CL
 - [Building an adapter](docs/adapters/building-an-adapter.md)
 - [Security model](docs/security/model.md)
 - [Migration guide](docs/guides/migrating.md)
+- [Your Nomad](docs/guides/your-nomad.md)
 - [Implementation status](docs/STATUS.md)
 - [Token and builder bounties](docs/token.md)
 

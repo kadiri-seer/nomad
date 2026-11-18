@@ -229,6 +229,34 @@ async function handle(req: Request, ctx: LocalContext, path: string[]): Promise<
       return json(await nomad.previewRestore(b));
     case "POST backups/:id/restore":
       return json(await nomad.restore(b));
+    case "GET home": {
+      const { homeAgents, notGathered } = await import("@nomad/migration");
+      return json({ agents: homeAgents(nomad, { search: q("search") }), notInHomeYet: await notGathered(nomad) });
+    }
+    case "POST home/:id": {
+      const { borrowAgent, gatherAgents, previewSendBack } = await import("@nomad/migration");
+      const s = await body(req);
+      if (b === "gather") return json(await gatherAgents(nomad));
+      if (b === "borrow") return json(await borrowAgent(nomad, String(s.agent ?? ""), { version: s.version ? Number(s.version) : undefined, skills: Array.isArray(s.skills) ? s.skills.map(String) : undefined, memorySearch: s.memorySearch ? String(s.memorySearch) : undefined }));
+      if (b === "send-back") {
+        const from = s.from && typeof s.from === "object" ? { adapter: String(s.from.adapter), root: String(s.from.root), nativeId: String(s.from.nativeId) } : undefined;
+        const prefer = s.prefer && typeof s.prefer === "object" ? Object.fromEntries(Object.entries(s.prefer).filter(([, v]) => v === "home" || v === "incoming")) : undefined;
+        const include = Array.isArray(s.include) ? s.include.filter((x: unknown) => x === "skills" || x === "tools") : undefined;
+        const memory = Array.isArray(s.memory) ? s.memory.filter((m: any) => m && typeof m.content === "string").map((m: any) => ({ content: String(m.content), title: m.title ? String(m.title) : undefined })) : undefined;
+        return json(await previewSendBack(nomad, { agent: String(s.agent ?? ""), from, include, prefer: prefer as Record<string, "home" | "incoming"> | undefined, memory, app: from ? undefined : "the Nomad dashboard" }));
+      }
+      break;
+    }
+    case "POST home/:id/apply": {
+      if (b !== "send-back") break;
+      const { applySendBack } = await import("@nomad/migration");
+      const s = await body(req);
+      return json(applySendBack(nomad, String(s.previewId), String(s.token)));
+    }
+    case "GET connect": {
+      const { connectStatus } = await import("@nomad/migration");
+      return json(await connectStatus());
+    }
     case "GET settings":
       return json(nomad.settings());
     case "POST settings": {

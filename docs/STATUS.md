@@ -184,6 +184,21 @@ Checked with real applications: the Real apps workflow moves QHooks to Codex CLI
 
 Not verified: trades and launches themselves (nothing was signed), and the referral payouts.
 
+## Your Nomad (added)
+
+Written Nov 18, 2026. One home for all of a person's agents, reachable from inside their apps: show, gather, borrow, bring and send back, through six new MCP tools (`show_agents`, `gather_agents`, `borrow_agent`, `bring_agent`, `send_back`, `apply_send_back`), `nomad home` and `nomad connect` in the CLI, and a Your Nomad page in the dashboard. See [docs/guides/your-nomad.md](guides/your-nomad.md).
+
+Tested (automated, every push, `tests/home/`):
+- Show and gather: agents found in apps before and after gathering, nothing in the apps changed, no duplicates when gathering again, copies marked behind after a newer home version.
+- Borrow: persona, rules, memory and skills as text, skill steps and memory searches on request, the length limit, secrets left out, nothing written (versions, operations and app files unchanged), agents from packages marked as made by others.
+- Send back: new notes added after an approved preview only, duplicates skipped, secrets redacted, an entry changed only in the chat updated, changed in both places refused until chosen, an older chat never undoing a newer home, a preview refused once the home changed, changes read from a Claude Code copy without touching it, nothing deleted, skills and tools only when asked, a copy of another agent refused.
+- `nomad connect` in a home with Claude Code, Codex, OpenClaw and Hermes: the preview writes nothing; each entry is added with every other setting unchanged; Codex's TOML and Hermes' YAML keep their text exactly and come back to the same bytes on removal; OpenClaw's and Gemini CLI's files with comments are left alone, with the app's own command instead (`openclaw mcp set`, `gemini mcp add`; Gemini's was run here and kept the comments); a `nomad` skill Nomad did not write is never replaced and an edited one is kept on removal; files it cannot edit safely are left alone; a backup undoes it.
+- The MCP tools through an MCP client, the CLI commands, and the dashboard API.
+
+Checked with real applications: `scripts/check-your-nomad.mjs` (Real apps workflow) connects Nomad to the real Codex CLI, Gemini CLI and OpenClaw, checks each lists the server as written, starts the server with the command written for Codex and calls its tools, then removes it. Run here with Codex CLI and Gemini CLI, which passed; OpenClaw needs Node 24, which the workflow has. The real Claude Code was checked by hand: `claude mcp list` connects to the server `nomad connect` wrote.
+
+Not verified: a model in each app choosing the tools from a spoken request (no model sign-in in the build environment).
+
 ## Stoa setups (added)
 
 Written Nov 18, 2026. Stoa is a swap router on Robinhood Chain and Elysium, reached through a hosted, keyless, read-only MCP server whose swaps are unsigned transactions for the user's wallet. The Stoa team asked Nomad to add its server and reviewed the guide on Nov 18, 2026. See [docs/guides/stoa-setups.md](guides/stoa-setups.md).

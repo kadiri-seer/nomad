@@ -8,6 +8,7 @@ const GROUPS: Array<{ label: string; links: Array<{ href: string; label: string 
     label: "Agents",
     links: [
       { href: "/app", label: "Overview" },
+      { href: "/app/home", label: "Your Nomad" },
       { href: "/app/agents", label: "My agents" },
       { href: "/app/versions", label: "Versions" }
     ]

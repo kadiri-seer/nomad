@@ -16,7 +16,7 @@ export interface BackupFileEntry {
 
 export interface BackupManifest {
   id: string;
-  kind: "pre-migration" | "agent-snapshot" | "pre-restore" | "pre-sync";
+  kind: "pre-migration" | "agent-snapshot" | "pre-restore" | "pre-sync" | "pre-connect";
   createdAt: string;
   operationId: string | null;
   agentId: string | null;
