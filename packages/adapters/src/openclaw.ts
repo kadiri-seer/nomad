@@ -35,7 +35,10 @@ import {
   pluginOf,
   mcpServersFromTools,
   toolsFromMcpServers,
-  isPlainCliWord
+  isPlainCliWord,
+  markerQuoted,
+  markerValueOf,
+  MARKER_VALUE_SRC
 } from "./util";
 
 const P = "openclaw";
@@ -372,7 +375,8 @@ async function readAgent(root: string, agentId: string, notes: Note[], prefer?: 
     if (!e.file || !e.name.endsWith(".md")) continue;
     const text = (await read(`memory/${e.name}`))!;
     const date = /^(\d{4}-\d{2}-\d{2})/.exec(e.name)?.[1];
-    const marker = /<!-- nomad:memory id=("[^"]*"|\S+)/.exec(text)?.[1]?.replace(/"/g, "");
+    const raw = new RegExp(`<!-- nomad:memory id=${MARKER_VALUE_SRC}`).exec(text)?.[1];
+    const marker = raw === undefined ? undefined : markerValueOf(raw);
     doc.memory.push({
       id: marker ?? `daily-${e.name.replace(/\.md$/, "")}`,
       kind: date ? "daily-log" : "note",
@@ -480,7 +484,7 @@ async function planAgent(doc: AgentDocument, ctx: WriteContext): Promise<Planned
     if (longTerm.length) files.push(wsFile("MEMORY.md", { content: renderMemoryMarkdown(longTerm), strategy: "managed-block", blockKey: key, component: "memory", description: `${longTerm.length} long-term memory entries` }));
     for (const m of doc.memory.filter((x) => x.kind === "daily-log")) {
       const name = m.date ? `${m.date}.md` : `nomad-${safeName(m.id)}.md`;
-      files.push(wsFile(`memory/${name}`, { content: `<!-- nomad:memory id=${JSON.stringify(m.id)} -->\n${m.content.trim()}\n`, strategy: "create-only", component: "memory", description: `Daily log ${m.date ?? m.id}` }));
+      files.push(wsFile(`memory/${name}`, { content: `<!-- nomad:memory id=${markerQuoted(m.id)} -->\n${m.content.trim()}\n`, strategy: "create-only", component: "memory", description: `Daily log ${m.date ?? m.id}` }));
     }
   }
   if (wants(ctx, "skills")) {

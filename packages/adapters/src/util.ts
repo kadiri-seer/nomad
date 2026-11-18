@@ -156,10 +156,44 @@ function kindFromTitle(title: string | null, fallback: MemoryEntry["kind"]): Mem
 
 const MARKER_RE = /<!-- nomad:memory ([^>]*?) -->/g;
 
+/**
+ * A value inside a Nomad marker comment. Quoted as JSON, with < and > escaped, so a title or id
+ * holding "-->", ">" or quotes cannot end the comment early or change what a later read sees.
+ * Ordinary values are written exactly as before.
+ */
+export function markerQuoted(value: string): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
+}
+
+/** A value written bare when it is one plain word, quoted otherwise. */
+export function markerBare(value: string): string {
+  return /^[^\s"'<>\\]+$/.test(value) ? value : markerQuoted(value);
+}
+
+/** Read a marker value written by markerQuoted or markerBare (and by older versions of Nomad). */
+export function markerValueOf(raw: string): string {
+  if (!raw.startsWith('"')) return raw;
+  try {
+    const v = JSON.parse(raw);
+    if (typeof v === "string") return v;
+  } catch {
+    /* an older, plainly quoted value */
+  }
+  return raw.slice(1, raw.endsWith('"') ? -1 : undefined);
+}
+
+/** The first value of a marker attribute, such as id= in a daily log's marker. */
+export const MARKER_VALUE_SRC = '("(?:[^"\\\\]|\\\\.)*"|\\S+)';
+
 function parseAttrs(s: string): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const m of s.matchAll(/(\w+)=("([^"]*)"|\S+)/g)) out[m[1]] = m[3] ?? m[2];
+  for (const m of s.matchAll(new RegExp(`(\\w+)=${MARKER_VALUE_SRC}`, "g"))) out[m[1]] = markerValueOf(m[2]);
   return out;
+}
+
+/** A heading on one line, so a title holding line breaks cannot add lines to the file. */
+function oneLine(title: string): string {
+  return title.replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -245,12 +279,12 @@ export function renderMemoryMarkdown(entries: MemoryEntry[], heading?: string): 
     byKind.get(k)!.push(e);
   }
   for (const [title, list] of byKind) {
-    lines.push(`## ${title}`, "");
+    lines.push(`## ${oneLine(title)}`, "");
     for (const e of list) {
-      const attrs = [`id=${JSON.stringify(e.id)}`, `kind=${e.kind}`, `scope=${e.scope}`];
-      if (e.title) attrs.push(`title=${JSON.stringify(e.title)}`);
-      if (e.date) attrs.push(`date=${e.date}`);
-      if (e.tags.length) attrs.push(`tags=${e.tags.join(",")}`);
+      const attrs = [`id=${markerQuoted(e.id)}`, `kind=${e.kind}`, `scope=${e.scope}`];
+      if (e.title) attrs.push(`title=${markerQuoted(e.title)}`);
+      if (e.date) attrs.push(`date=${markerBare(e.date)}`);
+      if (e.tags.length) attrs.push(`tags=${markerBare(e.tags.join(","))}`);
       lines.push(`<!-- nomad:memory ${attrs.join(" ")} -->`);
       const body = e.content.trim();
       lines.push(/^[-*+] /.test(body) || body.includes("\n") ? body : `- ${body}`, "");
@@ -289,8 +323,8 @@ export function renderAgentMarkdown(
   for (const ins of doc.instructions) {
     if (opts.kinds && !opts.kinds.includes(ins.kind)) continue;
     if (!ins.content.trim()) continue;
-    out.push(`<!-- nomad:section kind=instruction id=${JSON.stringify(ins.id)} type=${ins.kind}${ins.title ? ` title=${JSON.stringify(ins.title)}` : ""} -->`);
-    out.push(`## ${ins.title ?? titleForKind(ins.kind)}`, "", demoteHeadings(ins.content.trim()), "");
+    out.push(`<!-- nomad:section kind=instruction id=${markerQuoted(ins.id)} type=${ins.kind}${ins.title ? ` title=${markerQuoted(ins.title)}` : ""} -->`);
+    out.push(`## ${oneLine(ins.title ?? titleForKind(ins.kind))}`, "", demoteHeadings(ins.content.trim()), "");
   }
   if (opts.memoryImports?.length) {
     out.push(`<!-- nomad:section kind=memory-imports -->`, "## Memory", "", ...opts.memoryImports.map((p) => `@${p}`), "");

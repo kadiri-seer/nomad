@@ -34,7 +34,10 @@ import {
   isPlainCliWord,
   integrationStep,
   wants,
-  workflowPrompt
+  workflowPrompt,
+  markerQuoted,
+  markerValueOf,
+  MARKER_VALUE_SRC
 } from "./util";
 
 const P = "hermes";
@@ -226,7 +229,8 @@ async function readHome(root: string, nativeId: string, notes: Note[], agentId?:
     if (!e.file || !e.name.endsWith(".md")) continue;
     const text = (await read(`memories/archive/${e.name}`))!;
     const date = /^(\d{4}-\d{2}-\d{2})/.exec(e.name)?.[1];
-    const marker = /<!-- nomad:memory id=("[^"]*"|\S+)/.exec(text)?.[1]?.replace(/"/g, "");
+    const raw = new RegExp(`<!-- nomad:memory id=${MARKER_VALUE_SRC}`).exec(text)?.[1];
+    const marker = raw === undefined ? undefined : markerValueOf(raw);
     doc.memory.push({ id: marker ?? `archive-${e.name.replace(/\.md$/, "")}`, kind: "daily-log", scope: "agent", title: date ? `Log ${date}` : e.name, content: text.replace(/<!-- nomad:memory [^>]*-->\n?/g, "").trim(), date, tags: [], source: { platform: P, path: `memories/archive/${e.name}` } });
   }
 
@@ -344,7 +348,7 @@ async function planHome(doc: AgentDocument, ctx: WriteContext): Promise<PlannedW
     if (rest.length || user.length) conversions.push({ category: "memory", item: `${rest.length + user.length} entries`, from: "structured memory", to: "§ delimited MEMORY.md and USER.md (kinds and titles are not kept)" });
     for (const m of logs) {
       const name = m.date ? `${m.date}.md` : `${safeName(m.id)}.md`;
-      files.push({ path: `${prefix}memories/archive/${name}`, content: `<!-- nomad:memory id=${JSON.stringify(m.id)} -->\n${m.content.trim()}\n`, strategy: "create-only", component: "memory", description: `Archived log ${m.date ?? m.id}` });
+      files.push({ path: `${prefix}memories/archive/${name}`, content: `<!-- nomad:memory id=${markerQuoted(m.id)} -->\n${m.content.trim()}\n`, strategy: "create-only", component: "memory", description: `Archived log ${m.date ?? m.id}` });
     }
     if (logs.length) conversions.push({ category: "memory", item: `${logs.length} logs`, from: "daily logs", to: "memories/archive (readable on request, not loaded into every prompt)" });
   }

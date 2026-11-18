@@ -3,6 +3,7 @@
 ## Secrets
 
 - Scanned and redacted: persona, descriptions, rules and their titles, memory and its titles, skill descriptions and steps, tool descriptions, routine prompts, integration settings and text files.
+- Values inside Nomad's marker comments (ids, titles, dates, tags) are quoted with `<` and `>` escaped, and headings are kept on one line, so a title or id from a package cannot end a marker early or add lines to an app's file.
 - Detection rules: Anthropic, OpenAI, OpenRouter, GitHub, GitLab, Google, AWS access and secret keys, Slack, Stripe, Hugging Face, Telegram bot tokens, private key blocks, JSON web tokens, passwords in connection strings, and high entropy credential assignments. Placeholders such as `${VAR}` are ignored.
 - Findings report rule, file and line, plus a short fingerprint. Values are never printed or stored.
 - Reads, exports, imports and migrations redact by default. MCP env values and headers holding credentials become references.
