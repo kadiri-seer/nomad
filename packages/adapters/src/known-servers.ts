@@ -842,7 +842,44 @@ const OSTRA: ServerProfile = {
   }
 };
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA];
+/** Stoa's hosted server: exactly https://stoadex.com/mcp on the default port, no user name or password. */
+const isStoaHost = (url: string | undefined) => {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && u.hostname === "stoadex.com" && !u.port && !u.username && !u.password && /^\/mcp\/?$/.test(u.pathname);
+  } catch {
+    return false;
+  }
+};
+/** Stoa's router on Robinhood Chain (docs/contracts and its skill, read Nov 18, 2026). */
+const STOA_ROUTER = "0x2F2804fad735a38015650f32f95Ad5E08D6B3eE5";
+
+/**
+ * Stoa, a swap router on Robinhood Chain and Elysium, as Stoa documents it (stoadex.com/docs/mcp, its skill
+ * at stoadex.com/skills/stoa/SKILL.md and the server's source, read Nov 18, 2026): the hosted, keyless,
+ * read-only server https://stoadex.com/mcp. It lists tokens, quotes, checks a token by simulating a buy and
+ * a sell-back, and builds unsigned swaps for the user's wallet to sign. No keys or wallets are involved.
+ */
+const STOA: ServerProfile = {
+  id: "stoa",
+  vendor: "Stoa",
+  label: "Stoa (a swap router on Robinhood Chain; your wallet signs)",
+  matches: (t) => !!t.mcp && t.mcp.transport !== "stdio" && isStoaHost(t.mcp.url),
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [],
+  looserDefaults: {},
+  apply(t, out) {
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: `"${t.name}" is Stoa's hosted swap router. It needs no key and never signs or sends anything: it quotes, checks tokens and builds unsigned swaps for your wallet to sign. Before signing on Robinhood Chain, check the transaction goes to Stoa's router, ${STOA_ROUTER}. Nomad copies its address.`
+    });
+  }
+};
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {
