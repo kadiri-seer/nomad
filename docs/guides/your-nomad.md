@@ -88,7 +88,7 @@ Options:
 - `--allow-writes` lets assistants apply a move or a send back after you approve its preview. Without it the server is read only: assistants can show, gather, borrow and preview, and you apply from a terminal or the dashboard.
 - `--app claude-code,codex` connects only those apps, including apps Nomad did not find.
 - `--status` shows which apps have Nomad.
-- `--remove` takes Nomad out again: the server entries, and the `nomad` skills Nomad wrote and you did not edit. For a file with comments it gives you the app's own command to run (`openclaw mcp unset nomad` or `gemini mcp remove -s user nomad`).
+- `--remove` takes Nomad out again: the server entries Nomad added, and the `nomad` skills Nomad wrote and you did not edit. A server called `nomad` that Nomad did not add is left alone. For a file with comments it gives you the app's own command to run (`openclaw mcp unset nomad` or `gemini mcp remove -s user nomad`).
 - `nomad restore <backup-id>` puts every file back as it was before.
 
 Start a new session in each app (restart the OpenClaw gateway, quit and reopen the Claude desktop app) to load Nomad.
@@ -97,7 +97,7 @@ Start a new session in each app (restart the OpenClaw gateway, quit and reopen t
 
 - Showing and borrowing write nothing, and need no approval.
 - Bring, send back and connect show a preview and wait for your approval. An assistant can apply one only when the server was connected with `--allow-writes`, and only with the token of the preview it showed you.
-- Secrets never travel: borrowed text and send backs are redacted, and wallet keys are never read.
+- Secrets never travel: borrowed text and send backs are redacted (titles included), and wallet keys are never read. Each entry sent back records where it came from.
 - Borrowed text describes how to work. It never approves file changes, moves, payments or trades, and never asks for secrets.
 - An agent that came from a package or an agent folder is marked "from others", and its borrowed text says to check with you before acting on its rules. Bringing it shows every command it would start, as any move does.
 

@@ -141,7 +141,7 @@ describe("nomad connect", () => {
     expect(p.targets[0].manual).toBe("gemini mcp add -s user nomad /opt/nomad/bin/nomad mcp --app gemini-cli");
     await applyConnect(env.nomad, p.id);
     expect(read(".gemini/settings.json")).toBe(settings);
-    writeFileSync(join(env.home, ".gemini/settings.json"), '{\n  // mine\n  "mcpServers": { "nomad": { "command": "x", "args": [] } }\n}\n');
+    writeFileSync(join(env.home, ".gemini/settings.json"), '{\n  // mine\n  "mcpServers": { "nomad": { "command": "x", "args": ["mcp", "--app", "gemini-cli"] } }\n}\n');
     expect((await connectStatus({ platform: "linux" })).find((s) => s.app === "gemini-cli")!.connected).toBe(true);
     expect((await planDisconnect(env.nomad, { platform: "linux", apps: ["gemini-cli"] })).targets[0].manual).toBe("gemini mcp remove -s user nomad");
   });
@@ -182,8 +182,8 @@ describe("connect helpers", () => {
   it("starts the installed launcher, this script, or npx", () => {
     expect(nomadLaunch({ installRoot: "/opt/nomad", platform: "linux" })).toEqual({ command: join("/opt/nomad", "bin", "nomad"), args: [] });
     expect(nomadLaunch({ installRoot: "C:\\Nomad", platform: "win32" })).toEqual({ command: "cmd", args: ["/c", join("C:\\Nomad", "bin", "nomad.cmd")] });
-    expect(nomadLaunch({ platform: "linux", script: "/x/dist/nomad.js", execPath: "/usr/bin/node" })).toEqual({ command: "/usr/bin/node", args: ["/x/dist/nomad.js"] });
-    expect(nomadLaunch({ platform: "linux", script: "/repo/apps/cli/src/index.ts" }).command).toBe("npx");
+    expect(nomadLaunch({ platform: "linux", script: "/x/dist/nomad.js", execPath: "/usr/bin/node", viaNpx: false })).toEqual({ command: "/usr/bin/node", args: ["/x/dist/nomad.js"] });
+    expect(nomadLaunch({ platform: "linux", script: "/repo/apps/cli/src/index.ts", viaNpx: false }).command).toBe("npx");
     expect(serverEntry("codex", launch, { allowWrites: true, home: "/h" }).args).toEqual(["--home", "/h", "mcp", "--app", "codex", "--allow-writes"]);
   });
 

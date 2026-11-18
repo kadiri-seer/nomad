@@ -409,15 +409,15 @@ export function createMcpServer(options: McpOptions = {}) {
 
   const memoryItem = z.object({
     id: z.string().optional().describe("Id of an existing entry to change; leave out for a new entry"),
-    title: z.string().optional(),
-    content: z.string().min(1),
+    title: z.string().max(200).optional(),
+    content: z.string().min(1).max(20000),
     kind: z.enum(MemoryKind.options).optional(),
-    tags: z.array(z.string()).optional()
+    tags: z.array(z.string().max(64)).max(20).optional()
   });
   const ruleItem = z.object({
     id: z.string().optional().describe("Id of an existing rule to change; leave out for a new rule"),
-    title: z.string().optional(),
-    content: z.string().min(1),
+    title: z.string().max(200).optional(),
+    content: z.string().min(1).max(20000),
     kind: z.enum(InstructionKind.options).optional()
   });
 
@@ -428,8 +428,8 @@ export function createMcpServer(options: McpOptions = {}) {
       description: "Preview saving new or changed memory entries and rules to the agent in the Nomad home, as a new version. Give them directly, or set fromApp to read the agent's copy in this app. Nothing is written: show the preview, and call apply_send_back only after the user approves.",
       inputSchema: {
         agent: z.string().describe("Agent name or id"),
-        memory: z.array(memoryItem).optional(),
-        instructions: z.array(ruleItem).optional().describe("Rules"),
+        memory: z.array(memoryItem).max(500).optional(),
+        instructions: z.array(ruleItem).max(500).optional().describe("Rules"),
         fromApp: z.union([z.boolean(), z.string()]).optional().describe('true: read the copy of this agent in this app; or a location such as "openclaw:~/.openclaw#main"'),
         include: z.array(z.enum(["skills", "tools"])).optional().describe("With fromApp: also send back new or changed skills or tools"),
         baseVersion: z.number().int().positive().optional().describe("The version borrow_agent returned"),

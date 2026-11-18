@@ -4,7 +4,7 @@ import JSON5 from "json5";
 import { parse as parseToml } from "smol-toml";
 import { parseDocument as parseYamlDocument } from "yaml";
 import { canonicalJson, isPlainObject, NOMAD_VERSION, NomadError, sha256, shortId, type DesiredFile } from "@nomad/core";
-import { displayPath, expandHome, pathExists, readTextIfExists } from "@nomad/core/node";
+import { assertNoSymlinks, displayPath, expandHome, pathExists, readTextIfExists } from "@nomad/core/node";
 import { applyOperations, computeOperations, type FileOperation } from "./ops";
 import { createBackup } from "./backup";
 import type { Nomad } from "./engine";
@@ -65,7 +65,7 @@ export function connectTargets(platform: NodeJS.Platform = process.platform): Co
       keyPath: ["mcp", "servers", SERVER],
       skill: { root: h(".openclaw"), path: "skills/nomad/SKILL.md" },
       restart: "Restart the OpenClaw gateway (openclaw gateway restart) to load Nomad.",
-      command: (e) => (e ? `openclaw mcp set ${SERVER} ${shellQuote(JSON.stringify(e))}` : `openclaw mcp unset ${SERVER}`)
+      command: (e) => (e ? `openclaw mcp set ${SERVER} ${shellQuote(JSON.stringify(e), platform)}` : `openclaw mcp unset ${SERVER}`)
     },
     { app: "hermes", displayName: "Hermes Agent", detect: [h(".hermes")], config: h(".hermes/config.yaml"), format: "yaml", keyPath: ["mcp_servers", SERVER], skill: { root: h(".hermes"), path: "skills/nomad/SKILL.md" }, restart: "Start a new Hermes session to load Nomad." },
     {
@@ -78,7 +78,7 @@ export function connectTargets(platform: NodeJS.Platform = process.platform): Co
       keyPath: ["mcpServers", SERVER],
       skill: null,
       restart: "Start a new Gemini CLI session to load Nomad.",
-      command: (e) => (e ? ["gemini", "mcp", "add", "-s", "user", SERVER, String(e.command), ...(e.args as string[])].map(shellQuote).join(" ") : `gemini mcp remove -s user ${SERVER}`)
+      command: (e) => (e ? ["gemini", "mcp", "add", "-s", "user", SERVER, String(e.command), ...(e.args as string[])].map((w) => shellQuote(w, platform)).join(" ") : `gemini mcp remove -s user ${SERVER}`)
     },
     { app: "cursor", displayName: "Cursor", detect: [h(".cursor")], config: h(".cursor/mcp.json"), format: "json", keyPath: ["mcpServers", SERVER], skill: null, restart: "Reload Cursor, then turn Nomad on under Settings, MCP." },
     { app: "claude-desktop", displayName: "Claude desktop app", detect: [desktopDir], config: join(desktopDir, "claude_desktop_config.json"), format: "json", keyPath: ["mcpServers", SERVER], skill: null, restart: "Quit and reopen the Claude desktop app to load Nomad." }
@@ -99,7 +99,7 @@ function pathExistsQuick(p: string): boolean {
  * How an app should start this copy of Nomad. The installer's launcher survives updates; an npm
  * install runs its own script with this Node; a checkout falls back to npx with this version.
  */
-export function nomadLaunch(options: { installRoot?: string | null; platform?: NodeJS.Platform; execPath?: string; script?: string } = {}): Launch {
+export function nomadLaunch(options: { installRoot?: string | null; platform?: NodeJS.Platform; execPath?: string; script?: string; viaNpx?: boolean } = {}): Launch {
   const platform = options.platform ?? process.platform;
   const win = platform === "win32";
   if (options.installRoot) {
@@ -107,7 +107,9 @@ export function nomadLaunch(options: { installRoot?: string | null; platform?: N
     return win ? { command: "cmd", args: ["/c", bin] } : { command: bin, args: [] };
   }
   const script = options.script ?? process.argv[1] ?? "";
-  if (/\.(m?js|cjs)$/i.test(script)) {
+  // Started through npx, the script sits in npx's cache, which can be cleared: apps start npx instead.
+  const viaNpx = options.viaNpx ?? process.env.npm_command === "exec";
+  if (!viaNpx && /\.(m?js|cjs)$/i.test(script)) {
     let real = script;
     try {
       real = realpathSync(script);
@@ -151,6 +153,14 @@ function parseAny(format: Format, text: string): unknown {
   }
 }
 
+/** An entry Nomad wrote: it starts "nomad mcp --app <app>". */
+function looksLikeNomad(entry: unknown): boolean {
+  if (!isPlainObject(entry) || !Array.isArray(entry.args)) return false;
+  const args = (entry.args as unknown[]).map(String);
+  const i = args.indexOf("mcp");
+  return i !== -1 && args[i + 1] === "--app";
+}
+
 function isPlainJson(text: string): boolean {
   if (!text.trim()) return true;
   try {
@@ -161,9 +171,10 @@ function isPlainJson(text: string): boolean {
   }
 }
 
-/** One shell word, in single quotes when it needs them. */
-function shellQuote(s: string): string {
-  return /^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`;
+/** One shell word, in single quotes when it needs them (PowerShell quoting on Windows). */
+function shellQuote(s: string, platform: NodeJS.Platform = process.platform): string {
+  if (/^[\w@%+=:,./-]+$/.test(s)) return s;
+  return platform === "win32" ? `'${s.replace(/'/g, "''")}'` : `'${s.replace(/'/g, "'\\''")}'`;
 }
 
 function getIn(obj: unknown, path: string[]): unknown {
@@ -451,6 +462,7 @@ async function plan(nomad: Nomad, mode: "connect" | "remove", options: ConnectOp
       const nextText = editEntry(t.format, text, t.keyPath, entry);
       if (mode === "connect") view.server = before === undefined ? "add" : canonicalJson(before) === canonicalJson(entry) ? "unchanged" : "update";
       else view.server = before === undefined ? "absent" : "remove";
+      if (mode === "remove" && before !== undefined && !looksLikeNomad(before)) throw new Error('Its server named "nomad" was not added by Nomad, so it is left alone.');
       // A file with comments would lose them if Nomad wrote it, so the app's own command does it instead.
       if (t.format === "json5" && nextText !== text && !isPlainJson(text)) {
         if (!t.command) throw new Error("The file has comments, which Nomad would not keep, so it left the file alone.");
@@ -458,7 +470,7 @@ async function plan(nomad: Nomad, mode: "connect" | "remove", options: ConnectOp
         view.notes.push(`${basename(t.config)} has comments, which Nomad would not keep. Run this ${t.displayName} command instead, which keeps them: ${view.manual}`);
         view.server = "manual";
       }
-      if (view.server === "update" && isPlainObject(before) && !String((before as any).args ?? "").includes("mcp")) {
+      if (view.server === "update" && !looksLikeNomad(before)) {
         view.notes.push(`${t.displayName} already has a server named "nomad" that does not look like Nomad's. It will be replaced; the backup keeps the old one.`);
       }
       if (nextText !== text && view.server !== "manual") {
@@ -466,7 +478,8 @@ async function plan(nomad: Nomad, mode: "connect" | "remove", options: ConnectOp
         const [op] = await computeOperations([desired], { root: dirname(t.config), mode: "replace", store: nomad.store, agentId: "nomad-connect" });
         if (op.error) throw new Error(op.error);
         ops.push(op);
-        view.files.push({ path: op.display, action: op.action, diff: op.diff });
+        // No diff for settings files: around the entry they can hold other servers' keys.
+        view.files.push({ path: op.display, action: op.action });
       }
     } catch (e) {
       view.server = "blocked";
@@ -546,6 +559,11 @@ export async function applyConnect(nomad: Nomad, planId: string): Promise<Connec
   await applyOperations(ops);
   for (const o of changing) nomad.store.recordWrite(o.recordKey, o.recordHash!, null, operationId);
   for (const d of deletes) {
+    // Checked again now: still Nomad's own file, unchanged, and not reached through a link.
+    assertNoSymlinks(d.root, d.abs);
+    const rec = nomad.store.lastWrite(d.abs);
+    const now = await fsp.readFile(d.abs).catch(() => null);
+    if (!now || !rec || rec.sha256 !== sha256(new Uint8Array(now))) continue;
     await fsp.rm(d.abs, { force: true });
     nomad.store.forgetWrite(d.abs);
     try {

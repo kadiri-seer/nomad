@@ -55,9 +55,17 @@ export function visitText(doc: AgentDocument, fn: (path: string, text: string) =
   if (doc.identity.persona) fn("identity/persona.md", doc.identity.persona);
   if (doc.identity.description) fn("identity/description", doc.identity.description);
   if (doc.description) fn("description", doc.description);
-  for (const i of doc.instructions) fn(`instructions/${i.id}.md`, i.content);
-  for (const m of doc.memory) fn(`memory/${m.id}.md`, m.content);
+  for (const i of doc.instructions) {
+    fn(`instructions/${i.id}.md`, i.content);
+    if (i.title) fn(`instructions/${i.id}.title`, i.title);
+  }
+  for (const m of doc.memory) {
+    fn(`memory/${m.id}.md`, m.content);
+    if (m.title) fn(`memory/${m.id}.title`, m.title);
+  }
+  for (const t of doc.tools) if (t.description) fn(`tools/${t.name}.description`, t.description);
   for (const s of doc.skills) {
+    if (s.description) fn(`skills/${s.name}/description`, s.description);
     fn(`skills/${s.name}/instructions.md`, s.instructions);
     for (const f of s.files) if (f.encoding === "utf8") fn(`skills/${s.name}/${f.path}`, f.content);
   }
@@ -169,10 +177,11 @@ export function sanitizeDocument(doc: AgentDocument, options: SanitizeOptions = 
       persona: doc.identity.persona === undefined ? undefined : red(doc.identity.persona),
       description: doc.identity.description === undefined ? undefined : red(doc.identity.description)
     },
-    instructions: doc.instructions.map((i) => ({ ...i, content: red(i.content) })),
-    memory: doc.memory.map((m) => ({ ...m, content: red(m.content) })),
+    instructions: doc.instructions.map((i) => ({ ...i, content: red(i.content), ...(i.title === undefined ? {} : { title: red(i.title) }) })),
+    memory: doc.memory.map((m) => ({ ...m, content: red(m.content), ...(m.title === undefined ? {} : { title: red(m.title) }) })),
     skills: doc.skills.map((s) => ({
       ...s,
+      description: red(s.description),
       instructions: red(s.instructions),
       files: s.files
         .filter((f) => keepFile(`skills/${s.name}/${f.path}`))
@@ -182,7 +191,7 @@ export function sanitizeDocument(doc: AgentDocument, options: SanitizeOptions = 
       ...w,
       actions: w.actions.map((a) => (a.kind === "prompt" ? { ...a, text: red(a.text) } : a))
     })),
-    tools: doc.tools.map((t) =>
+    tools: doc.tools.map((t) => ({ ...t, ...(t.description === undefined ? {} : { description: red(t.description) }) })).map((t) =>
       t.mcp
         ? {
             ...t,

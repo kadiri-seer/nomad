@@ -2,6 +2,7 @@
 
 ## Secrets
 
+- Scanned and redacted: persona, descriptions, rules and their titles, memory and its titles, skill descriptions and steps, tool descriptions, routine prompts, integration settings and text files.
 - Detection rules: Anthropic, OpenAI, OpenRouter, GitHub, GitLab, Google, AWS access and secret keys, Slack, Stripe, Hugging Face, Telegram bot tokens, private key blocks, JSON web tokens, passwords in connection strings, and high entropy credential assignments. Placeholders such as `${VAR}` are ignored.
 - Findings report rule, file and line, plus a short fingerprint. Values are never printed or stored.
 - Reads, exports, imports and migrations redact by default. MCP env values and headers holding credentials become references.
@@ -50,8 +51,8 @@ Read only by default. `--allow-writes` lets an assistant apply a preview only wi
 
 - `show_agents` and `borrow_agent` write nothing. `gather_agents` writes only Nomad's own library, the same as reading an agent; the apps are only read.
 - Borrowed text is built from the library, which holds agents with secrets redacted; it says that it does not approve file changes, moves, payments or trades and never asks for secrets. An agent from a package or an agent folder is marked as made by others, and its text says to check with the user before acting on its rules.
-- `bring_agent` is a migration preview from the library: the same approvals, commands shown for approval, backups and checks. `send_back` previews; `apply_send_back` needs `--allow-writes` and the preview's token, refuses while an entry changed in two places has no choice, and refuses when the home changed since the preview. Send back never deletes from the home, redacts secrets, and brings skills and tools only when asked.
-- `nomad connect` writes only the `nomad` entry in each app's settings file, after a preview and a backup, and checks that every other setting reads the same afterwards; a file it cannot edit that way is left alone. A `nomad` skill it did not write is never replaced, and `--remove` deletes only skill files it wrote and that are unchanged. The server it adds is read only unless the user chose `--allow-writes`.
+- `bring_agent` is a migration preview from the library: the same approvals, commands shown for approval, backups and checks. `send_back` previews; `apply_send_back` needs `--allow-writes` and the preview's token, refuses while an entry changed in two places has no choice, and refuses when the home changed since the preview. Send back never deletes from the home, redacts secrets (titles included) before anything is shown or saved, removes Nomad's own markers from what it is given and refuses text that would break them, accepts only plain ids, one-line titles and bounded sizes (500 entries, 20,000 characters each), records where each entry came from, and brings skills and tools only when asked.
+- `nomad connect` writes only the `nomad` entry in each app's settings file, after a preview and a backup, and checks that every other setting reads the same afterwards; a file it cannot edit that way is left alone. Its preview never shows the rest of a settings file, which can hold other servers' keys. `--remove` leaves a server named `nomad` that Nomad did not add, and deletes a skill only if it is still Nomad's own, unchanged file when the removal runs. A `nomad` skill it did not write is never replaced, and `--remove` deletes only skill files it wrote and that are unchanged. The server it adds is read only unless the user chose `--allow-writes`.
 
 ## SSH
 

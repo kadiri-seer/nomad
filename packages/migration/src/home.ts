@@ -1,7 +1,7 @@
 import { canonicalJson, documentHash, NomadError, sha256, shortId } from "@nomad/core";
 import { displayPath, resolveRoot } from "@nomad/core/node";
 import { parseDocument, type AgentDocument, type InstructionKind, type MemoryKind } from "@nomad/schema";
-import { sanitizeDocument } from "@nomad/security";
+import { redactText, sanitizeDocument } from "@nomad/security";
 import { findAdapter } from "@nomad/adapters";
 import type { LocationRow, VersionRow } from "@nomad/storage";
 import type { Nomad } from "./engine";
@@ -390,6 +390,25 @@ const norm = (s: string | undefined) =>
     .replace(/\s+/g, " ")
     .trim();
 
+/** Limits for what a chat, the command line or the dashboard can send back at once. */
+export const SEND_BACK_LIMITS = { entries: 500, content: 20_000, title: 200, tags: 20, tag: 64 } as const;
+const ID_RE = /^[A-Za-z0-9][\w.:-]{0,127}$/;
+const MARKER_RE = /<!--\s*nomad:[^>]*-->/g;
+
+/**
+ * Text sent back, made safe to store and to write into apps later: Nomad's own markers are removed
+ * (they would confuse where Nomad's sections begin and end), and secrets are redacted.
+ */
+function cleanText(value: string, what: string, max: number, oneLine: boolean): { text: string; redacted: number } {
+  let t = value.replace(MARKER_RE, "");
+  if (/<!--\s*nomad:/.test(t)) throw new NomadError(`The ${what} contains a Nomad marker ("<!-- nomad:"), which cannot be sent back.`, "usage");
+  if (oneLine) t = t.replace(/\s+/g, " ");
+  t = t.trim();
+  if (t.length > max) throw new NomadError(`The ${what} is longer than ${max.toLocaleString("en-US")} characters.`, "usage", "Send it back in smaller entries.");
+  const r = redactText(t);
+  return { text: r.text, redacted: r.count };
+}
+
 /** The object without its undefined values, so spreading it never blanks a field. */
 function defined<T extends Record<string, unknown>>(o: T): Record<string, any> {
   return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
@@ -485,17 +504,37 @@ export async function previewSendBack(nomad: Nomad, input: SendBackInput): Promi
   }
 
   // A change to an existing entry keeps what it does not mention (kind, title, tags) from the home.
+  // Everything given directly is checked, cleaned and redacted before it is compared or shown.
+  const L = SEND_BACK_LIMITS;
+  if ((input.memory?.length ?? 0) > L.entries || (input.instructions?.length ?? 0) > L.entries) throw new NomadError(`Send back at most ${L.entries} memory entries and ${L.entries} rules at once.`, "usage");
+  let givenRedacted = 0;
+  const given = (value: string, what: string, max: number, oneLine: boolean) => {
+    const r = cleanText(value, what, max, oneLine);
+    givenRedacted += r.redacted;
+    return r.text;
+  };
+  const checkId = (id: string | undefined, what: string) => {
+    if (id !== undefined && !ID_RE.test(id)) throw new NomadError(`"${id.slice(0, 40)}" is not a valid ${what} id.`, "usage", "Use the id shown by borrow_agent or the preview, or leave it out for a new entry.");
+  };
+  const provenance = { platform: input.from?.adapter ?? "nomad", note: `Sent back from ${fromLabel}` };
   for (const m of input.memory ?? []) {
-    if (!m.content?.trim()) continue;
+    checkId(m.id, "memory entry");
+    const content = given(m.content ?? "", "memory entry", L.content, false);
+    if (!content) continue;
+    const title = m.title === undefined ? undefined : given(m.title, "title", L.title, true) || undefined;
+    if (m.tags && (m.tags.length > L.tags || m.tags.some((t) => typeof t !== "string" || t.length > L.tag || /[\s,]/.test(t)))) throw new NomadError(`Tags are single words, at most ${L.tags} of them, each up to ${L.tag} characters.`, "usage");
     const id = m.id ?? shortId("mem");
     explicitKeys.add(`memory:${id}`);
-    incoming.memory.push(defined({ id, kind: m.kind ?? (m.id ? undefined : "note"), scope: m.id ? undefined : "agent", title: m.title?.trim() || undefined, content: m.content.trim(), date: new Date().toISOString().slice(0, 10), tags: m.tags ?? (m.id ? undefined : []), __new: m.id ? undefined : true }));
+    incoming.memory.push(defined({ id, kind: m.kind ?? (m.id ? undefined : "note"), scope: m.id ? undefined : "agent", title, content, date: new Date().toISOString().slice(0, 10), tags: m.tags ?? (m.id ? undefined : []), source: provenance, __new: m.id ? undefined : true }));
   }
   for (const i of input.instructions ?? []) {
-    if (!i.content?.trim()) continue;
+    checkId(i.id, "rule");
+    const content = given(i.content ?? "", "rule", L.content, false);
+    if (!content) continue;
+    const title = i.title === undefined ? undefined : given(i.title, "title", L.title, true) || undefined;
     const id = i.id ?? shortId("rule");
     explicitKeys.add(`instructions:${id}`);
-    incoming.instructions.push(defined({ id, kind: i.kind ?? (i.id ? undefined : "custom"), title: i.title?.trim() || undefined, content: i.content.trim(), __new: i.id ? undefined : true }));
+    incoming.instructions.push(defined({ id, kind: i.kind ?? (i.id ? undefined : "custom"), title, content, source: provenance, __new: i.id ? undefined : true }));
   }
   if (!input.from && !explicitKeys.size) throw new NomadError("There is nothing to send back.", "usage", "Give the memory entries or rules to save, or the app copy to read them from.");
 
@@ -554,7 +593,7 @@ export async function previewSendBack(nomad: Nomad, input: SendBackInput): Promi
   next.updatedAt = new Date().toISOString();
   const valid = parseDocument(next);
   const clean = sanitizeDocument(valid, { includeSecrets: false });
-  const secretsRedacted = clean.report.redactedText + clean.report.strippedEnvValues.length;
+  const secretsRedacted = givenRedacted + clean.report.redactedText + clean.report.strippedEnvValues.length;
   if (secretsRedacted) notes.push(`${secretsRedacted} secret value(s) in what is sent back were redacted. Secrets never go into the home as values.`);
 
   if (fromInfo && locDoc) {
