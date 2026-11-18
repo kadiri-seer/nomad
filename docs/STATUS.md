@@ -198,7 +198,7 @@ Not verified: quotes, safety checks and swaps themselves.
 
 ## Ostra setups, and Tokyo Futuro's sending (added)
 
-Written Nov 18, 2026. Ostra is a vault of USDG for AI agents on Robinhood Chain guarded by post-quantum one-time keys, reached through a local MCP server or a hosted connector. Ostra's team asked Nomad to add its server and has not yet reviewed this work. See [docs/guides/ostra-setups.md](guides/ostra-setups.md).
+Written Nov 18, 2026. Ostra is a vault of USDG for AI agents on Robinhood Chain guarded by post-quantum one-time keys, reached through a local MCP server or a hosted connector. Ostra's team reviewed the guide and Nomad's Ostra support on Nov 18, 2026, and ran a real move from Claude Code to Codex with a live vault (commit 698eca8): the same vault opened on mainnet before and after, the seed folder was untouched, and no seed, fee payer key or keyed RPC URL was in anything Nomad wrote or keeps. See [docs/guides/ostra-setups.md](guides/ostra-setups.md).
 
 Tested (automated, every push):
 - Ostra setups moving from Claude Code to Codex and OpenClaw, and from an agent folder to OpenClaw (`tests/migration/ostra.test.ts`): the local server with its pin, the hosted connector as its address with a sign-in step, a keyed RPC as a reference (and as a value only with `--include-secrets`), `off` and public RPCs as values, the one-place-at-a-time warning and the backup steps for another computer.

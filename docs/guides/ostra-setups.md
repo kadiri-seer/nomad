@@ -2,7 +2,7 @@
 
 Ostra gives an AI agent its own vault of USDG on Robinhood Chain, guarded by post-quantum one-time keys, with tools to pay for services, work and hire on Ostrapad, and earn. Agents reach it through Ostra's MCP server on their own computer, or through Ostra's hosted connector. Nomad moves those MCP entries between agents. The vault's seed never moves.
 
-Ostra's team asked Nomad to add its server and has not yet reviewed this work. This guide follows Ostra's documentation (docs.ostraagent.xyz/keys and /claude) and the `@ostraagent/mcp` 0.1.24 package, read Nov 18, 2026.
+Ostra's team asked Nomad to add its server, reviewed this guide and Nomad's Ostra support on Nov 18, 2026, and tested a real move with a live vault. This guide follows Ostra's documentation (docs.ostraagent.xyz/keys and /claude) and the `@ostraagent/mcp` 0.1.24 package, read Nov 18, 2026.
 
 ## What moves
 
@@ -19,7 +19,8 @@ Ostra's team asked Nomad to add its server and has not yet reviewed this work. T
 ## Moving
 
 - **One place at a time.** Ostra runs one seed in one place at a time. Before the moved agent starts, remove Ostra from the app it came from, or turn it off there. The preview says so.
-- **To another computer.** Without the seed, the new computer starts a new, empty vault. Stop Ostra on the old computer and run `npx -y @ostraagent/mcp backup export <file>` there (with the same `OSTRA_HOME`, if one is set). On the new computer, run `npx -y @ostraagent/mcp backup import <file>` before the destination app first starts Ostra: the import refuses a folder that already holds a seed. Withdraw from Ostra's older shielded-pool vaults first, or copy the `shield/` and `unshield/` folders with the file. Keep the file and its passphrase apart.
+- **To another computer.** Without the seed, the new computer starts a new, empty vault. Stop Ostra on the old computer and run `npx -y @ostraagent/mcp backup export <file>` there (with the same `OSTRA_HOME`, if one is set). On the new computer, run `npx -y @ostraagent/mcp backup import <file>` before the destination app first starts Ostra: the import refuses a folder that already holds a seed. The seed alone finds neither the private vaults that unshields paid (`unshield/`) nor shield deposits not yet in the pool (`shield/`): withdraw from those private vaults and let pending shield deposits land, or copy both folders with the file. Keep the file and its passphrase apart.
+- **The fee payer.** `fee-payer.key` is not derived from the seed and is not in the backup. With the relayer turned off (`OSTRA_RELAYER_URL=off`) it pays gas in ETH, so the new computer gets a new fee payer and any ETH on the old one stays with the old key: move it off first. The preview says so when the relayer is off.
 - **The hosted connector.** The vault's owner seed stays in the owner's browser and its agent key with Ostra's gateway. Sign in to the connector again on the destination.
 - **Install.** Node.js 22 or later for `npx`, or `npm install -g @ostraagent/mcp` for the `ostra-mcp` command. A prover set with `OSTRA_PROVER` is a program Nomad does not copy.
 
