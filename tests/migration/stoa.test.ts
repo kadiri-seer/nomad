@@ -42,7 +42,7 @@ describe("Stoa setups", () => {
     expect(cfg.mcp_servers.stoa).toEqual({ url: STOA_URL });
     expect(read(join(dest, "skills/stoa/SKILL.md"))).toContain("Run safety_check on unfamiliar tokens");
     expect(notes(plan)).toContain(`"stoa" is Stoa's hosted swap router. It needs no key and never signs or sends anything`);
-    expect(notes(plan)).toContain("0x2F2804fad735a38015650f32f95Ad5E08D6B3eE5");
+    expect(notes(plan)).toContain("0x2F2804fad735a38015650f32f95Ad5E08D6B3eE5 on Robinhood Chain (4663), 0x104752D50ef893da579Ad813918269e09Ea17dbA on Elysium (99901)");
     expect(warnings(plan)).not.toContain("Stoa");
     expect(treeHash(cc)).toBe(before);
   });

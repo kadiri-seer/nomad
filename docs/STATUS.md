@@ -186,13 +186,13 @@ Not verified: trades and launches themselves (nothing was signed), and the refer
 
 ## Stoa setups (added)
 
-Written Nov 18, 2026. Stoa is a swap router on Robinhood Chain and Elysium, reached through a hosted, keyless, read-only MCP server whose swaps are unsigned transactions for the user's wallet. The Stoa team asked Nomad to add its server and has not yet reviewed this work. See [docs/guides/stoa-setups.md](guides/stoa-setups.md).
+Written Nov 18, 2026. Stoa is a swap router on Robinhood Chain and Elysium, reached through a hosted, keyless, read-only MCP server whose swaps are unsigned transactions for the user's wallet. The Stoa team asked Nomad to add its server and reviewed the guide on Nov 18, 2026. See [docs/guides/stoa-setups.md](guides/stoa-setups.md).
 
 Tested (automated, every push):
 - Stoa setups moving from Claude Code to Codex and OpenClaw (`tests/migration/stoa.test.ts`): the address exactly as written (no referral added), the `stoa` skill, and the preview naming Stoa's router; the source unchanged.
 - Which entries count as Stoa, and 9 look-alikes that do not, which get no note.
 
-Checked with real applications: the Real apps workflow asks Stoa's server, with no key, for its tools and checks `list_tokens` names the router the preview tells people to check, then moves a setup to the real Codex and OpenClaw, which list the server, with the skill in OpenClaw (`scripts/check-stoa.mjs`). Nothing is built, signed or sent.
+Checked with real applications: the Real apps workflow asks Stoa's server, with no key, for its tools and checks `list_tokens` names the routers the preview tells people to check, on Robinhood Chain and Elysium, then moves a setup to the real Codex and OpenClaw, which list the server, with the skill in OpenClaw (`scripts/check-stoa.mjs`). Nothing is built, signed or sent.
 
 Not verified: quotes, safety checks and swaps themselves.
 

@@ -852,8 +852,9 @@ const isStoaHost = (url: string | undefined) => {
     return false;
   }
 };
-/** Stoa's router on Robinhood Chain (docs/contracts and its skill, read Nov 18, 2026). */
+/** Stoa's routers (docs/contracts and its skill, read Nov 18, 2026). */
 const STOA_ROUTER = "0x2F2804fad735a38015650f32f95Ad5E08D6B3eE5";
+const STOA_ROUTER_ELYSIUM = "0x104752D50ef893da579Ad813918269e09Ea17dbA";
 
 /**
  * Stoa, a swap router on Robinhood Chain and Elysium, as Stoa documents it (stoadex.com/docs/mcp, its skill
@@ -874,7 +875,7 @@ const STOA: ServerProfile = {
     out.notes.push({
       level: "info",
       category: "tools",
-      message: `"${t.name}" is Stoa's hosted swap router. It needs no key and never signs or sends anything: it quotes, checks tokens and builds unsigned swaps for your wallet to sign. Before signing on Robinhood Chain, check the transaction goes to Stoa's router, ${STOA_ROUTER}. Nomad copies its address.`
+      message: `"${t.name}" is Stoa's hosted swap router. It needs no key and never signs or sends anything: it quotes, checks tokens and builds unsigned swaps for your wallet to sign. Before signing, check the transaction goes to Stoa's router: ${STOA_ROUTER} on Robinhood Chain (4663), ${STOA_ROUTER_ELYSIUM} on Elysium (99901). Nomad copies its address.`
     });
   }
 };

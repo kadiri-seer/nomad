@@ -14,7 +14,7 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cli = join(repo, "apps/cli/dist/nomad.js");
 const bin = (name) => (process.env.NOMAD_APPS_BIN ? join(process.env.NOMAD_APPS_BIN, name) : name);
 const URL_STOA = "https://stoadex.com/mcp";
-const ROUTER = "0x2F2804fad735a38015650f32f95Ad5E08D6B3eE5";
+const ROUTERS = { robinhood: "0x2F2804fad735a38015650f32f95Ad5E08D6B3eE5", elysium: "0x104752D50ef893da579Ad813918269e09Ea17dbA" };
 const INIT = { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "nomad-check", version: "1.0" } } };
 const home = mkdtempSync(join(tmpdir(), "nomad-stoa-"));
 const env = { ...process.env, HOME: home, USERPROFILE: home, NOMAD_FAKE_HOME: home, NOMAD_HOME: join(home, ".nomad"), CODEX_HOME: join(home, ".codex"), NO_COLOR: "1", CI: "1" };
@@ -46,9 +46,12 @@ try {
   const list = await post(2, "tools/list", {}).catch(() => ({}));
   const names = (list.body?.result?.tools ?? []).map((t) => t.name);
   for (const n of ["list_tokens", "quote", "build_swap", "safety_check", "stock_tokens"]) check(`it offers ${n}`, names.includes(n), names.join(", "));
-  const tokens = await post(3, "tools/call", { name: "list_tokens", arguments: { chain: "robinhood" } }).catch(() => ({}));
-  const router = tokens.body?.result?.structuredContent?.router ?? json(tokens.body?.result?.content?.[0]?.text ?? "")?.router;
-  check(`list_tokens names the router the preview tells people to check (${ROUTER})`, String(router).toLowerCase() === ROUTER.toLowerCase(), String(router));
+  let id = 3;
+  for (const [chain, expected] of Object.entries(ROUTERS)) {
+    const tokens = await post(id++, "tools/call", { name: "list_tokens", arguments: { chain } }).catch(() => ({}));
+    const router = tokens.body?.result?.structuredContent?.router ?? json(tokens.body?.result?.content?.[0]?.text ?? "")?.router;
+    check(`list_tokens names the ${chain} router the preview tells people to check (${expected})`, String(router).toLowerCase() === expected.toLowerCase(), String(router));
+  }
 
   mkdirSync(join(home, ".claude/skills/stoa"), { recursive: true });
   writeFileSync(join(home, ".claude/CLAUDE.md"), "# Rules\n\n- Run Stoa's safety check first.\n");
