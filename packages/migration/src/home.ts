@@ -131,10 +131,18 @@ function isFromOthers(nomad: Nomad, agentId: string, versions = nomad.store.list
   return nomad.store.listOperations(agentId).some((o) => o.kind === "import" || PACKAGE_LABEL.test(o.source ?? ""));
 }
 
+/**
+ * The home agent at a found location, if any. Locations are kept by their real path, so a folder
+ * reached through a link (as /var is on macOS) is looked up by its real path too.
+ */
+function knownAt(nomad: Nomad, adapter: string, root: string, nativeId: string): string | null {
+  return nomad.store.findByLocation(adapter, resolveRoot(root), nativeId)?.agentId ?? nomad.store.findByLocation(adapter, root, nativeId)?.agentId ?? null;
+}
+
 /** Agents found at the usual places on this computer that are not in the home yet. Reads no agent files. */
 export async function notGathered(nomad: Nomad): Promise<NotGathered[]> {
   const found = await nomad.scan();
-  return found.flatMap((p) => p.agents.filter((a) => !a.agentId).map((a) => ({ adapter: p.adapter, app: appName(p.adapter), root: p.root, display: displayPath(p.root), nativeId: a.nativeId, name: a.name })));
+  return found.flatMap((p) => p.agents.filter((a) => !knownAt(nomad, p.adapter, p.root, a.nativeId)).map((a) => ({ adapter: p.adapter, app: appName(p.adapter), root: p.root, display: displayPath(p.root), nativeId: a.nativeId, name: a.name })));
 }
 
 export interface GatherResult {
@@ -152,7 +160,8 @@ export async function gatherAgents(nomad: Nomad): Promise<GatherResult> {
   for (const p of found) {
     for (const a of p.agents) {
       try {
-        const known = a.agentId ? nomad.store.getAgent(a.agentId) : undefined;
+        const id = knownAt(nomad, p.adapter, p.root, a.nativeId);
+        const known = id ? nomad.store.getAgent(id) : undefined;
         const r = await nomad.readLocation(p.adapter, p.root, a.nativeId);
         result.gathered.push({ agentId: r.doc.id, name: r.doc.name, app: appName(p.adapter), display: displayPath(p.root), nativeId: a.nativeId, version: r.version ?? null, added: !known, secretsRedacted: r.scan.findings.length });
       } catch (e) {

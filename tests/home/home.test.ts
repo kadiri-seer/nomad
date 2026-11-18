@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { applySendBack, borrowAgent, gatherAgents, homeAgents, notGathered, previewSendBack } from "@nomad/migration";
 import { FAKE_OPENAI_KEY } from "../fixtures/platforms";
@@ -36,6 +36,28 @@ describe("your Nomad: show and gather", () => {
     const again = await gatherAgents(env.nomad);
     expect(again.gathered.every((g) => !g.added)).toBe(true);
     expect(homeAgents(env.nomad).length).toBe(waiting.length);
+  });
+
+  it("knows gathered agents when the home folder is reached through a link (as /var is on macOS)", async () => {
+    const link = `${env.home}-link`;
+    symlinkSync(env.home, link, "junction");
+    const before = process.env.NOMAD_FAKE_HOME;
+    process.env.NOMAD_FAKE_HOME = link;
+    try {
+      const waiting = await notGathered(env.nomad);
+      expect(waiting.length).toBeGreaterThan(0);
+      const r = await gatherAgents(env.nomad);
+      expect(r.gathered.every((g) => g.added)).toBe(true);
+      expect(await notGathered(env.nomad)).toEqual([]);
+      expect((await gatherAgents(env.nomad)).gathered.every((g) => !g.added)).toBe(true);
+    } finally {
+      process.env.NOMAD_FAKE_HOME = before;
+      try {
+        rmSync(link, { force: true });
+      } catch {
+        /* the temporary folder is removed with the test home */
+      }
+    }
   });
 
   it("narrows the list by search words", async () => {
