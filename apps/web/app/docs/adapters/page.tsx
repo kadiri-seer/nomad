@@ -124,6 +124,10 @@ export default function Adapters() {
       <p>
         Ostra gives an AI agent its own vault of USDG on Robinhood Chain, guarded by post-quantum one-time keys, through a local MCP server or a hosted connector. Nomad moves the local server (<code>npx @ostraagent/mcp</code> or <code>ostra-mcp</code>) and the connector into the destination&apos;s own format. The vault&apos;s seed (<code>~/.ostra</code> or <code>OSTRA_HOME</code>) and seed backups are never read or copied, and RPC addresses that can carry a provider key become references. The preview says to run Ostra in one app at a time and, for another computer, how to bring the vault along with Ostra&apos;s own encrypted backup. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/ostra-setups.md">Ostra setups guide</a>.
       </p>
+      <h2>Stoa setups</h2>
+      <p>
+        Stoa is a swap router on Robinhood Chain and Elysium, reached through a hosted MCP server that needs no key and never signs anything: it quotes, checks tokens and builds unsigned swaps for the user&apos;s wallet to sign. Nomad moves the server (<code>https://stoadex.com/mcp</code>) and the <code>stoa</code> skill into the destination&apos;s own format, and the preview names Stoa&apos;s router to check before signing. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/stoa-setups.md">Stoa setups guide</a>.
+      </p>
       <h3>Guided platforms</h3>
       <p>
         Hosted products (ChatGPT, Claude, Gemini, Grok, Perplexity) do not offer an agent import, and frameworks (CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n, Letta) define agents in code or in their own apps. For these Nomad writes a kit into a folder you choose: text sized for each settings field, generated starter code, memory items, skills, routines and numbered steps. Nothing is sent to those services.

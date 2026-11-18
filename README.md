@@ -49,6 +49,8 @@ Tokyo Futuro setups move too: the hosted server, the local server (`npx tokyo-fu
 
 Ostra setups move too: the local server (`npx @ostraagent/mcp` or `ostra-mcp`) and Ostra's hosted connector arrive in each destination's format. The vault's seed (`~/.ostra` or `OSTRA_HOME`) and seed backups are never read or copied, RPC addresses that can carry a provider key become references (`off` stays `off`), and the preview says to run Ostra in one app at a time and, for another computer, how to bring the vault with Ostra's own encrypted backup. Ostra is a post-quantum vault for AI agents on Robinhood Chain. See [docs/guides/ostra-setups.md](docs/guides/ostra-setups.md).
 
+Stoa setups move too: Stoa's hosted, keyless swap router (`https://stoadex.com/mcp`) and its `stoa` skill arrive in each destination's format, with the preview naming the router to check before signing. Stoa quotes, checks tokens and builds unsigned swaps on Robinhood Chain and Elysium for the user's wallet to sign. See [docs/guides/stoa-setups.md](docs/guides/stoa-setups.md).
+
 Agent folders can carry MCP servers too: a `.mcp.json` next to `SOUL.md`, `AGENTS.md`, `memory/` and `skills/` is read with the rest of the folder.
 
 Installed Codex plugins are read too: their servers and skills move to other apps as ordinary entries, and another Codex gets the plugin's install commands.
