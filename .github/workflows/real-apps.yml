@@ -27,6 +27,7 @@ on:
       - "scripts/check-qhooks.mjs"
       - "scripts/check-tokyo.mjs"
       - "scripts/check-ostra.mjs"
+      - "scripts/check-stoa.mjs"
       - ".github/workflows/real-apps.yml"
 permissions:
   contents: read
@@ -77,3 +78,6 @@ jobs:
       # Ostra's package in a throwaway vault folder with its services off, its connector, and a move to the real Codex and OpenClaw.
       - name: Check Ostra
         run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-ostra.mjs
+      # Keyless and read-only: Stoa's hosted server lists its tools and router, and a setup moves to the real Codex and OpenClaw.
+      - name: Check Stoa
+        run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-stoa.mjs
