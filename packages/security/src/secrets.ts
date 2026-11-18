@@ -53,6 +53,9 @@ export const SECRET_RULES: SecretRule[] = [
   { id: "huggingface-token", name: "Hugging Face token", pattern: /\bhf_[A-Za-z0-9]{34,}/g },
   { id: "telegram-bot-token", name: "Telegram bot token", pattern: /\b\d{8,10}:AA[A-Za-z0-9_-]{33}\b/g },
   { id: "jwt", name: "JSON Web Token", pattern: /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g },
+  // Ostra's encrypted seed backup (backup export): {"version":1,"kdf":{"name":"scrypt",...},"salt","iv","ciphertext","tag"}.
+  // It opens with a passphrase, so it can still be attacked offline: the ciphertext never moves.
+  { id: "ostra-seed-backup", name: "Ostra seed backup", pattern: /"kdf"\s*:\s*\{\s*"name"\s*:\s*"scrypt"[^}]{0,120}\}[^}]{0,400}?"ciphertext"\s*:\s*"([0-9a-fA-F]{32,})"/g, group: 1 },
   // Tokyo Futuro's wallet sign-in token, as Tokyo describes it: <wallet>.<expiry>.<epoch>.<hmac>, valid 7 days.
   { id: "tokyo-futuro-token", name: "Tokyo Futuro sign-in token", pattern: /\b0x[0-9a-fA-F]{40}\.\d{6,14}\.\d{1,14}\.[A-Za-z0-9_+/=-]{16,}/g },
   { id: "url-credentials", name: "Password in connection string", pattern: /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:([^\s@/]{6,})@/gi, group: 1 },
@@ -90,7 +93,9 @@ const PUBLIC_RPC_HOSTS = new Set([
   "rpc.testnet.chain.robinhood.com",
   "robinhood-rpc.publicnode.com",
   "rpc.ordofi.network",
-  "mainnet.base.org"
+  "mainnet.base.org",
+  // Ostra's default Ethereum RPC (OSTRA_ETH_RPC_URL), keyless.
+  "ethereum-rpc.publicnode.com"
 ]);
 
 export function isPublicRpcUrl(value: string): boolean {

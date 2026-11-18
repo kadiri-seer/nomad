@@ -18,14 +18,18 @@ export const KEY_MATERIAL_DIRS: RegExp[] = [
   /(^|\/)\.brainchain(\/|$)/,
   /(^|\/)\.config\/brainchain-worker(\/|$)/,
   // Rushr: the agent wallet made by create_wallet, the registered API key and the daily spend ledger.
-  /(^|\/)\.rushr(\/|$)/
+  /(^|\/)\.rushr(\/|$)/,
+  // Ostra: the master seed (master.key), the fee payer key and the one-time key records (OSTRA_HOME, by default ~/.ostra).
+  /(^|\/)\.ostra(\/|$)/
 ];
 
 /** Key files by name, wherever they are. */
 export const KEY_MATERIAL_FILES: RegExp[] = [
   /(^|\/)agent(-\d+)?\.key$/,
   // Rushr's and its Talos example agent's wallet file ({ "privateKey": ... }), wherever it is kept.
-  /(^|\/)\.?agent-wallet\.json$/
+  /(^|\/)\.?agent-wallet\.json$/,
+  // Ostra's encrypted seed backup, as its docs name it (ostra-seed-backup.json) and similar names.
+  /(^|\/)[^/]*seed-backup[^/]*\.json$/i
 ];
 
 function matches(p: string): boolean {

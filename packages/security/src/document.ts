@@ -6,7 +6,8 @@ const EVM_KEY_VALUE = /\b0x[0-9a-fA-F]{64}\b/;
 /** True when an env or header value must not be copied: a credential by name or shape, a wallet key, or a private RPC URL. */
 export function isSecretEnvEntry(key: string, value: string): boolean {
   if (isSensitiveEnvKey(key) || looksLikeSecretValue(value) || EVM_KEY_VALUE.test(value)) return true;
-  return isRpcEnvKey(key) && !isPublicRpcUrl(value);
+  // "off" turns an RPC (or service) off, as Ostra's settings allow: it is a setting, not an address.
+  return isRpcEnvKey(key) && !isPublicRpcUrl(value) && value.trim().toLowerCase() !== "off";
 }
 
 /** Names that hold wallet key material: PRIVATE_KEY, WALLET_SECRET, SIGNER_KEY, HEDGEHOOD_SESSION_KEY and similar. */
