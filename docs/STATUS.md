@@ -184,6 +184,20 @@ Checked with real applications: the Real apps workflow moves QHooks to Codex CLI
 
 Not verified: trades and launches themselves (nothing was signed), and the referral payouts.
 
+## Ostra setups, and Tokyo Futuro's sending (added)
+
+Written Nov 18, 2026. Ostra is a vault of USDG for AI agents on Robinhood Chain guarded by post-quantum one-time keys, reached through a local MCP server or a hosted connector. Ostra's team asked Nomad to add its server and has not yet reviewed this work. See [docs/guides/ostra-setups.md](guides/ostra-setups.md).
+
+Tested (automated, every push):
+- Ostra setups moving from Claude Code to Codex and OpenClaw, and from an agent folder to OpenClaw (`tests/migration/ostra.test.ts`): the local server with its pin, the hosted connector as its address with a sign-in step, a keyed RPC as a reference (and as a value only with `--include-secrets`), `off` and public RPCs as values, the one-place-at-a-time warning and the backup steps for another computer.
+- The seed folder (`~/.ostra`: `master.key`, `fee-payer.key`, `wots/`) and seed backup files are key material, never read; a planted seed and backup never appear in destinations, plans, receipts or Nomad's library. A backup pasted into notes is removed.
+- Another deployment record, other service addresses, a prover and an RPC file each get their warning or step; Ostra's package, command and connector are recognised, and 10 look-alikes are not.
+- Tokyo Futuro's `tokyo-futuro-mcp` 0.2.0 can send with `TOKYO_ALLOW_SEND=1`: the preview now says when sending is off, warns when it is on with its approval cap, and carries the cap only as a value.
+
+Checked with real applications: the Real apps workflow starts `@ostraagent/mcp` 0.1.24 in a throwaway vault folder with Ostra's services off and lists its tools, checks the hosted connector answers, and moves a setup with a planted seed and backup to the real Codex and OpenClaw, which list the servers, with the seed, backup and RPC key nowhere in what Nomad wrote (`scripts/check-ostra.mjs`). `scripts/check-tokyo.mjs` now checks `tokyo-futuro-mcp` 0.2.0 and its new tools.
+
+Not verified: a real vault, funds, payments and the backup round trip (no vault was funded).
+
 ## Tokyo Futuro setups and .mcp.json in agent folders (added)
 
 Written Nov 17, 2026. Tokyo Futuro is an onchain city game on Robinhood Chain where agents take jobs, join crews and bet, through a hosted server or a local one that signs in with the agent's wallet. The Tokyo Futuro team asked Nomad to add its servers and has not yet reviewed this work. See [docs/guides/tokyo-futuro-setups.md](guides/tokyo-futuro-setups.md).

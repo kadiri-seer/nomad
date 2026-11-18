@@ -47,6 +47,8 @@ QHooks setups move too: the hosted server (`https://qhooks.com/mcp`) arrives in 
 
 Tokyo Futuro setups move too: the hosted server, the local server (`npx tokyo-futuro-mcp`, `tokyo-futuro-mcp` or `node tokyo-mcp.mjs`) and the `tokyo-futuro` skill arrive in each destination's format. `AGENT_KEY`, the agent's wallet key, is never copied, sign-in tokens are removed from notes and other text, and the preview warns when `TOKYO_URL` points anywhere other than Tokyo's own server. Tokyo Futuro is an onchain city game on Robinhood Chain. See [docs/guides/tokyo-futuro-setups.md](docs/guides/tokyo-futuro-setups.md).
 
+Ostra setups move too: the local server (`npx @ostraagent/mcp` or `ostra-mcp`) and Ostra's hosted connector arrive in each destination's format. The vault's seed (`~/.ostra` or `OSTRA_HOME`) and seed backups are never read or copied, RPC addresses that can carry a provider key become references (`off` stays `off`), and the preview says to run Ostra in one app at a time and, for another computer, how to bring the vault with Ostra's own encrypted backup. Ostra is a post-quantum vault for AI agents on Robinhood Chain. See [docs/guides/ostra-setups.md](docs/guides/ostra-setups.md).
+
 Agent folders can carry MCP servers too: a `.mcp.json` next to `SOUL.md`, `AGENTS.md`, `memory/` and `skills/` is read with the rest of the folder.
 
 Installed Codex plugins are read too: their servers and skills move to other apps as ordinary entries, and another Codex gets the plugin's install commands.
