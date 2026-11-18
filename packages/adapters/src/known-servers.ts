@@ -817,8 +817,12 @@ const OSTRA: ServerProfile = {
     });
     const prefix = home ? `OSTRA_HOME=${home} ` : "";
     out.manualSteps.push(
-      `If ${platform} runs on another computer, "${t.name}" needs the same seed there, or it starts a new, empty vault. Stop Ostra on this computer and run ${prefix}npx -y @ostraagent/mcp backup export <file> here; then, on the new computer, run ${prefix}npx -y @ostraagent/mcp backup import <file> before ${platform} first starts it. Withdraw from Ostra's older shielded-pool vaults first, or copy the shield/ and unshield/ folders with the file. Keep the file and its passphrase apart.`
+      `If ${platform} runs on another computer, "${t.name}" needs the same seed there, or it starts a new, empty vault. Stop Ostra on this computer and run ${prefix}npx -y @ostraagent/mcp backup export <file> here; then, on the new computer, run ${prefix}npx -y @ostraagent/mcp backup import <file> before ${platform} first starts it. The seed alone finds neither the private vaults that unshields paid (unshield/) nor shield deposits not yet in the pool (shield/): withdraw from those private vaults and let pending shield deposits land, or copy both folders with the file. Keep the file and its passphrase apart.`
     );
+    // With the relayer off, gas is paid in ETH by fee-payer.key, which is not derived from the seed and is not in the backup.
+    if (lit("OSTRA_RELAYER_URL")?.toLowerCase() === "off") {
+      out.manualSteps.push(`"${t.name}" pays gas in ETH from its own fee payer (OSTRA_RELAYER_URL=off). fee-payer.key is not derived from the seed and is not in Ostra's backup, so another computer gets a new fee payer: move any ETH off the old one first.`);
+    }
     for (const k of ["OSTRA_DEPLOYMENT", "OSTRA_SWAP_DEPLOYMENT"]) {
       const v = lit(k);
       if (v) out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" uses another Ostra deployment record (${k}=${v}): it decides which contracts the vault uses. Keep it only if you trust it. The file is not copied.` });

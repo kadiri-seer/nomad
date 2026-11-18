@@ -123,6 +123,9 @@ describe("Ostra setups", () => {
     expect(all({ OSTRA_HOME: "/srv/agents/payer" })).toContain("OSTRA_HOME=/srv/agents/payer npx -y @ostraagent/mcp backup export <file>");
     expect(all({ OSTRA_HOME: "/srv/agents/payer" })).toContain("master.key in /srv/agents/payer");
     expect(all({})).toContain("npm install -g @ostraagent/mcp. It needs Node.js 22 or later");
+    expect(all({})).toContain("The seed alone finds neither the private vaults that unshields paid (unshield/) nor shield deposits not yet in the pool (shield/)");
+    expect(all({})).not.toContain("fee-payer.key");
+    expect(all({ OSTRA_RELAYER_URL: "off" })).toContain("fee-payer.key is not derived from the seed and is not in Ostra's backup, so another computer gets a new fee payer");
   });
 
   it("RPC settings: a keyed URL is a secret, off and public endpoints are values", () => {
