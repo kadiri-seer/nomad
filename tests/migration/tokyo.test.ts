@@ -69,7 +69,8 @@ describe("Tokyo Futuro setups", () => {
     expect(local.env).toEqual({ TOKYO_URL, AGENT_NAME: "Kestrel", AGENT_ERC8004_ID: "20708" });
     expect(local.env_vars).toEqual(["AGENT_KEY"]);
     expect(notes(plan)).toContain(`"tokyo-futuro" is Tokyo Futuro's hosted server. It needs no key and never signs anything`);
-    expect(notes(plan)).toContain(`"tokyo-local" runs Tokyo Futuro's server on this computer. It uses AGENT_KEY, the agent's wallet key, only to sign Tokyo's sign-in message`);
+    expect(notes(plan)).toContain(`"tokyo-local" runs Tokyo Futuro's server on this computer. It uses AGENT_KEY, the agent's wallet key, to sign Tokyo's sign-in message.`);
+    expect(notes(plan)).toContain(`"tokyo-local" sends no transactions: TOKYO_ALLOW_SEND is not set to 1.`);
     expect(unsupported(plan)).toContain("tokyo-local: AGENT_KEY: Set AGENT_KEY on Codex to the same wallet's key to keep playing as the same agent");
     expect(steps(plan)).toContain(`"tokyo-local" runs Tokyo Futuro's server through npx: Codex needs Node.js 20 or later`);
     expect(warnings(plan)).not.toContain("Tokyo");
@@ -135,6 +136,20 @@ describe("Tokyo Futuro setups", () => {
     expect(msgs({ TOKYO_URL: { secretRef: "TOKYO_URL", redacted: true } })).toContain("takes Tokyo's address from TOKYO_URL, which was a variable on the source");
     expect(msgs({})).toContain(`Set TOKYO_URL for "t" on OpenClaw to ${TOKYO_URL}`);
     expect(msgs({ TOKYO_URL: { value: TOKYO_URL } })).toContain(`"t" had no AGENT_KEY, so it can read Tokyo but not sign in`);
+  });
+
+  it("sending (0.2.0): on is a warning with the cap, a reference is noted, and the cap is a limit", () => {
+    const local = (env: Record<string, unknown>): Tool => ({ name: "t", kind: "mcp", mcp: { transport: "stdio", command: "npx", args: ["-y", "tokyo-futuro-mcp@0.2.0"], env: { TOKYO_URL: { value: TOKYO_URL }, ...env }, headers: {} } }) as unknown as Tool;
+    const r = (env: Record<string, unknown>) => applyKnownServerProfile(local(env), "OpenClaw");
+    const text = (env: Record<string, unknown>) => r(env).notes.map((n) => `${n.level}: ${n.message}`).join("\n");
+    expect(text({ TOKYO_ALLOW_SEND: { value: "1" } })).toContain(`warning: "t" sends transactions from the agent's wallet (TOKYO_ALLOW_SEND=1): it approves $ZENI bonds to Tokyo's job board, up to 200 $ZENI each`);
+    expect(text({ TOKYO_ALLOW_SEND: { value: "1" }, TOKYO_MAX_APPROVE_ZENI: { value: "50" } })).toContain("up to 50 $ZENI each");
+    expect(text({ TOKYO_ALLOW_SEND: { value: "0" } })).toContain(`"t" sends no transactions`);
+    expect(text({ TOKYO_ALLOW_SEND: { secretRef: "TOKYO_ALLOW_SEND", redacted: true } })).toContain("reads TOKYO_ALLOW_SEND from a variable on the source");
+    // The cap is carried only as a value: a reference is dropped, and the preview says the default is 200.
+    const capRef = r({ TOKYO_ALLOW_SEND: { value: "1" }, TOKYO_MAX_APPROVE_ZENI: { secretRef: "CAP", redacted: true } });
+    expect(capRef.tool.mcp!.env.TOKYO_MAX_APPROVE_ZENI).toBeUndefined();
+    expect(capRef.unsupported.map((u) => u.reason).join("\n")).toContain("200 $ZENI per bond approval");
   });
 
   it("the global command and the one-file script get their own install steps", () => {

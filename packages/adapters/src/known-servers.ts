@@ -664,9 +664,11 @@ const isNodeCommand = (command: string | undefined) => !!command && /(^|[\\/])no
  * Tokyo documents it (agents.md, SKILL.md, tokyo-mcp.mjs and tokyo-futuro-mcp 0.1.2, read Nov 17, 2026):
  * the hosted, keyless server at <Worker>/mcp, whose prepare_ tools return unsigned transactions for the
  * user's wallet, and the local server (`node tokyo-mcp.mjs`, `npx tokyo-futuro-mcp` or `tokyo-futuro-mcp`),
- * which reads TOKYO_URL, AGENT_KEY (the agent's wallet key, used only to sign Tokyo's sign-in message),
- * AGENT_NAME and AGENT_ERC8004_ID. The key is never copied (wallet keys are references only); sign-in
- * tokens are kept out of text by the tokyo-futuro-token secret rule.
+ * which reads TOKYO_URL, AGENT_KEY (the agent's wallet key), AGENT_NAME and AGENT_ERC8004_ID. Since 0.2.0
+ * (read Nov 18, 2026) it can also send, only with TOKYO_ALLOW_SEND=1: $ZENI bond approvals to Tokyo's job
+ * board, capped by TOKYO_MAX_APPROVE_ZENI (200 by default), and taking and delivering jobs, paying gas in
+ * ETH (TOKYO_RPC). The key is never copied (wallet keys are references only); sign-in tokens are kept out
+ * of text by the tokyo-futuro-token secret rule.
  */
 const TOKYO: ServerProfile = {
   id: "tokyo-futuro",
@@ -680,8 +682,8 @@ const TOKYO: ServerProfile = {
   // AGENT_KEY is handled in apply(): it is a raw key, not a key file, and the same wallet keeps the agent's record.
   keyVars: [],
   emptyOkEnv: [],
-  limitVars: [],
-  looserDefaults: {},
+  limitVars: ["TOKYO_MAX_APPROVE_ZENI"],
+  looserDefaults: { TOKYO_MAX_APPROVE_ZENI: "200 $ZENI per bond approval" },
   apply(t, out, platform) {
     const mcp = t.mcp!;
     if (mcp.transport !== "stdio") {
@@ -693,7 +695,22 @@ const TOKYO: ServerProfile = {
       });
       return;
     }
-    out.notes.push({ level: "info", category: "tools", message: `"${t.name}" runs Tokyo Futuro's server on this computer. It uses AGENT_KEY, the agent's wallet key, only to sign Tokyo's sign-in message, and never sends transactions.` });
+    out.notes.push({ level: "info", category: "tools", message: `"${t.name}" runs Tokyo Futuro's server on this computer. It uses AGENT_KEY, the agent's wallet key, to sign Tokyo's sign-in message.` });
+    // Sending (tokyo-futuro-mcp 0.2.0 and later) is on only with TOKYO_ALLOW_SEND=1.
+    const allow = mcp.env.TOKYO_ALLOW_SEND;
+    if (allow && "value" in allow && allow.value.trim() === "1") {
+      const capVar = mcp.env.TOKYO_MAX_APPROVE_ZENI;
+      const cap = capVar && "value" in capVar && capVar.value.trim() ? capVar.value.trim() : "200";
+      out.notes.push({
+        level: "warning",
+        category: "tools",
+        message: `"${t.name}" sends transactions from the agent's wallet (TOKYO_ALLOW_SEND=1): it approves $ZENI bonds to Tokyo's job board, up to ${cap} $ZENI each, and takes and delivers jobs, paying gas in ETH. Set TOKYO_ALLOW_SEND to 0 on ${platform} to turn sending off.`
+      });
+    } else if (allow && !("value" in allow)) {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" reads TOKYO_ALLOW_SEND from a variable on the source. Without it on ${platform} it sends nothing; set it to 1 there only if the agent should take and deliver jobs with its own wallet.` });
+    } else {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" sends no transactions: TOKYO_ALLOW_SEND is not set to 1.` });
+    }
     const url = mcp.env.TOKYO_URL;
     const urlValue = url && "value" in url ? url.value.trim() : undefined;
     if (urlValue !== undefined) {
@@ -729,7 +746,103 @@ const TOKYO: ServerProfile = {
   }
 };
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO];
+/** The ostra-mcp command from @ostraagent/mcp (also .cmd or .exe on Windows), alone or as a path. */
+const isOstraCommand = (command: string | undefined) => !!command && /(^|[\\/])ostra-mcp(\.cmd|\.exe)?$/i.test(command);
+const isOstraPackage = isPackageArg("@ostraagent/mcp");
+/** Ostra's hosted connector for Claude: exactly https://mcp.ostraagent.xyz/mcp on the default port. */
+const isOstraConnector = (url: string | undefined) => {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && u.hostname === "mcp.ostraagent.xyz" && !u.port && !u.username && !u.password && /^\/mcp\/?$/.test(u.pathname);
+  } catch {
+    return false;
+  }
+};
+/** Ostra's own services and their addresses; "off" turns one off. */
+const OSTRA_SERVICES: Record<string, string> = {
+  OSTRA_RELAYER_URL: "https://relayer.ostraagent.xyz",
+  OSTRA_KEEPER_URL: "https://keeper.ostraagent.xyz",
+  OSTRA_AGGREGATOR_URL: "https://aggregator.ostraagent.xyz",
+  OSTRA_AI_URL: "https://ai.ostraagent.xyz",
+  OSTRA_RAETO_URL: "https://api.raeto.cc",
+  OSTRA_PAD_INDEXER_URL: "https://app.ostraagent.xyz"
+};
+
+/**
+ * Ostra, a vault of USDG for AI agents on Robinhood Chain guarded by post-quantum one-time keys, as Ostra
+ * documents it (@ostraagent/mcp 0.1.24, docs.ostraagent.xyz/keys and /claude, read Nov 18, 2026): the local
+ * server `npx -y @ostraagent/mcp` (or `ostra-mcp`), whose master seed (master.key, with fee-payer.key and the
+ * wots/ records) lives in OSTRA_HOME, by default ~/.ostra, and the hosted connector
+ * https://mcp.ostraagent.xyz/mcp. The seed folder is key material: never read, followed or written.
+ * Ostra runs one seed in one place at a time; on another computer the seed comes back only through Ostra's
+ * own encrypted backup (backup export, then backup import before the server first starts there).
+ */
+const OSTRA: ServerProfile = {
+  id: "ostra",
+  vendor: "Ostra",
+  label: "Ostra (a post-quantum vault for AI agents on Robinhood Chain)",
+  matches: (t) =>
+    !!t.mcp && (t.mcp.transport === "stdio" ? isOstraCommand(t.mcp.command) || t.mcp.args.some(isOstraPackage) : isOstraConnector(t.mcp.url)),
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [],
+  looserDefaults: {},
+  apply(t, out, platform) {
+    const mcp = t.mcp!;
+    if (mcp.transport !== "stdio") {
+      out.notes.push({
+        level: "info",
+        category: "tools",
+        message: `"${t.name}" is Ostra's hosted connector. Nomad copies its address. The vault's owner seed stays in the owner's browser and its agent key with Ostra's gateway, so nothing secret moves.`
+      });
+      out.manualSteps.push(`Sign in to "${t.name}" again on ${platform}: Ostra's connector signs in through Ostra's web app, and sign-ins are not copied.`);
+      return;
+    }
+    const lit = (k: string) => {
+      const v = mcp.env[k];
+      return v && "value" in v ? v.value.trim() : undefined;
+    };
+    const home = lit("OSTRA_HOME");
+    const where = home ? home : mcp.env.OSTRA_HOME ? "the folder OSTRA_HOME names" : "~/.ostra";
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: `"${t.name}" runs Ostra's vault server on this computer. Its seed (master.key in ${where}) holds every vault of the agent; Nomad never reads, copies or moves it.`
+    });
+    out.notes.push({
+      level: "warning",
+      category: "tools",
+      message: `Ostra runs one seed in one place at a time. Before "${t.name}" starts on ${platform}, remove Ostra from the app you moved it from, or turn it off there.`
+    });
+    const prefix = home ? `OSTRA_HOME=${home} ` : "";
+    out.manualSteps.push(
+      `If ${platform} runs on another computer, "${t.name}" needs the same seed there, or it starts a new, empty vault. Stop Ostra on this computer and run ${prefix}npx -y @ostraagent/mcp backup export <file> here; then, on the new computer, run ${prefix}npx -y @ostraagent/mcp backup import <file> before ${platform} first starts it. Withdraw from Ostra's older shielded-pool vaults first, or copy the shield/ and unshield/ folders with the file. Keep the file and its passphrase apart.`
+    );
+    for (const k of ["OSTRA_DEPLOYMENT", "OSTRA_SWAP_DEPLOYMENT"]) {
+      const v = lit(k);
+      if (v) out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" uses another Ostra deployment record (${k}=${v}): it decides which contracts the vault uses. Keep it only if you trust it. The file is not copied.` });
+    }
+    for (const [k, own] of Object.entries(OSTRA_SERVICES)) {
+      const v = lit(k);
+      if (v && v.toLowerCase() !== "off" && v.replace(/\/+$/, "") !== own) {
+        out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" uses ${v} (${k}) instead of Ostra's ${own}. Keep it only if you trust that address.` });
+      }
+    }
+    const prover = lit("OSTRA_PROVER");
+    if (prover && prover.toLowerCase() !== "off") out.manualSteps.push(`"${t.name}" proves with ${prover} (OSTRA_PROVER), a program Nomad does not copy. On another computer, put it at the same path, or leave OSTRA_PROVER unset to use the prover in the package.`);
+    const rpcFile = lit("OSTRA_RPC_URL_FILE");
+    if (rpcFile) out.manualSteps.push(`"${t.name}" reads its RPC address from ${rpcFile} (OSTRA_RPC_URL_FILE), a file Nomad does not copy. On another computer, create it there, readable only by you.`);
+    if (lit("OSTRA_HOSTED") === "yes") out.notes.push({ level: "info", category: "tools", message: `"${t.name}" is set up as one of Ostra Cloud's hosted agents (OSTRA_HOSTED=yes), which runs only inside Ostra Cloud.` });
+    if (isOstraCommand(mcp.command)) {
+      out.manualSteps.push(`Install Ostra's MCP server for "${t.name}": npm install -g @ostraagent/mcp. It needs Node.js 22 or later, and the ostra-mcp command must be on the PATH ${platform} uses.`);
+    } else {
+      out.manualSteps.push(`"${t.name}" runs Ostra's server through npx: ${platform} needs Node.js 22 or later on its PATH.`);
+    }
+  }
+};
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {

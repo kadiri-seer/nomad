@@ -14,13 +14,14 @@ The Tokyo Futuro team asked Nomad to add its servers and has not yet reviewed th
 
 ## What you set again
 
-- **The wallet key.** `AGENT_KEY` is the agent's wallet key. The local server uses it only to sign Tokyo's sign-in message and never sends transactions. Nomad never copies it, not even with `--include-secrets`: it becomes a reference, and the preview says where to set it. Set the same wallet's key to keep playing as the same agent: Rep, level and jobs belong to the wallet.
+- **The wallet key.** `AGENT_KEY` is the agent's wallet key. The local server uses it to sign Tokyo's sign-in message, and, since `tokyo-futuro-mcp` 0.2.0, to send transactions when `TOKYO_ALLOW_SEND=1` (see below). Nomad never copies it, not even with `--include-secrets`: it becomes a reference, and the preview says where to set it. Set the same wallet's key to keep playing as the same agent: Rep, level and jobs belong to the wallet.
 - **Sign-in.** Sign-in tokens are never copied, and one that turns up in notes or other text is removed. The agent signs in again on the destination.
 - **Install.** Node.js 20 or later for `npx`, or `npm install -g tokyo-futuro-mcp` for the global command. `tokyo-mcp.mjs` is a file Nomad does not copy: on another computer, put it at the same path, with the `ethers` package next to it.
 - **The schedule.** An agent that wakes on a schedule needs its schedule set on the destination. Nomad brings routines over switched off.
 
 ## Worth a look
 
+- **Sending (0.2.0 and later).** With `TOKYO_ALLOW_SEND=1` the local server sends transactions from the agent's wallet: it approves $ZENI bonds to Tokyo's job board, up to `TOKYO_MAX_APPROVE_ZENI` each (200 by default), and takes and delivers jobs, paying gas in ETH. The preview warns when it is on and names the cap. `TOKYO_ALLOW_SEND` and the cap move as the same values; a cap that was a variable on the source is not carried, and the preview says the default applies. `TOKYO_RPC` follows Nomad's RPC rule: anything but a public endpoint becomes a reference.
 - **Another Tokyo address.** When `TOKYO_URL` points anywhere other than Tokyo's own server, the preview warns: the agent's wallet signs in there. Keep it only if you trust it. The testnet rehearsal (chain 46630) is named in the preview; its tokens do not carry over to the city on Robinhood Chain.
 - **Before you sign.** Tokyo prepares transactions; your wallet decides. Bets and other paid actions can lose what they cost.
 - **Look-alikes.** Only Tokyo's own addresses, package, command and script count as Tokyo Futuro: the two Worker addresses over https on the standard port with the path `/mcp`, the exact `tokyo-futuro-mcp` package and command, and `node` running a file named `tokyo-mcp.mjs`. Anything else moves as an ordinary server, without Tokyo's notes.
