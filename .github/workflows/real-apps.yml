@@ -30,6 +30,7 @@ on:
       - "scripts/check-stoa.mjs"
       - "scripts/check-zolva.mjs"
       - "scripts/check-memoria.mjs"
+      - "scripts/check-upoch.mjs"
       - "scripts/check-your-nomad.mjs"
       - "packages/mcp/**"
       - ".github/workflows/real-apps.yml"
@@ -93,6 +94,10 @@ jobs:
       # real Codex (bearer_token_env_var = MEMORIA_API_KEY) and OpenClaw, with the key nowhere.
       - name: Check Memoria
         run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-memoria.mjs
+      # Nothing from Upoch is installed or run: npm still names the upoch command, and a setup with a planted
+      # (fake) ~/.upoch moves to the real Codex and OpenClaw, with nothing from that folder in what Nomad wrote.
+      - name: Check Upoch
+        run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-upoch.mjs
       # Your Nomad: nomad connect adds the server to the real Codex, Gemini CLI and OpenClaw, the server answers
       # when started exactly as Codex starts it, and nomad connect --remove takes it out again.
       - name: Check Your Nomad
