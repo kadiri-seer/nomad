@@ -257,3 +257,17 @@ Not covered: wallet keys in formats other than those above (for example an encry
 - Not yet verified: the live Robinhood Chain RPC and Blockscout API (unreachable from the build environment), the connected Upstash database, and a vote from a real wallet app. The first round is the check: open it by hand and cast one test vote.
 - Suggestion box on the Vote page: anyone can suggest or back an app (a few suggestions and backs per person per day, plus a hidden field that catches bots). The workflow, every 5 minutes, posts new suggestions as GitHub issues and publishes the list the site shows. Tested with unit tests and in a browser against a stand-in database.
 - Smart-contract wallets (ERC-1271) cannot vote yet; votes must be signed by an ordinary wallet key.
+
+## Zolva setups, and bearer tokens in a variable (added)
+
+Written Nov 19, 2026. Zolva is open trading-agent infrastructure on Robinhood Chain, reached through a hosted MCP server that is read-only without a key and adds tools for an optional API key's scopes. The Zolva team asked Nomad to add its server and has not reviewed this work yet. See [docs/guides/zolva-setups.md](guides/zolva-setups.md).
+
+Tested (automated, every push):
+- Zolva setups moving between Claude Code, Codex, Hermes, Cursor and OpenClaw (`tests/migration/zolva.test.ts`): the address as written; a key in a header or a variable becomes `ZOLVA_KEY` holding the key alone (`bearer_token_env_var` in Codex, `Bearer ${ZOLVA_KEY}` in Claude Code and Hermes, `${env:ZOLVA_KEY}` in Cursor, a step for OpenClaw that keeps the key out of `openclaw.json`); a variable of the user's own keeps its name; a keyless setup stays keyless; a Codex round trip comes back as Zolva's docs write it. Planted keys never appear in destinations, plans, receipts or Nomad's library, and the sources are unchanged.
+- Zolva's key shape (`zk_` and 43 characters) is a secret rule of its own, so a key in instructions or notes is removed.
+- Which entries count as Zolva, and 9 look-alikes that do not, which get no note and keep their header as it was.
+- For any remote server: Codex's `bearer_token_env_var` is read and written, a header written as `Bearer ${NAME}` keeps `NAME`, an existing Authorization header wins, and local servers never get one.
+
+Checked with real applications: `scripts/check-zolva.mjs` (Real apps workflow) asks Zolva's server, with no key, for its seven read-only tools, checks a wrong key is refused with 401, then moves a setup with a fake key to the real Codex, which lists the server with `bearer_token_env_var = "ZOLVA_KEY"`, and OpenClaw, which accepts its config, with the key nowhere in what Nomad wrote. The Codex part was run here with Codex CLI 0.170.0 and passed. No tool is called and no account is used.
+
+Not verified: the keyed tools with a real key (that needs a Zolva account).

@@ -64,6 +64,8 @@ Ostra setups move too: the local server (`npx @ostraagent/mcp` or `ostra-mcp`) a
 
 Stoa setups move too: Stoa's hosted, keyless swap router (`https://stoadex.com/mcp`) and its `stoa` skill arrive in each destination's format, with the preview naming the router to check before signing. Stoa quotes, checks tokens and builds unsigned swaps on Robinhood Chain and Elysium for the user's wallet to sign. See [docs/guides/stoa-setups.md](docs/guides/stoa-setups.md).
 
+Zolva setups move too: Zolva's hosted server (`https://zolvaagent.app/mcp`) arrives in each destination's format. Without a key it is read-only; an optional API key is never copied: the destination reads it from `ZOLVA_KEY` (`bearer_token_env_var` in Codex, `Bearer ${ZOLVA_KEY}` elsewhere), and the preview names what the key's scopes allow. Zolva is open trading-agent infrastructure on Robinhood Chain. See [docs/guides/zolva-setups.md](docs/guides/zolva-setups.md).
+
 Agent folders can carry MCP servers too: a `.mcp.json` next to `SOUL.md`, `AGENTS.md`, `memory/` and `skills/` is read with the rest of the folder.
 
 Installed Codex plugins are read too: their servers and skills move to other apps as ordinary entries, and another Codex gets the plugin's install commands.

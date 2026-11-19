@@ -128,6 +128,10 @@ export default function Adapters() {
       <p>
         Stoa is a swap router on Robinhood Chain and Elysium, reached through a hosted MCP server that needs no key and never signs anything: it quotes, checks tokens and builds unsigned swaps for the user&apos;s wallet to sign. Nomad moves the server (<code>https://stoadex.com/mcp</code>) and the <code>stoa</code> skill into the destination&apos;s own format, and the preview names Stoa&apos;s router to check before signing. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/stoa-setups.md">Stoa setups guide</a>.
       </p>
+      <h2>Zolva setups</h2>
+      <p>
+        Zolva is open trading-agent infrastructure on Robinhood Chain, reached through a hosted MCP server that is read-only without a key. Nomad moves the server (<code>https://zolvaagent.app/mcp</code>) into the destination&apos;s own format. An optional API key is never copied: the destination reads it from <code>ZOLVA_KEY</code>, and the preview names what the key&apos;s scopes allow. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/zolva-setups.md">Zolva setups guide</a>.
+      </p>
       <h3>Guided platforms</h3>
       <p>
         Hosted products (ChatGPT, Claude, Gemini, Grok, Perplexity) do not offer an agent import, and frameworks (CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n, Letta) define agents in code or in their own apps. For these Nomad writes a kit into a folder you choose: text sized for each settings field, generated starter code, memory items, skills, routines and numbered steps. Nothing is sent to those services.
