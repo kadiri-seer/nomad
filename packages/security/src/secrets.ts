@@ -60,6 +60,8 @@ export const SECRET_RULES: SecretRule[] = [
   { id: "tokyo-futuro-token", name: "Tokyo Futuro sign-in token", pattern: /\b0x[0-9a-fA-F]{40}\.\d{6,14}\.\d{1,14}\.[A-Za-z0-9_+/=-]{16,}/g },
   // Zolva's API key, as its source makes it: "zk_" and 32 random bytes in base64url (43 characters).
   { id: "zolva-key", name: "Zolva API key", pattern: /\bzk_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g },
+  // Memoria's API key, as its source makes it: "mem_", 12 hex characters, "_" and 43 base64url characters.
+  { id: "memoria-key", name: "Memoria API key", pattern: /\bmem_[0-9a-f]{12}_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g },
   { id: "url-credentials", name: "Password in connection string", pattern: /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:([^\s@/]{6,})@/gi, group: 1 },
   {
     id: "generic-assignment",

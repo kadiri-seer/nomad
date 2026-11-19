@@ -6,8 +6,8 @@ import { Instruction, Skill, type Tool } from "@nomad/schema";
  * which variables are keys, which are identity, which are safety limits.
  * Profiles only remove or explain; they never add variables the source did
  * not have and never write values. The exceptions are QHooks (see below),
- * whose address gets Nomad's referral, and Zolva, whose key reference is
- * reshaped so the variable holds the key alone, as Zolva documents it.
+ * whose address gets Nomad's referral, and Zolva and Memoria, whose key
+ * reference is reshaped so the variable holds the key alone, as each documents it.
  */
 export interface KnownServerProfileResult {
   tool: Tool;
@@ -951,7 +951,67 @@ const ZOLVA: ServerProfile = {
   }
 };
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA];
+/** Memoria's hosted server: exactly https://www.memoriaagent.site/mcp on the default port, no user name or password. */
+const isMemoriaHost = (url: string | undefined) => {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && u.hostname === "www.memoriaagent.site" && !u.port && !u.username && !u.password && /^\/mcp\/?$/.test(u.pathname);
+  } catch {
+    return false;
+  }
+};
+/** The variable Memoria's docs use for the key (memoriaagent.site/docs.html). */
+const MEMORIA_KEY_VAR = "MEMORIA_API_KEY";
+
+/**
+ * Memoria, a shared memory service for AI agents, as Memoria documents it (memoriaagent.site and /docs.html,
+ * and the server's source at github.com/thervee/memoria, read Nov 19, 2026): the hosted server
+ * https://www.memoriaagent.site/mcp over HTTP. Every request needs "Authorization: Bearer mem_..."; without a
+ * valid key it refuses everything. Each key belongs to one agent and decides which agent a memory is saved as,
+ * so the key is the agent's identity. Memories are private to the agent that saved them unless shared with
+ * agents in the same account, and are kept on Memoria's server: nothing about them moves with the agent.
+ *
+ * Keys are never copied. A key reference becomes MEMORIA_API_KEY holding the key alone, sent as
+ * "Bearer ${MEMORIA_API_KEY}" (bearer_token_env_var in Codex). A reference that already holds the key alone
+ * (Bearer ${NAME}) keeps its name.
+ */
+const MEMORIA: ServerProfile = {
+  id: "memoria",
+  vendor: "Memoria",
+  label: "Memoria (shared memory for AI agents; each key is one agent)",
+  matches: (t) => !!t.mcp && t.mcp.transport !== "stdio" && isMemoriaHost(t.mcp.url),
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [],
+  looserDefaults: {},
+  apply(t, out, platform) {
+    const mcp = t.mcp!;
+    const headers = { ...mcp.headers };
+    const auth = Object.keys(headers).filter((h) => h.toLowerCase() === "authorization");
+    // A reference holding the whole header ("Bearer mem_..."), or a key Nomad removed: the key goes in MEMORIA_API_KEY instead.
+    if (auth.length === 1 && "secretRef" in headers[auth[0]] && typeof (mcp as Record<string, unknown>).bearerEnv !== "string") {
+      delete headers[auth[0]];
+      out.tool = { ...t, mcp: { ...mcp, headers, bearerEnv: MEMORIA_KEY_VAR } as Tool["mcp"] };
+    }
+    const keyRef = (out.tool.mcp as Record<string, unknown>).bearerEnv;
+    const keptKey = Object.keys(out.tool.mcp!.headers).some((h) => h.toLowerCase() === "authorization");
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: `"${t.name}" is Memoria's hosted memory server. Memories stay on Memoria's server and nothing about them is copied; Nomad copies its address. Each key belongs to one agent, so with the same key this agent keeps reading and saving the same memories on ${platform}; a different key is a different agent, which sees only memories shared with it.`
+    });
+    if (typeof keyRef === "string") {
+      out.manualSteps.push(
+        `The "${t.name}" key is this agent's Memoria API key (mem_..., shown once at sign-up); keys are never copied. Memoria refuses every request without a valid key, so the server does not work on ${platform} until ${keyRef} is set. Use the same key to stay the same agent.`
+      );
+    } else if (!keptKey) {
+      out.manualSteps.push(`"${t.name}" has no Memoria API key here, and Memoria refuses every request without one. Add an Authorization header: "Bearer " followed by the agent's key (mem_...).`);
+    }
+  }
+};
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {
