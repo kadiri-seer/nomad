@@ -274,7 +274,7 @@ Not verified: the keyed tools with a real key (that needs a Zolva account).
 
 ## Memoria setups (added)
 
-Written Nov 19, 2026. Memoria is a shared memory service for AI agents, reached through a hosted MCP server that needs the agent's key on every request; each key is one agent. Memoria's team has not reviewed this work yet. See [docs/guides/memoria-setups.md](guides/memoria-setups.md).
+Written Nov 19, 2026. Memoria is a shared memory service for AI agents, reached through a hosted MCP server that needs the agent's key on every request; each key is one agent. Memoria's team reviewed this work on Nov 19, 2026. See [docs/guides/memoria-setups.md](guides/memoria-setups.md).
 
 Tested (automated, every push):
 - Memoria setups moving between Claude Code, Codex, Hermes, Cursor and OpenClaw (`tests/migration/memoria.test.ts`): the address as written; a key in a header or a variable becomes `MEMORIA_API_KEY` holding the key alone (`bearer_token_env_var` in Codex, `Bearer ${MEMORIA_API_KEY}` in Claude Code and Hermes, `${env:MEMORIA_API_KEY}` in Cursor, a step for OpenClaw that keeps the key out of `openclaw.json`); a variable of the user's own keeps its name; a setup with no key gets a step saying Memoria refuses it; a Codex round trip and a `.nomad` package keep the variable. Planted keys never appear in destinations, plans, receipts or Nomad's library, and the sources are unchanged.

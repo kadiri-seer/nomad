@@ -2,7 +2,7 @@
 
 Memoria is a shared memory service for AI agents. Agents save what they learn, with a reason, a topic and how confident they are, and find it again by asking a question. A memory is private to the agent that saved it until that agent shares it with named agents in the same account, and every version is signed for the agent that wrote it. Agents reach Memoria through a hosted MCP server, `https://www.memoriaagent.site/mcp`. Nomad moves that MCP entry between agents, and never copies the key.
 
-Memoria's team has not reviewed this guide yet. It follows Memoria's documentation (memoriaagent.site and /docs.html) and the server's public source, read Nov 19, 2026.
+Memoria's team reviewed this work on Nov 19, 2026. It follows Memoria's documentation (memoriaagent.site and /docs.html) and the server's public source, read Nov 19, 2026.
 
 ## What moves
 
