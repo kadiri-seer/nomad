@@ -1011,7 +1011,69 @@ const MEMORIA: ServerProfile = {
   }
 };
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA];
+/** The upoch command from @upoch/guard (also .cmd or .exe on Windows), alone or as a path. */
+const isUpochCommand = (command: string | undefined) => !!command && /(^|[\\/])upoch(\.cmd|\.exe)?$/i.test(command);
+const isUpochPackage = isPackageArg("@upoch/guard");
+/** Upoch Guard's MCP server: `upoch mcp`, or `npx [-y] @upoch/guard mcp`. Other upoch commands (setup, protect) are not servers. */
+const isUpochServer = (t: Tool) => {
+  const mcp = t.mcp;
+  if (!mcp || mcp.transport !== "stdio") return false;
+  if (isUpochCommand(mcp.command)) return mcp.args.length === 1 && mcp.args[0] === "mcp";
+  const i = mcp.args.findIndex(isUpochPackage);
+  return i >= 0 && mcp.args.slice(i + 1).join(" ") === "mcp";
+};
+
+/**
+ * Upoch, checkpoints and recovery for AI agents on Robinhood Chain, as Upoch documents it (upoch.tech/docs/mcp,
+ * /docs/recovery and /docs/security-review, @upoch/guard 0.1.4, and the Upoch team's answers, read Nov 19, 2026):
+ * the local MCP server `upoch mcp` from @upoch/guard (Node.js 24 or later), which checkpoints, restores and rolls
+ * back an agent's work. Everything lives in one folder, UPOCH_HOME (default ~/.upoch): the owner and executor
+ * keys, the checkpoint encryption key and the storage token in secrets.json, plus config.json, session.json and
+ * journal.jsonl. That folder is key material: never read or copied. Restoring it is what carries the agent's keys
+ * to a new computer. Upoch does not coordinate two copies of one agent yet, so the agent runs in one app at a
+ * time. Risk Check runs through Upoch's SDK, not this server. The contracts have had no independent audit.
+ */
+const UPOCH: ServerProfile = {
+  id: "upoch",
+  vendor: "Upoch",
+  label: "Upoch (checkpoints and recovery for AI agents on Robinhood Chain)",
+  matches: isUpochServer,
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [],
+  looserDefaults: {},
+  apply(t, out, platform) {
+    const mcp = t.mcp!;
+    const v = mcp.env.UPOCH_HOME;
+    const home = v && "value" in v ? v.value.trim() : undefined;
+    const where = home ? home : v ? "the folder UPOCH_HOME names" : "~/.upoch";
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: `"${t.name}" runs Upoch Guard on this computer: it checkpoints the agent's work on Robinhood Chain and can restore or roll it back. Its keys and settings stay in ${where}; Nomad never reads, copies or moves that folder.`
+    });
+    out.notes.push({
+      level: "warning",
+      category: "tools",
+      message: `Upoch does not coordinate two copies of the same agent yet. Stop "${t.name}" in the app you moved it from before ${platform} starts it.`
+    });
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: `Upoch's contracts have had an internal review but no independent audit yet, and Upoch suggests low-value workflows first. Risk Check (spending limits) runs through Upoch's SDK, not through "${t.name}".`
+    });
+    out.manualSteps.push(
+      `If ${platform} runs on another computer, copy ${where} there yourself (keep it readable only by you) before ${platform} first starts "${t.name}": that folder carries the agent's Upoch keys. Without it Upoch is not set up there, and a new setup registers a different agent.`
+    );
+    if (isUpochCommand(mcp.command)) {
+      out.manualSteps.push(`Install Upoch Guard for "${t.name}": npm install -g @upoch/guard. It needs Node.js 24 or later, and the upoch command must be on the PATH ${platform} uses.`);
+    } else {
+      out.manualSteps.push(`"${t.name}" runs Upoch Guard through npx: ${platform} needs Node.js 24 or later on its PATH.`);
+    }
+  }
+};
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {
