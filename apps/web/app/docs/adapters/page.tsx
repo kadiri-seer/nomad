@@ -132,6 +132,10 @@ export default function Adapters() {
       <p>
         Zolva is open trading-agent infrastructure on Robinhood Chain, reached through a hosted MCP server that is read-only without a key. Nomad moves the server (<code>https://zolvaagent.app/mcp</code>) into the destination&apos;s own format. An optional API key is never copied: the destination reads it from <code>ZOLVA_KEY</code>, and the preview names what the key&apos;s scopes allow. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/zolva-setups.md">Zolva setups guide</a>.
       </p>
+      <h2>Memoria setups</h2>
+      <p>
+        Memoria is a shared memory service for AI agents, reached through a hosted MCP server that needs the agent&apos;s key on every request. Nomad moves the server (<code>https://www.memoriaagent.site/mcp</code>) into the destination&apos;s own format. The key is never copied: the destination reads it from <code>MEMORIA_API_KEY</code>, and the preview explains that the key is the agent&apos;s identity, so the same key keeps the same memories. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/memoria-setups.md">Memoria setups guide</a>.
+      </p>
       <h3>Guided platforms</h3>
       <p>
         Hosted products (ChatGPT, Claude, Gemini, Grok, Perplexity) do not offer an agent import, and frameworks (CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n, Letta) define agents in code or in their own apps. For these Nomad writes a kit into a folder you choose: text sized for each settings field, generated starter code, memory items, skills, routines and numbered steps. Nothing is sent to those services.

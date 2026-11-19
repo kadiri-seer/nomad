@@ -271,3 +271,16 @@ Tested (automated, every push):
 Checked with real applications: `scripts/check-zolva.mjs` (Real apps workflow) asks Zolva's server, with no key, for its seven read-only tools, checks a wrong key is refused with 401, then moves a setup with a fake key to the real Codex, which lists the server with `bearer_token_env_var = "ZOLVA_KEY"`, and OpenClaw, which accepts its config, with the key nowhere in what Nomad wrote. The Codex part was run here with Codex CLI 0.170.0 and passed. No tool is called and no account is used.
 
 Not verified: the keyed tools with a real key (that needs a Zolva account).
+
+## Memoria setups (added)
+
+Written Nov 19, 2026. Memoria is a shared memory service for AI agents, reached through a hosted MCP server that needs the agent's key on every request; each key is one agent. Memoria's team has not reviewed this work yet. See [docs/guides/memoria-setups.md](guides/memoria-setups.md).
+
+Tested (automated, every push):
+- Memoria setups moving between Claude Code, Codex, Hermes, Cursor and OpenClaw (`tests/migration/memoria.test.ts`): the address as written; a key in a header or a variable becomes `MEMORIA_API_KEY` holding the key alone (`bearer_token_env_var` in Codex, `Bearer ${MEMORIA_API_KEY}` in Claude Code and Hermes, `${env:MEMORIA_API_KEY}` in Cursor, a step for OpenClaw that keeps the key out of `openclaw.json`); a variable of the user's own keeps its name; a setup with no key gets a step saying Memoria refuses it; a Codex round trip and a `.nomad` package keep the variable. Planted keys never appear in destinations, plans, receipts or Nomad's library, and the sources are unchanged.
+- Memoria's key shape (`mem_`, 12 hex characters and 43 more) is a secret rule of its own, so a key in instructions or notes is removed, while memory ids (`mem-1a2b3c4d`) are left alone.
+- Which entries count as Memoria, and 10 look-alikes that do not (a Memoria on this computer included), which get no note and keep their header as it was.
+
+Checked with real applications: `scripts/check-memoria.mjs` (Real apps workflow) sends Memoria's server one request with no key and checks it is refused with 401, then moves a setup with a fake key to the real Codex, which lists the server with `bearer_token_env_var = "MEMORIA_API_KEY"`, and OpenClaw, which accepts its config, with the key nowhere in what Nomad wrote. No key is sent and no account is used.
+
+Not verified: saving and finding memories with a real key (that needs a Memoria account).
