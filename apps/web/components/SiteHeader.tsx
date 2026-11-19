@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Logo } from "./Logo";
 import { XLink } from "./Social";
+import { ThemeToggle } from "./ThemeToggle";
 
 const LINKS = [
   { href: "/#how", label: "How it works" },
@@ -41,6 +42,7 @@ export function SiteHeader() {
             Open the app
           </Link>
         </nav>
+        <ThemeToggle />
         <button className="menu-button" aria-expanded={open} aria-controls="mobile-menu" onClick={() => setOpen((o) => !o)}>
           {open ? "Close" : "Menu"}
         </button>

@@ -224,7 +224,7 @@ export default function Home() {
                 <Link href="/docs" className="btn btn-lime">
                   Get started
                 </Link>
-                <Link href="/inspect" className="btn btn-ghost" style={{ color: "var(--paper)" }}>
+                <Link href="/inspect" className="btn btn-ghost" style={{ color: "var(--band-ink)" }}>
                   Try the inspector
                 </Link>
               </div>

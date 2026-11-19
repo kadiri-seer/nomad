@@ -1,4 +1,4 @@
-/* Nomad design system. Warm paper, ink, and the electric blue of the mark. */
+/* Nomad design system. Warm paper, ink, and the blue of the mark. Light and dark. */
 
 :root {
   --ink: #0e1013;
@@ -9,7 +9,7 @@
   --card: #f6f4ee;
   --line: #d3cfc3;
   --line-strong: #b9b4a6;
-  --blue: #1d5cff;
+  --blue: #2a4fb8;
   --blue-ink: #0b2f8f;
   --blue-soft: #dbe4fb;
   --lime: #c9e265;
@@ -20,6 +20,21 @@
   --warn-soft: #f1e3c4;
   --bad: #b4381d;
   --bad-soft: #f2d9d0;
+  /* Roles that keep their look in both modes. */
+  --brand: #1d5cff;
+  --hero: #2a4fb8;
+  --on-hero: #efede6;
+  --code-bg: #0e1013;
+  --band-bg: #0e1013;
+  --band-ink: #efede6;
+  --on-lime: #0e1013;
+  --overlay: rgba(14, 16, 19, 0.06);
+  --warn-line: #dcc28c;
+  --warn-bg: #f6ecd6;
+  --bad-line: #e0b2a4;
+  --bad-bg: #f6e3dc;
+  --ok-line: #b5d3bc;
+  --ok-bg: #e5f0e6;
   --radius: 6px;
   --radius-sm: 4px;
   --radius-lg: 10px;
@@ -27,6 +42,73 @@
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --max: 1180px;
   color-scheme: light;
+}
+
+/* Dark mode: the device's setting, unless the header switch chose light or dark (data-theme on <html>).
+   The two blocks hold the same values; change them together. */
+:root[data-theme="dark"] {
+  --ink: #ecebe6;
+  --ink-2: #cfcdc6;
+  --muted: #a19f97;
+  --paper: #141412;
+  --paper-2: #1e1d1a;
+  --card: #1a1917;
+  --line: #2e2d29;
+  --line-strong: #46443e;
+  --blue: #8ea8ff;
+  --blue-ink: #b8c7ff;
+  --blue-soft: #1f2a4a;
+  --ok: #72c592;
+  --ok-soft: #17291e;
+  --warn: #e3ac55;
+  --warn-soft: #2f2410;
+  --bad: #f19378;
+  --bad-soft: #3a1d15;
+  --hero: #24429c;
+  --code-bg: #22211e;
+  --band-bg: #22211e;
+  --band-ink: #ecebe6;
+  --overlay: rgba(236, 235, 230, 0.08);
+  --warn-line: #5c4718;
+  --warn-bg: #2a2110;
+  --bad-line: #5e2e22;
+  --bad-bg: #2e1813;
+  --ok-line: #2f5a3c;
+  --ok-bg: #15251b;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #ecebe6;
+    --ink-2: #cfcdc6;
+    --muted: #a19f97;
+    --paper: #141412;
+    --paper-2: #1e1d1a;
+    --card: #1a1917;
+    --line: #2e2d29;
+    --line-strong: #46443e;
+    --blue: #8ea8ff;
+    --blue-ink: #b8c7ff;
+    --blue-soft: #1f2a4a;
+    --ok: #72c592;
+    --ok-soft: #17291e;
+    --warn: #e3ac55;
+    --warn-soft: #2f2410;
+    --bad: #f19378;
+    --bad-soft: #3a1d15;
+    --hero: #24429c;
+    --code-bg: #22211e;
+    --band-bg: #22211e;
+    --band-ink: #ecebe6;
+    --overlay: rgba(236, 235, 230, 0.08);
+    --warn-line: #5c4718;
+    --warn-bg: #2a2110;
+    --bad-line: #5e2e22;
+    --bad-bg: #2e1813;
+    --ok-line: #2f5a3c;
+    --ok-bg: #15251b;
+    color-scheme: dark;
+  }
 }
 
 *,
@@ -170,7 +252,7 @@ pre {
 .btn-lime {
   background: var(--lime);
   border-color: var(--lime);
-  color: var(--ink);
+  color: var(--on-lime);
 }
 .btn-lime:hover {
   background: #bdd659;
@@ -181,7 +263,7 @@ pre {
   border-color: currentColor;
 }
 .btn-ghost:hover {
-  background: rgba(14, 16, 19, 0.06);
+  background: var(--overlay);
 }
 .on-blue .btn-ghost:hover {
   background: rgba(239, 237, 230, 0.12);
@@ -340,8 +422,8 @@ pre {
   padding: 16px 16px 0;
 }
 .hero-panel {
-  background: var(--blue);
-  color: var(--paper);
+  background: var(--hero);
+  color: var(--on-hero);
   border-radius: var(--radius-lg);
   padding: clamp(40px, 7vw, 88px) 0 clamp(32px, 5vw, 56px);
   overflow: hidden;
@@ -350,7 +432,7 @@ pre {
   max-width: 15ch;
 }
 .hero-panel .label {
-  color: rgba(239, 237, 230, 0.78);
+  color: rgba(239, 237, 230, 0.86);
 }
 .hero-panel .panel .label {
   color: var(--muted);
@@ -488,8 +570,8 @@ pre {
 }
 
 .cta-band {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--band-bg);
+  color: var(--band-ink);
   border-radius: var(--radius-lg);
   padding: clamp(36px, 6vw, 64px);
   display: flex;
@@ -523,7 +605,7 @@ pre {
 }
 
 .code {
-  background: var(--ink);
+  background: var(--code-bg);
   color: #e9e6dc;
   border-radius: var(--radius);
   padding: 18px 20px;
@@ -675,16 +757,16 @@ table.data .why {
   background: var(--card);
 }
 .notice.warn {
-  border-color: #dcc28c;
-  background: #f6ecd6;
+  border-color: var(--warn-line);
+  background: var(--warn-bg);
 }
 .notice.bad {
-  border-color: #e0b2a4;
-  background: #f6e3dc;
+  border-color: var(--bad-line);
+  background: var(--bad-bg);
 }
 .notice.ok {
-  border-color: #b5d3bc;
-  background: #e5f0e6;
+  border-color: var(--ok-line);
+  background: var(--ok-bg);
 }
 .notice strong {
   display: block;
@@ -1147,7 +1229,7 @@ details.diff summary {
   color: var(--blue-ink);
 }
 .diff-pre {
-  background: var(--ink);
+  background: var(--code-bg);
   color: #e9e6dc;
   border-radius: var(--radius-sm);
   padding: 12px;
@@ -1516,7 +1598,7 @@ details.diff summary {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--ink);
+  background: var(--code-bg);
   border-radius: var(--radius);
   padding: 12px 12px 12px 18px;
   margin-bottom: 12px;
@@ -1537,4 +1619,51 @@ details.diff summary {
 .install-note code {
   font-family: var(--mono);
   font-size: 0.85em;
+}
+
+/* ------------------------------ light and dark switch ------------------------------ */
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.theme-toggle:hover {
+  background: var(--paper-2);
+}
+/* The icon shows the mode a click switches to: a moon in light mode, a sun in dark mode. */
+.theme-toggle .icon-sun {
+  display: none;
+}
+:root[data-theme="dark"] .theme-toggle .icon-sun {
+  display: block;
+}
+:root[data-theme="dark"] .theme-toggle .icon-moon {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .icon-sun {
+    display: block;
+  }
+  :root:not([data-theme="light"]) .theme-toggle .icon-moon {
+    display: none;
+  }
+}
+@media (max-width: 860px) {
+  .theme-toggle {
+    margin-left: auto;
+    width: 44px;
+    height: 44px;
+  }
+  .theme-toggle + .menu-button {
+    margin-left: 8px;
+  }
 }

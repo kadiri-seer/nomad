@@ -1,5 +1,5 @@
 /** The Nomad mark: a zigzag band, drawn as an outlined ribbon. */
-export function Mark({ size = 30, color = "var(--blue)", title }: { size?: number; color?: string; title?: string }) {
+export function Mark({ size = 30, color = "var(--brand)", title }: { size?: number; color?: string; title?: string }) {
   return (
     <svg width={(size * 300) / 190} height={size} viewBox="0 0 300 190" role={title ? "img" : undefined} aria-hidden={title ? undefined : true} aria-label={title}>
       <g fill="none" stroke={color} strokeWidth="17" strokeLinejoin="miter" strokeMiterlimit="10">

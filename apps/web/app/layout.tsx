@@ -4,6 +4,7 @@ import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "./globals.css";
 import { SiteHeader } from "@/components/SiteHeader";
+import { THEME_SCRIPT } from "@/lib/theme";
 
 // Absolute URLs for link previews. Vercel provides the production host; NEXT_PUBLIC_SITE_URL overrides it (for a custom domain).
 const site = process.env.NEXT_PUBLIC_SITE_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://127.0.0.1:4317");
@@ -23,14 +24,20 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#efede6",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#efede6" },
+    { media: "(prefers-color-scheme: dark)", color: "#141412" }
+  ],
   width: "device-width",
   initialScale: 1
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body>
         <a href="#main" className="skip-link">
           Skip to content
