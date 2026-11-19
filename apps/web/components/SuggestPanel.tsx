@@ -1,29 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { REPO_URL } from "@/components/SiteFooter";
-
-type Item = { issue: number; name: string; approved: boolean; won: boolean; thumbs: number; support: number; source: "site" | "github" };
-
-const BACKED_KEY = "nomad-backed-suggestions";
-
-function readBacked(): number[] {
-  try {
-    const raw = window.localStorage.getItem(BACKED_KEY);
-    const list = raw ? (JSON.parse(raw) as unknown) : [];
-    return Array.isArray(list) ? list.filter((n): n is number => typeof n === "number") : [];
-  } catch {
-    return [];
-  }
-}
-
-function rememberBacked(list: number[]) {
-  try {
-    window.localStorage.setItem(BACKED_KEY, JSON.stringify(list));
-  } catch {
-    /* only a convenience: the server already counts one back per person */
-  }
-}
+import { useEffect, useState } from "react";
 
 async function post(url: string, body: unknown) {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), cache: "no-store" });
@@ -32,35 +9,23 @@ async function post(url: string, body: unknown) {
   return { ok: res.ok, data };
 }
 
+/** The suggestion box. Suggestions are sent for review and are not listed on the page. */
 export function SuggestPanel() {
-  const [items, setItems] = useState<Item[] | null>(null);
   const [available, setAvailable] = useState(true);
   const [name, setName] = useState("");
   const [why, setWhy] = useState("");
   const [trap, setTrap] = useState("");
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState<{ kind: "ok" | "bad"; text: string } | null>(null);
-  const [backed, setBacked] = useState<number[]>([]);
-  const [backing, setBacking] = useState<number | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch("/api/suggest", { cache: "no-store" });
-      if (!(res.headers.get("content-type") ?? "").includes("application/json")) {
-        setAvailable(false);
-        return;
-      }
-      const data = (await res.json()) as { items?: Item[] };
-      setItems(Array.isArray(data.items) ? data.items : []);
-    } catch {
-      setAvailable(false);
-    }
-  }, []);
 
   useEffect(() => {
-    setBacked(readBacked());
-    load();
-  }, [load]);
+    // The local app has no suggestion service, so the box only shows where one answers.
+    fetch("/api/suggest", { method: "HEAD", cache: "no-store" })
+      .then((res) => {
+        if (!(res.headers.get("content-type") ?? "").includes("application/json")) setAvailable(false);
+      })
+      .catch(() => setAvailable(false));
+  }, []);
 
   if (!available) return null;
 
@@ -72,11 +37,6 @@ export function SuggestPanel() {
       const r = await post("/api/suggest", { name, why, website: trap });
       if (!r.ok) {
         setNotice({ kind: "bad", text: String(r.data.error ?? "Your suggestion was not sent. Try again.") });
-      } else if (r.data.status === "duplicate") {
-        const issue = typeof r.data.issue === "number" ? r.data.issue : null;
-        setNotice({ kind: "ok", text: issue ? "Someone already suggested that. Back it in the list below to move it up." : "Sent. Thanks for your suggestion." });
-        setName("");
-        setWhy("");
       } else {
         setNotice({ kind: "ok", text: "Sent. Thanks for your suggestion." });
         setName("");
@@ -89,29 +49,10 @@ export function SuggestPanel() {
     }
   }
 
-  async function back(issue: number) {
-    setBacking(issue);
-    try {
-      const r = await post("/api/suggest/back", { issue });
-      if (r.ok) {
-        const next = [...new Set([...backed, issue])];
-        setBacked(next);
-        rememberBacked(next);
-        setItems((list) => list?.map((it) => (it.issue === issue ? { ...it, support: Number(r.data.support ?? it.support) } : it)) ?? null);
-      } else {
-        setNotice({ kind: "bad", text: String(r.data.error ?? "That did not go through. Try again.") });
-      }
-    } catch {
-      setNotice({ kind: "bad", text: "That did not go through. Check your connection and try again." });
-    } finally {
-      setBacking(null);
-    }
-  }
-
   return (
     <section className="suggest" aria-labelledby="suggest-title">
       <h2 id="suggest-title">Suggest an app</h2>
-      <p className="muted">Which app should Nomad move agents to and from next? Anyone can suggest one. Suggestions the maintainers accept go on the next ballot, most backed first.</p>
+      <p className="muted">Which app should Nomad move agents to and from next? Anyone can suggest one. Suggestions the maintainers accept go on the next ballot.</p>
       <form className="panel panel-body suggest-form" onSubmit={submit}>
         <label>
           <span>App or tool</span>
@@ -135,36 +76,6 @@ export function SuggestPanel() {
         </div>
         {notice && <p className={`vote-notice ${notice.kind}`}>{notice.text}</p>}
       </form>
-
-      <h3 className="suggest-list-title">Suggestions</h3>
-      {items === null ? (
-        <p className="muted">Loading suggestions…</p>
-      ) : items.length === 0 ? (
-        <p className="muted">No suggestions yet. Be the first.</p>
-      ) : (
-        <ul className="suggest-list">
-          {items.map((it) => {
-            const mine = backed.includes(it.issue);
-            return (
-              <li key={it.issue}>
-                <span className="suggest-name">
-                  {it.name}{" "}
-                  <a href={`${REPO_URL}/issues/${it.issue}`} className="muted">
-                    #{it.issue}
-                  </a>
-                </span>
-                <span className="suggest-tags">
-                  {it.won ? <span className="badge ok">Won a vote</span> : it.approved ? <span className="badge info">Accepted</span> : <span className="badge not-applicable">Waiting for review</span>}
-                </span>
-                <span className="suggest-count">{it.thumbs + it.support} backing</span>
-                <button type="button" className="btn btn-quiet btn-sm" onClick={() => back(it.issue)} disabled={mine || backing === it.issue || it.won}>
-                  {mine ? "Backed" : "Back this"}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
     </section>
   );
 }

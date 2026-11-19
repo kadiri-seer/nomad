@@ -79,7 +79,7 @@ export default function Token() {
       <h2>Taking part as a holder</h2>
       <h3>Suggest an integration</h3>
       <p>
-        Use the suggestion box on the <Link href="/vote">Vote page</Link>: type the app&apos;s name and, if you like, why it should be next. No account or wallet is needed. You can also back the suggestions already listed there. With a GitHub account you can use the <a href={PROPOSAL_URL}>suggestion form</a> and add a thumbs-up reaction instead; both count.
+        Use the suggestion box on the <Link href="/vote">Vote page</Link>: type the app&apos;s name and, if you like, why it should be next. No account or wallet is needed. With a GitHub account you can use the <a href={PROPOSAL_URL}>suggestion form</a> instead; both count.
       </p>
       <h3>Vote</h3>
       <ol>
@@ -97,7 +97,7 @@ export default function Token() {
 
       <h2>Voting rules</h2>
       <ul>
-        <li>Rounds run back to back: each vote lasts 48 hours, and the next round opens within minutes after one closes, as long as at least two accepted suggestions are waiting. Each ballot holds up to five accepted suggestions: the ones with the most backing (backs on the Vote page plus thumbs-up reactions on GitHub).</li>
+        <li>Rounds run back to back: each vote lasts 48 hours, and the next round opens within minutes after one closes, as long as at least two accepted suggestions are waiting. Each ballot holds up to five accepted suggestions: the ones with the most backing (thumbs-up reactions on GitHub, plus earlier backs from the Vote page).</li>
         <li>Past winners do not go on the ballot again.</li>
         <li>One {TOKEN_TICKER} is one vote. Balances are counted at the moment the vote opens, so tokens bought during a vote do not add votes.</li>
         <li>The team&apos;s wallets and the reward wallet do not vote.</li>
