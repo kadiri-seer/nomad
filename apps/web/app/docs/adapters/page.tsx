@@ -136,6 +136,10 @@ export default function Adapters() {
       <p>
         Memoria is a shared memory service for AI agents, reached through a hosted MCP server that needs the agent&apos;s key on every request. Nomad moves the server (<code>https://www.memoriaagent.site/mcp</code>) into the destination&apos;s own format. The key is never copied: the destination reads it from <code>MEMORIA_API_KEY</code>, and the preview explains that the key is the agent&apos;s identity, so the same key keeps the same memories. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/memoria-setups.md">Memoria setups guide</a>.
       </p>
+      <h2>Upoch setups</h2>
+      <p>
+        Upoch saves checkpoints of an agent&apos;s work on Robinhood Chain so it can restore or roll back, through a local MCP server, Upoch Guard. Nomad moves the server (<code>upoch mcp</code> or <code>npx @upoch/guard mcp</code>) into the destination&apos;s own format. Upoch&apos;s folder, which holds its keys, is never read or copied, and the preview says to run the agent in one app at a time and, for another computer, to restore that folder yourself. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/upoch-setups.md">Upoch setups guide</a>.
+      </p>
       <h3>Guided platforms</h3>
       <p>
         Hosted products (ChatGPT, Claude, Gemini, Grok, Perplexity) do not offer an agent import, and frameworks (CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n, Letta) define agents in code or in their own apps. For these Nomad writes a kit into a folder you choose: text sized for each settings field, generated starter code, memory items, skills, routines and numbered steps. Nothing is sent to those services.

@@ -68,6 +68,8 @@ Zolva setups move too: Zolva's hosted server (`https://zolvaagent.app/mcp`) arri
 
 Memoria setups move too: Memoria's hosted memory server (`https://www.memoriaagent.site/mcp`) arrives in each destination's format. The agent's key is never copied: the destination reads it from `MEMORIA_API_KEY` (`bearer_token_env_var` in Codex, `Bearer ${MEMORIA_API_KEY}` elsewhere), and the preview explains that the key is the agent's identity, so the same key keeps the same memories. Memoria is a shared, signed memory service for AI agents. See [docs/guides/memoria-setups.md](docs/guides/memoria-setups.md).
 
+Upoch setups move too: Upoch Guard's local server (`upoch mcp`, or `npx @upoch/guard mcp`) arrives in each destination's format. Upoch's folder (`~/.upoch` or `UPOCH_HOME`), which holds its keys, is never read or copied, and the preview says to stop the agent in one app before starting it in another, and to restore that folder yourself on another computer. Upoch saves checkpoints of an agent's work on Robinhood Chain for recovery and rollback. See [docs/guides/upoch-setups.md](docs/guides/upoch-setups.md).
+
 Agent folders can carry MCP servers too: a `.mcp.json` next to `SOUL.md`, `AGENTS.md`, `memory/` and `skills/` is read with the rest of the folder.
 
 Installed Codex plugins are read too: their servers and skills move to other apps as ordinary entries, and another Codex gets the plugin's install commands.
