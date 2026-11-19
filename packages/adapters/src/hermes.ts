@@ -383,8 +383,9 @@ async function planHome(doc: AgentDocument, ctx: WriteContext): Promise<PlannedW
       // Hermes expands ${VAR} from ~/.hermes/.env and drops entries whose reference is unset.
       const r = mcpServersFromTools(mcpTools, { platformName: "Hermes", envRefStyle: "dollar", optionalRef: (_t, name) => `\${${name}}` });
       cfg.mcp_servers = r.servers;
-      const refNames = [...new Set(Object.values(r.refs).flatMap((x) => [...x.env.filter((k) => Object.values(r.servers).some((sv: any) => sv.env?.[k])), ...x.headers.map(([, v]) => v)]))];
+      const refNames = [...new Set(Object.values(r.refs).flatMap((x) => [...x.env.filter((k) => Object.values(r.servers).some((sv: any) => sv.env?.[k])), ...x.headers.map(([, v]) => v), ...(x.bearer ? [x.bearer] : [])]))];
       if (refNames.length) manualSteps.push(`Add ${refNames.join(", ")} to ~/.hermes/.env (Nomad never reads or writes that file).`);
+      for (const [n, x] of Object.entries(r.refs)) if (x.bearer) manualSteps.push(`${x.bearer} holds the key alone: Nomad writes the "${n}" MCP server's Authorization header as "Bearer \${${x.bearer}}".`);
       manualSteps.push(...r.manualSteps.filter((m) => !m.startsWith("Set ")));
       unsupported.push(...r.unsupported);
       notes.push(...r.notes);

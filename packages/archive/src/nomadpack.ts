@@ -274,13 +274,17 @@ export function writeNomadPack(doc: AgentDocument, options: { exportedAt?: strin
     const { name, kind, mcp, description, enabled, ...rest } = t;
     if (kind === "mcp" && mcp) {
       const env = (rec: typeof mcp.env) => Object.fromEntries(Object.entries(rec).map(([k, v]) => [k, "value" in v ? v.value : `\${${v.secretRef}}`]));
+      // A bearer token kept alone in a variable travels as "Bearer ${NAME}", the way MCP configs write it.
+      const bearer = (mcp as Record<string, unknown>).bearerEnv;
+      const headers: Record<string, string> = env(mcp.headers);
+      if (typeof bearer === "string" && /^[A-Za-z_][A-Za-z0-9_]*$/.test(bearer) && !Object.keys(headers).some((h) => h.toLowerCase() === "authorization")) headers.Authorization = `Bearer \${${bearer}}`;
       servers[name] = {
         ...(mcp.transport !== "stdio" ? { type: mcp.transport } : {}),
         ...(mcp.command ? { command: mcp.command } : {}),
         ...(mcp.args.length ? { args: mcp.args } : {}),
         ...(mcp.url ? { url: mcp.url } : {}),
         ...(Object.keys(mcp.env).length ? { env: env(mcp.env) } : {}),
-        ...(Object.keys(mcp.headers).length ? { headers: env(mcp.headers) } : {}),
+        ...(Object.keys(headers).length ? { headers } : {}),
         ...(mcp.cwd ? { cwd: mcp.cwd } : {}),
         ...(description ? { description } : {}),
         ...(enabled === false ? { disabled: true } : {})
@@ -620,11 +624,16 @@ export function readNomadPack(files: Map<string, Uint8Array>, options: { verifyI
             return [k, ref ? { secretRef: ref[1], redacted: true as const } : { value: String(v) }];
           }));
         const extra = manifest.tools?.[name] ?? {};
+        // "Authorization: Bearer ${NAME}" on a remote server: the variable holds the token alone.
+        const rawHeaders: Record<string, string> = { ...(s.headers ?? {}) };
+        const authKey = Object.keys(rawHeaders).filter((h) => h.toLowerCase() === "authorization");
+        const bearer = authKey.length === 1 && s.url ? /^\s*Bearer\s+\$\{([A-Za-z_][A-Za-z0-9_]*)\}\s*$/i.exec(String(rawHeaders[authKey[0]])) : null;
+        if (bearer) delete rawHeaders[authKey[0]];
         tools.push({
           name,
           kind: "mcp",
           description: s.description,
-          mcp: { transport: s.type ?? (s.url ? "http" : "stdio"), command: s.command, args: s.args ?? [], url: s.url, env: env(s.env), headers: env(s.headers), cwd: s.cwd },
+          mcp: { transport: s.type ?? (s.url ? "http" : "stdio"), command: s.command, args: s.args ?? [], url: s.url, env: env(s.env), headers: env(rawHeaders), cwd: s.cwd, ...(bearer ? { bearerEnv: bearer[1] } : {}) },
           permissions: [],
           platforms: [],
           enabled: s.disabled !== true,

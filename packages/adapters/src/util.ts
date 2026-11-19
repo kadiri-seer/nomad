@@ -423,6 +423,28 @@ export function parseAgentMarkdown(text: string, platform: string, path: string)
 /** Reference syntaxes: ${VAR}, ${env:VAR} (Cursor), ${VAR:-} and ${VAR:-default}. */
 const ENV_REF = /^\$\{(env:)?([A-Za-z_][A-Za-z0-9_]*)(:-([^}]*))?\}$/;
 
+/** "Bearer ${NAME}": the variable holds the token alone, as Codex's bearer_token_env_var does. */
+const BEARER_REF = /^\s*Bearer\s+\$\{(?:env:)?([A-Za-z_][A-Za-z0-9_]*)\}\s*$/i;
+/** An environment variable name, as written in a reference. */
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Splits an "Authorization: Bearer ${NAME}" header off a server's headers. The variable then holds
+ * the token alone (bearerEnv), so each destination can write it its own way. Any other
+ * Authorization header is left as it is.
+ */
+function splitBearer(raw: unknown): { headers: unknown; bearer?: string } {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { headers: raw };
+  const auth = Object.keys(raw).filter((k) => k.toLowerCase() === "authorization");
+  if (auth.length !== 1) return { headers: raw };
+  const v = (raw as Record<string, unknown>)[auth[0]];
+  const m = typeof v === "string" ? BEARER_REF.exec(v) : null;
+  if (!m) return { headers: raw };
+  const rest = { ...(raw as Record<string, unknown>) };
+  delete rest[auth[0]];
+  return { headers: rest, bearer: m[1] };
+}
+
 interface EnvParse {
   rec: McpServer["env"];
   /** Entries that may be unset on the source (empty default, or a platform that drops unset refs). */
@@ -476,7 +498,8 @@ export function toolsFromMcpServers(raw: unknown, platform: string, path: string
     const url = cfg.url ?? cfg.httpUrl ?? cfg.serverUrl;
     const transport = cfg.type === "sse" || cfg.transport === "sse" ? "sse" : url ? "http" : "stdio";
     const env = envRecord(cfg.env, opts.refsOptional && transport === "stdio");
-    const headers = envRecord(cfg.headers ?? cfg.http_headers);
+    const split = splitBearer(cfg.headers ?? cfg.http_headers);
+    const headers = envRecord(split.headers);
     for (const [k, d] of env.defaults) opts.notes?.push({ level: "info", category: "tools", message: `"${name}": ${k} has a default (${d.length > 40 ? `${d.length} characters` : d}) that is not carried. Set ${k} on the destination if you rely on it.` });
     const mcp: McpServer = {
       transport,
@@ -488,6 +511,7 @@ export function toolsFromMcpServers(raw: unknown, platform: string, path: string
       cwd: typeof cfg.cwd === "string" ? cfg.cwd : undefined
     };
     if (env.optional.length) (mcp as Record<string, unknown>).optionalEnv = env.optional;
+    if (split.bearer && transport !== "stdio") (mcp as Record<string, unknown>).bearerEnv = split.bearer;
     tools.push({
       name,
       description: typeof cfg.description === "string" ? cfg.description : undefined,
@@ -524,6 +548,8 @@ export interface McpRefs {
   /** Env entries kept as references (names of the env keys). */
   env: string[];
   headers: Array<[string, string]>;
+  /** The variable holding a bearer token, sent as "Authorization: Bearer <token>". */
+  bearer?: string;
   /** Env entries that may be unset. */
   optional: string[];
 }
@@ -634,6 +660,17 @@ export function mcpServersFromTools(tools: Tool[], opts: McpWriteOptions): McpWr
           headers[k] = asRef(v.secretRef);
           missing.push(v.secretRef);
         } else missing.push(`${k} header`);
+      }
+    }
+    // A bearer token kept in a variable: written as "Bearer ${NAME}" where the destination expands references.
+    const bearer = (mcp as Record<string, unknown>).bearerEnv;
+    if (mcp.transport !== "stdio" && typeof bearer === "string" && ENV_NAME.test(bearer) && !Object.keys(headers).some((h) => h.toLowerCase() === "authorization")) {
+      refs.bearer = bearer;
+      if (style !== "none") {
+        headers.Authorization = `Bearer ${asRef(bearer)}`;
+        out.manualSteps.push(`Set ${bearer} in your environment to the key alone, so the "${t.name}" MCP server can authenticate in ${opts.platformName}: Nomad writes its Authorization header as "Bearer ${asRef(bearer)}".`);
+      } else {
+        out.manualSteps.push(`Add an Authorization header for the "${t.name}" MCP server in ${opts.platformName}: "Bearer " followed by your key (${bearer} held it on the source). Nomad does not write secret values.`);
       }
     }
     if (Object.keys(headers).length) s.headers = headers;

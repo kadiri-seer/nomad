@@ -290,6 +290,9 @@ export const codexAdapter: Adapter = {
           for (const v of Array.isArray(s.env_vars) ? s.env_vars : []) if (typeof v === "string" && !(v in env)) env[v] = `\${${v}}`;
           const headers: Record<string, unknown> = { ...(s.http_headers ?? {}) };
           for (const [h, v] of Object.entries((s.env_http_headers ?? {}) as Record<string, unknown>)) if (typeof v === "string") headers[h] = `\${${v}}`;
+          // bearer_token_env_var names a variable holding the token alone: "Authorization: Bearer <token>".
+          const bearer = s.bearer_token_env_var;
+          if (typeof bearer === "string" && /^[A-Za-z_][A-Za-z0-9_]*$/.test(bearer) && !Object.keys(headers).some((h) => h.toLowerCase() === "authorization")) headers.Authorization = `Bearer \${${bearer}}`;
           servers[name] = { ...s, env, headers };
         }
         doc.tools.push(...toolsFromMcpServers(servers, P, L.config, { notes }));
@@ -405,8 +408,12 @@ export const codexAdapter: Adapter = {
             servers[name] = {
               url: s.url,
               ...(s.headers ? { http_headers: s.headers } : {}),
-              ...(refs?.headers.length ? { env_http_headers: Object.fromEntries(refs.headers) } : {})
+              ...(refs?.headers.length ? { env_http_headers: Object.fromEntries(refs.headers) } : {}),
+              ...(refs?.bearer ? { bearer_token_env_var: refs.bearer } : {})
             };
+            if (refs?.bearer) {
+              manualSteps.push(`Set ${refs.bearer} in your shell to the key alone before starting Codex: the "${name}" MCP server sends it as a bearer token (bearer_token_env_var). Nomad does not write secret values.`);
+            }
             continue;
           }
           const { headers: _h, ...rest } = s;
@@ -414,7 +421,8 @@ export const codexAdapter: Adapter = {
           servers[name] = { ...rest, ...(refs?.env.length ? { env_vars: refs.env } : {}) };
         }
         config.mcp_servers = servers;
-        manualSteps.push(...r.manualSteps.map((m) => m.replace(/^Add (.+) for the "(.+)" MCP server in Codex\. Nomad does not write secret values\.$/, 'Set $1 in your shell before starting Codex: the "$2" MCP server forwards them (env_vars). Nomad does not write secret values.')));
+        const bearerStep = (m: string) => Object.entries(r.refs).some(([n, x]) => !!x.bearer && !!r.servers[n]?.url && m.startsWith(`Add an Authorization header for the "${n}" MCP server in Codex:`));
+        manualSteps.push(...r.manualSteps.filter((m) => !bearerStep(m)).map((m) => m.replace(/^Add (.+) for the "(.+)" MCP server in Codex\. Nomad does not write secret values\.$/, 'Set $1 in your shell before starting Codex: the "$2" MCP server forwards them (env_vars). Nomad does not write secret values.')));
         unsupported.push(...r.unsupported);
         notes.push(...r.notes);
       }

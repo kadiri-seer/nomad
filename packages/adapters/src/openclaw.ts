@@ -602,6 +602,14 @@ async function planAgent(doc: AgentDocument, ctx: WriteContext): Promise<Planned
         const refs = r.refs[name];
         for (const k of refs?.env ?? []) setStep(name, "env", k, refs.optional.includes(k) ? " (optional on the source: only if you use it)" : "");
         for (const [h] of refs?.headers ?? []) setStep(name, "headers", h, "");
+        if (refs?.bearer) {
+          // OpenClaw substitutes ${VAR} in its config: with the variable set first, the key stays out of openclaw.json.
+          manualSteps.push(
+            isPlainCliWord(name)
+              ? `Set the Authorization header for the "${name}" MCP server in OpenClaw. To keep the key out of openclaw.json, set ${refs.bearer} to the key alone in the environment OpenClaw starts with, then run: openclaw config set mcp.servers.${name}.headers.Authorization 'Bearer \${${refs.bearer}}'`
+              : `Set the Authorization header for the MCP server ${JSON.stringify(name)} in OpenClaw ("Bearer " followed by your key), under mcp.servers in openclaw.json. Nomad prints no command for it, because its name has characters a terminal could misread.`
+          );
+        }
         for (const field of ["env", "headers"] as const) {
           const rec = server[field] as Record<string, string> | undefined;
           if (!rec) continue;

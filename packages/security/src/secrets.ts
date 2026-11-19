@@ -58,6 +58,8 @@ export const SECRET_RULES: SecretRule[] = [
   { id: "ostra-seed-backup", name: "Ostra seed backup", pattern: /"kdf"\s*:\s*\{\s*"name"\s*:\s*"scrypt"[^}]{0,120}\}[^}]{0,400}?"ciphertext"\s*:\s*"([0-9a-fA-F]{32,})"/g, group: 1 },
   // Tokyo Futuro's wallet sign-in token, as Tokyo describes it: <wallet>.<expiry>.<epoch>.<hmac>, valid 7 days.
   { id: "tokyo-futuro-token", name: "Tokyo Futuro sign-in token", pattern: /\b0x[0-9a-fA-F]{40}\.\d{6,14}\.\d{1,14}\.[A-Za-z0-9_+/=-]{16,}/g },
+  // Zolva's API key, as its source makes it: "zk_" and 32 random bytes in base64url (43 characters).
+  { id: "zolva-key", name: "Zolva API key", pattern: /\bzk_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g },
   { id: "url-credentials", name: "Password in connection string", pattern: /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:([^\s@/]{6,})@/gi, group: 1 },
   {
     id: "generic-assignment",

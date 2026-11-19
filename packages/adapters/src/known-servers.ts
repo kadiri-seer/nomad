@@ -5,8 +5,9 @@ import { Instruction, Skill, type Tool } from "@nomad/schema";
  * Profiles for MCP servers whose configuration needs care when it moves:
  * which variables are keys, which are identity, which are safety limits.
  * Profiles only remove or explain; they never add variables the source did
- * not have and never write values. The one exception is QHooks (see below),
- * whose address gets Nomad's referral.
+ * not have and never write values. The exceptions are QHooks (see below),
+ * whose address gets Nomad's referral, and Zolva, whose key reference is
+ * reshaped so the variable holds the key alone, as Zolva documents it.
  */
 export interface KnownServerProfileResult {
   tool: Tool;
@@ -884,7 +885,73 @@ const STOA: ServerProfile = {
   }
 };
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA];
+/** Zolva's hosted server: exactly https://zolvaagent.app/mcp on the default port, no user name or password. */
+const isZolvaHost = (url: string | undefined) => {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && u.hostname === "zolvaagent.app" && !u.port && !u.username && !u.password && /^\/mcp\/?$/.test(u.pathname);
+  } catch {
+    return false;
+  }
+};
+/** The variable Zolva's docs use for the key (zolvaagent.app/docs/mcp, the Codex setup). */
+const ZOLVA_KEY_VAR = "ZOLVA_KEY";
+
+/**
+ * Zolva, open trading-agent infrastructure on Robinhood Chain, as Zolva documents it (zolvaagent.app/docs/mcp,
+ * /docs/public-api, /llms.txt and the server's source at github.com/zolvaagent/zolva, read Nov 19, 2026): the
+ * hosted server https://zolvaagent.app/mcp, Streamable HTTP. Without a key it has seven read-only tools. An
+ * optional key (zk_ followed by 43 characters) goes in "Authorization: Bearer zk_..." and adds tools for the
+ * key's scopes: read:private, compute, ai (spends AI credits), agents:write (paper agents only) and live:stop
+ * (stops a real-money agent). It never moves funds. A missing, wrong or empty key is refused with 401, so a
+ * header whose variable is unset stops the keyless tools too.
+ *
+ * Keys are never copied. A key reference becomes ZOLVA_KEY holding the key alone, sent as "Bearer ${ZOLVA_KEY}"
+ * (bearer_token_env_var in Codex), which is how Zolva asks clients to keep the key out of their files. A
+ * reference that already holds the key alone (Bearer ${NAME}) keeps its name.
+ */
+const ZOLVA: ServerProfile = {
+  id: "zolva",
+  vendor: "Zolva",
+  label: "Zolva (trading agents on Robinhood Chain; read only without a key)",
+  matches: (t) => !!t.mcp && t.mcp.transport !== "stdio" && isZolvaHost(t.mcp.url),
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [],
+  looserDefaults: {},
+  apply(t, out, platform) {
+    const mcp = t.mcp!;
+    const headers = { ...mcp.headers };
+    const auth = Object.keys(headers).filter((h) => h.toLowerCase() === "authorization");
+    // A reference holding the whole header ("Bearer zk_..."), or a key Nomad removed: the key goes in ZOLVA_KEY instead.
+    if (auth.length === 1 && "secretRef" in headers[auth[0]] && typeof (mcp as Record<string, unknown>).bearerEnv !== "string") {
+      delete headers[auth[0]];
+      out.tool = { ...t, mcp: { ...mcp, headers, bearerEnv: ZOLVA_KEY_VAR } as Tool["mcp"] };
+    }
+    const keyRef = (out.tool.mcp as Record<string, unknown>).bearerEnv;
+    const keptKey = Object.keys(out.tool.mcp!.headers).some((h) => h.toLowerCase() === "authorization");
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: `"${t.name}" is Zolva's hosted server for trading agents on Robinhood Chain. Without a key it has seven read-only tools and needs no wallet; Nomad copies its address.`
+    });
+    if (typeof keyRef === "string") {
+      out.manualSteps.push(
+        `The "${t.name}" key is your Zolva API key (zk_..., from Settings, API keys on zolvaagent.app); keys are never copied. Until ${keyRef} is set, the server does not work on ${platform}, keyless tools included. To use Zolva without a key, leave out its key setting (${platform === "Codex" ? "bearer_token_env_var" : "the Authorization header"}).`
+      );
+    }
+    if (typeof keyRef === "string" || keptKey) {
+      out.notes.push({
+        level: "info",
+        category: "tools",
+        message: `A Zolva key adds tools for the scopes it holds: agents:write creates, pauses and publishes paper agents, ai spends your AI credits, and live:stop can stop a real-money agent. Give the key only the scopes this agent needs. Zolva never moves funds through MCP.`
+      });
+    }
+  }
+};
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {
