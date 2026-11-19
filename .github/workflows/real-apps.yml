@@ -29,6 +29,7 @@ on:
       - "scripts/check-ostra.mjs"
       - "scripts/check-stoa.mjs"
       - "scripts/check-zolva.mjs"
+      - "scripts/check-memoria.mjs"
       - "scripts/check-your-nomad.mjs"
       - "packages/mcp/**"
       - ".github/workflows/real-apps.yml"
@@ -88,6 +89,10 @@ jobs:
       # (fake) key moves to the real Codex (bearer_token_env_var = ZOLVA_KEY) and OpenClaw, with the key nowhere.
       - name: Check Zolva
         run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-zolva.mjs
+      # One request with no key: Memoria's hosted server refuses it (401), and a setup with a (fake) key moves to the
+      # real Codex (bearer_token_env_var = MEMORIA_API_KEY) and OpenClaw, with the key nowhere.
+      - name: Check Memoria
+        run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-memoria.mjs
       # Your Nomad: nomad connect adds the server to the real Codex, Gemini CLI and OpenClaw, the server answers
       # when started exactly as Codex starts it, and nomad connect --remove takes it out again.
       - name: Check Your Nomad
