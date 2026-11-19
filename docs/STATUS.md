@@ -260,7 +260,7 @@ Not covered: wallet keys in formats other than those above (for example an encry
 
 ## Zolva setups, and bearer tokens in a variable (added)
 
-Written Nov 19, 2026. Zolva is open trading-agent infrastructure on Robinhood Chain, reached through a hosted MCP server that is read-only without a key and adds tools for an optional API key's scopes. The Zolva team asked Nomad to add its server and has not reviewed this work yet. See [docs/guides/zolva-setups.md](guides/zolva-setups.md).
+Written Nov 19, 2026. Zolva is open trading-agent infrastructure on Robinhood Chain, reached through a hosted MCP server that is read-only without a key and adds tools for an optional API key's scopes. The Zolva team asked Nomad to add its server and tested this work before release on Nov 19, 2026. See [docs/guides/zolva-setups.md](guides/zolva-setups.md).
 
 Tested (automated, every push):
 - Zolva setups moving between Claude Code, Codex, Hermes, Cursor and OpenClaw (`tests/migration/zolva.test.ts`): the address as written; a key in a header or a variable becomes `ZOLVA_KEY` holding the key alone (`bearer_token_env_var` in Codex, `Bearer ${ZOLVA_KEY}` in Claude Code and Hermes, `${env:ZOLVA_KEY}` in Cursor, a step for OpenClaw that keeps the key out of `openclaw.json`); a variable of the user's own keeps its name; a keyless setup stays keyless; a Codex round trip comes back as Zolva's docs write it. Planted keys never appear in destinations, plans, receipts or Nomad's library, and the sources are unchanged.

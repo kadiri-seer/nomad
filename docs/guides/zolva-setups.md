@@ -2,7 +2,7 @@
 
 Zolva is open trading-agent infrastructure on Robinhood Chain: people build trading agents for tokenized US stocks, ETFs and crypto, backtest them, and run them on paper or with real money from their own wallet, with every decision public. Agents reach Zolva through a hosted MCP server, `https://zolvaagent.app/mcp`. Without a key it has seven read-only tools: agents, markets, recent activity, consensus and a replay that checks a published agent. An optional API key adds tools for the scopes it holds. Nomad moves that MCP entry between agents, and never copies the key.
 
-The Zolva team asked Nomad to add its server and has not reviewed this guide yet. It follows Zolva's documentation (zolvaagent.app/docs/mcp, /docs/public-api and /llms.txt) and the server's public source, read Nov 19, 2026.
+The Zolva team asked Nomad to add its server and tested this work before release on Nov 19, 2026. It follows Zolva's documentation (zolvaagent.app/docs/mcp, /docs/public-api and /llms.txt) and the server's public source, read Nov 19, 2026.
 
 ## What moves
 
