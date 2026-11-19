@@ -2,8 +2,7 @@ import Link from "next/link";
 import { ALL_INFOS } from "@nomad/adapters/catalog";
 import { CompatDemo } from "@/components/CompatDemo";
 import { InstallNomad } from "@/components/InstallNomad";
-import { SiteFooter } from "@/components/SiteFooter";
-import { Badge } from "@/components/ui";
+import { REPO_URL, SiteFooter } from "@/components/SiteFooter";
 
 const STEPS = [
   { t: "Read the agent where it lives", d: "Nomad finds OpenClaw, Claude Code, Codex and Hermes agents on your machine and reads instructions, persona, memory, skills, tools, routines and permissions into one portable format." },
@@ -12,14 +11,11 @@ const STEPS = [
   { t: "Apply, verify, keep a receipt", d: "Writes are atomic and backed up first. Nomad reads the result back to verify it, records a receipt, and can restore the previous state in one step." }
 ];
 
-const COMPONENTS = [
-  { t: "Identity", d: "Name, persona, tone and a permanent agent id, so the same agent is recognised on every platform." },
-  { t: "Instructions", d: "System prompts, AGENTS.md style rules, conventions and slash commands." },
-  { t: "Memory", d: "Profile, preferences, facts, project context and daily logs, kept as separate entries with their origin." },
-  { t: "Skills", d: "Agent Skills folders with their scripts and files, converted between skills, commands and prompts." },
-  { t: "Tools", d: "MCP servers with their configuration. Credentials become references you reconnect, never copied values." },
-  { t: "Routines", d: "Scheduled jobs with their cron expression and timezone. Always imported paused." },
-  { t: "Permissions", d: "Allow, ask and deny rules mapped to the destination. Nomad never widens what an agent may do without asking." }
+const HOME = [
+  { t: "Show", d: "Ask \u201cNomad, show my agents\u201d to see every agent you have, the apps it lives in, and any copy that is behind." },
+  { t: "Borrow", d: "Use an agent in the chat you are in. Nothing is written anywhere, and secrets are never included." },
+  { t: "Bring", d: "Install an agent in this app for good, with its tools and skills, after a preview you approve." },
+  { t: "Send back", d: "Save what an agent learned to the home as a new version, ready for its other copies." }
 ];
 
 const SAFETY = [
@@ -68,7 +64,7 @@ export default function Home() {
             {direct.slice(0, 9).map((a) => (
               <span key={a.id}>{a.displayName}</span>
             ))}
-            <span>and {direct.length - 9 + guided.length} more</span>
+            <Link href="/docs/adapters">and {direct.length - 9 + guided.length} more</Link>
           </div>
         </div>
 
@@ -81,7 +77,7 @@ export default function Home() {
                 Paste one line once, and Nomad is on your computer like any other app. No Node.js, no admin rights, nothing to set up. Everything after that is clicks.
               </p>
               <p className="muted" style={{ marginTop: 18 }}>
-                Developers can also run it straight from npm: <code>npx thenomad</code>
+                Developers can also run it straight from npm: <code>npx thenomad</code>. The app, the command line and the MCP server share one engine.
               </p>
             </div>
             <InstallNomad />
@@ -95,9 +91,9 @@ export default function Home() {
                 <p className="label">How it works</p>
                 <h2 style={{ marginTop: 12 }}>A migration you can read before you run it.</h2>
               </div>
-              <p>Copying instruction files is the easy part. Nomad maps each platform&apos;s structure into a common format, then writes the closest faithful version at the destination and tells you exactly where it could not.</p>
+              <p>Copying instruction files is the easy part. Nomad maps each platform&apos;s structure into a common format, then writes the closest faithful version at the destination and tells you exactly where it could not. <Link href="/docs/format">See what travels</Link>.</p>
             </div>
-            <ol className="steps">
+            <ol className="steps steps-grid">
               {STEPS.map((s, i) => (
                 <li key={s.t}>
                   <span className="num">{String(i + 1).padStart(2, "0")}</span>
@@ -109,70 +105,26 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="section">
+        <section className="section" id="your-nomad">
           <div className="wrap split">
             <div>
-              <p className="label">What travels</p>
-              <h2 style={{ marginTop: 12 }}>An agent is more than its system prompt.</h2>
+              <p className="label">Your Nomad</p>
+              <h2 style={{ marginTop: 12 }}>Every agent you have, in one home.</h2>
               <p className="lede" style={{ marginTop: 18 }}>
-                Every part is kept in the Universal Agent Format: versioned, validated JSON with Markdown for anything you would want to read.
+                Reach your home from inside the app you are working in. Run <code>nomad connect</code> once, then ask for the agent you want. It runs on your computer: no account, nothing uploaded.
               </p>
-              <Link href="/docs/format" className="btn btn-quiet" style={{ marginTop: 24 }}>
-                Read the format
-              </Link>
+              <a href={`${REPO_URL}/blob/main/docs/guides/your-nomad.md`} className="btn btn-quiet" style={{ marginTop: 24 }}>
+                Read the guide
+              </a>
             </div>
             <dl style={{ margin: 0 }}>
-              {COMPONENTS.map((c) => (
+              {HOME.map((c) => (
                 <div key={c.t} style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: 16, padding: "16px 0", borderBottom: "1px solid var(--line)" }}>
                   <dt style={{ fontWeight: 600 }}>{c.t}</dt>
                   <dd style={{ margin: 0, color: "var(--ink-2)" }}>{c.d}</dd>
                 </div>
               ))}
             </dl>
-          </div>
-        </section>
-
-        <section className="section" id="platforms">
-          <div className="wrap">
-            <div className="section-head">
-              <div>
-                <p className="label">Platforms</p>
-                <h2 style={{ marginTop: 12 }}>Honest support labels.</h2>
-              </div>
-              <p>Each integration declares what it can read and write per category. Full and partial adapters write files directly, and guided ones prepare a kit you finish by hand because the platform offers no import.</p>
-            </div>
-            <div className="panel table-wrap">
-              <table className="data">
-                <thead>
-                  <tr>
-                    <th scope="col">Platform</th>
-                    <th scope="col">Support</th>
-                    <th scope="col">What Nomad works with</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {direct.map((a) => (
-                    <tr key={a.id}>
-                      <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{a.displayName}</td>
-                      <td>
-                        <Badge kind={a.support}>{a.support.toLowerCase()}</Badge>
-                      </td>
-                      <td className="why">{a.description}</td>
-                    </tr>
-                  ))}
-                  <tr>
-                    <td style={{ fontWeight: 600 }}>Hosted and frameworks</td>
-                    <td>
-                      <Badge kind="GUIDED">guided</Badge>
-                    </td>
-                    <td className="why">{guided.map((g) => g.displayName).join(", ")}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <p style={{ marginTop: 16 }}>
-              <Link href="/docs/adapters">See the full capability matrix</Link>
-            </p>
           </div>
         </section>
 
@@ -193,26 +145,6 @@ export default function Home() {
                 <li key={s}>{s}</li>
               ))}
             </ul>
-          </div>
-        </section>
-
-        <section className="section">
-          <div className="wrap split">
-            <div>
-              <p className="label">For developers</p>
-              <h2 style={{ marginTop: 12 }}>The same engine everywhere.</h2>
-              <p className="lede" style={{ marginTop: 18 }}>
-                The web app, the CLI and the MCP server share one migration engine. New platforms plug in through the adapter SDK and its contract tests.
-              </p>
-            </div>
-            <pre className="code" aria-label="Command line example">
-              <span className="c"># guided: pick an agent, pick where it goes</span>
-              {"\nnpx thenomad\n\n"}
-              <span className="c"># or in one line, with a short preview first</span>
-              {"\nnpx thenomad move openclaw claude-code\n\n"}
-              <span className="c"># save it to a file, open it anywhere</span>
-              {"\nnpx thenomad move openclaw ./kestrel.nomad\nnpx thenomad move ./kestrel.nomad codex"}
-            </pre>
           </div>
         </section>
 

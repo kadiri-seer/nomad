@@ -1667,3 +1667,34 @@ details.diff summary {
     margin-left: 8px;
   }
 }
+
+/* ------------------------- steps side by side ------------------------- */
+
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0 32px;
+}
+.steps-grid li {
+  display: block;
+  padding: 24px 0 0;
+  border-bottom: 0;
+}
+.steps-grid h3 {
+  margin: 10px 0 8px;
+}
+@media (max-width: 960px) {
+  .steps-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 32px;
+  }
+}
+@media (max-width: 560px) {
+  .steps-grid {
+    grid-template-columns: 1fr;
+  }
+  .steps-grid li {
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--line);
+  }
+}
