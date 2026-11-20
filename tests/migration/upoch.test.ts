@@ -66,8 +66,9 @@ describe("Upoch setups", () => {
     expect(notes(plan)).toContain(`"upoch" runs Upoch Guard on this computer: it checkpoints the agent's work on Robinhood Chain and can restore or roll it back. Its keys and settings stay in ~/.upoch; Nomad never reads, copies or moves that folder.`);
     expect(warnings(plan)).toContain(`Upoch does not coordinate two copies of the same agent yet. Stop "upoch" in the app you moved it from before Codex starts it.`);
     expect(notes(plan)).toContain("no independent audit yet");
-    expect(notes(plan)).toContain(`Risk Check (spending limits) runs through Upoch's SDK, not through "upoch".`);
-    expect(steps(plan)).toContain(`If Codex runs on another computer, copy ~/.upoch there yourself (keep it readable only by you) before Codex first starts "upoch": that folder carries the agent's Upoch keys.`);
+    expect(notes(plan)).toContain(`Risk Check (spending limits) runs in "upoch" from @upoch/guard 0.2.0, with its rules kept alongside the keys.`);
+    expect(notes(plan)).not.toContain("SDK");
+    expect(steps(plan)).toContain(`If Codex runs on another computer, copy ~/.upoch there yourself (keep it readable only by you) before Codex first starts "upoch": that folder carries the agent's Upoch keys and Risk Check rules.`);
     expect(steps(plan)).toContain(`Install Upoch Guard for "upoch": npm install -g @upoch/guard. It needs Node.js 24 or later`);
     expectNoLeak(allText(dest), JSON.stringify(plan), JSON.stringify(receipt), allText(env.nomadHome));
     expect(treeHash(src)).toBe(before);

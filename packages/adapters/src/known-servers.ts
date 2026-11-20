@@ -1025,13 +1025,15 @@ const isUpochServer = (t: Tool) => {
 
 /**
  * Upoch, checkpoints and recovery for AI agents on Robinhood Chain, as Upoch documents it (upoch.tech/docs/mcp,
- * /docs/recovery and /docs/security-review, @upoch/guard 0.1.4, and the Upoch team's answers, read Nov 19, 2026):
+ * /docs/recovery and /docs/security-review, @upoch/guard 0.1.4, and the Upoch team's answers, read Nov 19, 2026;
+ * Risk Check updated from @upoch/guard 0.2.0 and the team's note, Nov 20, 2026):
  * the local MCP server `upoch mcp` from @upoch/guard (Node.js 24 or later), which checkpoints, restores and rolls
  * back an agent's work. Everything lives in one folder, UPOCH_HOME (default ~/.upoch): the owner and executor
  * keys, the checkpoint encryption key and the storage token in secrets.json, plus config.json, session.json and
  * journal.jsonl. That folder is key material: never read or copied. Restoring it is what carries the agent's keys
  * to a new computer. Upoch does not coordinate two copies of one agent yet, so the agent runs in one app at a
- * time. Risk Check runs through Upoch's SDK, not this server. The contracts have had no independent audit.
+ * time. Risk Check (payment rules set with `upoch rules`, kept in config.json) runs in this server from
+ * @upoch/guard 0.2.0. The contracts have had no independent audit.
  */
 const UPOCH: ServerProfile = {
   id: "upoch",
@@ -1060,10 +1062,10 @@ const UPOCH: ServerProfile = {
     out.notes.push({
       level: "info",
       category: "tools",
-      message: `Upoch's contracts have had an internal review but no independent audit yet, and Upoch suggests low-value workflows first. Risk Check (spending limits) runs through Upoch's SDK, not through "${t.name}".`
+      message: `Upoch's contracts have had an internal review but no independent audit yet, and Upoch suggests low-value workflows first. Risk Check (spending limits) runs in "${t.name}" from @upoch/guard 0.2.0, with its rules kept alongside the keys.`
     });
     out.manualSteps.push(
-      `If ${platform} runs on another computer, copy ${where} there yourself (keep it readable only by you) before ${platform} first starts "${t.name}": that folder carries the agent's Upoch keys. Without it Upoch is not set up there, and a new setup registers a different agent.`
+      `If ${platform} runs on another computer, copy ${where} there yourself (keep it readable only by you) before ${platform} first starts "${t.name}": that folder carries the agent's Upoch keys and Risk Check rules. Without it Upoch is not set up there, and a new setup registers a different agent.`
     );
     if (isUpochCommand(mcp.command)) {
       out.manualSteps.push(`Install Upoch Guard for "${t.name}": npm install -g @upoch/guard. It needs Node.js 24 or later, and the upoch command must be on the PATH ${platform} uses.`);

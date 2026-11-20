@@ -287,7 +287,7 @@ Not verified: saving and finding memories with a real key (that needs a Memoria 
 
 ## Upoch setups (added)
 
-Written Nov 19, 2026. Upoch saves checkpoints of an agent's work on Robinhood Chain for recovery and rollback, through a local MCP server, Upoch Guard (`upoch mcp`), whose keys live in `~/.upoch` or `UPOCH_HOME`. The Upoch team answered Nomad's questions (one app at a time; restoring `~/.upoch` carries the keys; Risk Check is not in the MCP server yet) and has not reviewed this work yet. See [docs/guides/upoch-setups.md](guides/upoch-setups.md).
+Written Nov 19, 2026. Upoch saves checkpoints of an agent's work on Robinhood Chain for recovery and rollback, through a local MCP server, Upoch Guard (`upoch mcp`), whose keys live in `~/.upoch` or `UPOCH_HOME`. The Upoch team answered Nomad's questions (one app at a time; restoring `~/.upoch` carries the keys and, from `@upoch/guard` 0.2.0, the Risk Check rules, which run in the MCP server) and reviewed this work on Nov 20, 2026. See [docs/guides/upoch-setups.md](guides/upoch-setups.md).
 
 Tested (automated, every push):
 - Upoch setups moving from Claude Code to Codex and back, and from Codex to OpenClaw (`tests/migration/upoch.test.ts`): `upoch mcp` and the `npx @upoch/guard mcp` form with its pin as written, `UPOCH_HOME` as a path, the one-app-at-a-time warning, the steps for another computer and for Node.js 24, and the notes on Risk Check and the audit. A planted `~/.upoch` with fake keys is never read: nothing from it appears in destinations, plans, receipts or Nomad's library, and the sources are unchanged.
