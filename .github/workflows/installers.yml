@@ -45,7 +45,7 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (v4.4.0)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (v4.4.0)
         with:
           ref: ${{ env.REF }}
           persist-credentials: false
@@ -100,7 +100,7 @@ jobs:
           - { runner: ubuntu-22.04-arm, target: linux-arm64, ext: tar.gz }
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (v4.4.0)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (v4.4.0)
         with:
           ref: ${{ env.REF }}
           persist-credentials: false
@@ -141,7 +141,7 @@ jobs:
     env:
       VERSION: ${{ needs.package.outputs.version }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (v4.4.0)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (v4.4.0)
         with:
           ref: ${{ env.REF }}
           persist-credentials: false
