@@ -330,6 +330,15 @@ pre {
   text-decoration: none;
   color: var(--ink-2);
   padding: 10px 0;
+  white-space: nowrap;
+}
+@media (max-width: 1180px) {
+  .nav {
+    gap: 14px;
+  }
+  .nav a {
+    letter-spacing: 0.05em;
+  }
 }
 .nav a:hover,
 .nav a[aria-current="page"] {
@@ -385,7 +394,7 @@ pre {
   display: none;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 960px) {
   .nav {
     display: none;
   }
