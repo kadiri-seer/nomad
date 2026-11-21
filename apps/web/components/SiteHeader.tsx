@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/docs/security", label: "Security" },
   { href: "/docs", label: "Docs" },
   { href: "/vote", label: "Vote" },
+  { href: "/ai", label: "Nomad AI" },
   { href: "/inspect", label: "Inspector" }
 ];
 
