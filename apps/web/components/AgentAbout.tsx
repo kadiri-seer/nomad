@@ -125,6 +125,12 @@ export function AgentAbout() {
                   <dd>{v}</dd>
                 </div>
               ))}
+              <dt>Checks tokens with</dt>
+              <dd>
+                <a href="https://engine.oddsengine.live" target="_blank" rel="noopener noreferrer">
+                  OddsEngine
+                </a>
+              </dd>
             </dl>
           </>
         )}
