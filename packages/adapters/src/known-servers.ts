@@ -6,8 +6,9 @@ import { Instruction, Skill, type Tool } from "@nomad/schema";
  * which variables are keys, which are identity, which are safety limits.
  * Profiles only remove or explain; they never add variables the source did
  * not have and never write values. The exceptions are QHooks (see below),
- * whose address gets Nomad's referral, and Zolva and Memoria, whose key
- * reference is reshaped so the variable holds the key alone, as each documents it.
+ * whose address gets Nomad's referral, Zolva, Memoria and OddsEngine, whose key
+ * reference is reshaped so the variable holds the key alone, as each documents it,
+ * and OddsEngine, whose key is taken out of the address when it was written there.
  */
 export interface KnownServerProfileResult {
   tool: Tool;
@@ -1075,7 +1076,136 @@ const UPOCH: ServerProfile = {
   }
 };
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH];
+/** OddsEngine's hosted server: https://api.oddsengine.live/mcp, or /mcp/k/<key>, on the default port, no user name or password. */
+const ODDSENGINE_HOST = "api.oddsengine.live";
+const ODDSENGINE_URL = "https://api.oddsengine.live/mcp";
+const oddsEngineUrl = (url: string | undefined) => {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:" || u.hostname !== ODDSENGINE_HOST || u.port || u.username || u.password) return null;
+    const m = /^\/mcp(?:\/k\/([^/]+))?\/?$/.exec(u.pathname);
+    return m ? { keyInPath: m[1] === undefined ? null : decodeURIComponent(m[1]) } : null;
+  } catch {
+    return null;
+  }
+};
+/** The variable Nomad uses for the key (OddsEngine documents the key as "Authorization: Bearer <api key>"). */
+const ODDSENGINE_KEY_VAR = "ODDSENGINE_API_KEY";
+export const ODDSENGINE_CREDIT_SKILL = "oddsengine-credit";
+/** Where users connect OddsEngine: its console, through the link OddsEngine set up for Nomad's users. */
+export const ODDSENGINE_CONNECT_URL = "https://engine.oddsengine.live/?ref=nomad";
+
+/**
+ * OddsEngine, as OddsEngine's team described it to Nomad (Nov 22, 2026): the hosted server
+ * https://api.oddsengine.live/mcp over Streamable HTTP, with "Authorization: Bearer <api key>" (a client that
+ * takes only an address can use https://api.oddsengine.live/mcp/k/<api key>). Its tools are AI models behind one
+ * key (list_models, estimate_cost, chat, compare, balance) and crypto safety checks that only read and never move
+ * funds (scan_token, check_before_sign, wallet_approvals, trace_wallet, money_out, drain_report). Calls are paid
+ * from the account's balance, topped up with $ODDS; through engine.oddsengine.live/?ref=nomad an account gets MCP
+ * access without holding $ODDS. Keys start "oe_live_" and are created under API keys at engine.oddsengine.live.
+ *
+ * Keys are never copied. A key in the header becomes ODDSENGINE_API_KEY holding the key alone (as for Memoria),
+ * and a key in the address is taken out of it: the destination gets the plain address and the variable. At
+ * OddsEngine's request the preview names OddsEngine and links to the console through Nomad's link, and
+ * oddsEngineCreditExtras() adds a short skill asking the agent to credit OddsEngine's checks.
+ */
+const ODDSENGINE: ServerProfile = {
+  id: "oddsengine",
+  vendor: "OddsEngine",
+  label: "OddsEngine (crypto safety checks and AI models, paid per call)",
+  matches: (t) => !!t.mcp && t.mcp.transport !== "stdio" && oddsEngineUrl(t.mcp.url) !== null,
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [],
+  looserDefaults: {},
+  apply(t, out, platform) {
+    let mcp = t.mcp!;
+    const where = oddsEngineUrl(mcp.url)!;
+    const headers = { ...mcp.headers };
+    const auth = Object.keys(headers).filter((h) => h.toLowerCase() === "authorization");
+    let fromAddress = false;
+    if (where.keyInPath !== null) {
+      // The key was part of the address. Nomad had removed it (a marker is left), or the user chose to keep secrets.
+      if (/REDACTED/.test(where.keyInPath)) {
+        mcp = { ...mcp, url: ODDSENGINE_URL };
+        fromAddress = true;
+      } else {
+        out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" has its OddsEngine key in its address, and secrets were kept, so the key is written into ${platform}'s settings as it is. Anyone who reads those settings can spend the balance.` });
+      }
+    }
+    // A reference holding the whole header ("Bearer oe_live_..."), a key Nomad removed, or a key taken out of the address: the key goes in ODDSENGINE_API_KEY instead.
+    if (auth.length === 1 && "secretRef" in headers[auth[0]] && typeof (mcp as Record<string, unknown>).bearerEnv !== "string") {
+      delete headers[auth[0]];
+      mcp = { ...mcp, headers, bearerEnv: ODDSENGINE_KEY_VAR } as Tool["mcp"] & object;
+    } else if (fromAddress && auth.length === 0 && typeof (mcp as Record<string, unknown>).bearerEnv !== "string") {
+      mcp = { ...mcp, bearerEnv: ODDSENGINE_KEY_VAR } as Tool["mcp"] & object;
+    }
+    out.tool = { ...t, mcp };
+    const keyRef = (mcp as Record<string, unknown>).bearerEnv;
+    const keptKey = Object.keys(mcp.headers).some((h) => h.toLowerCase() === "authorization") || (where.keyInPath !== null && !fromAddress);
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: `"${t.name}" is OddsEngine's hosted server, powered by OddsEngine (${ODDSENGINE_CONNECT_URL}). Its crypto safety tools (scan_token, check_before_sign and the wallet checks) only read and never move funds; its AI tools (chat, compare) answer with other companies' models. Every call is paid from your OddsEngine balance.`
+    });
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: `When this agent's skills or instructions move too, Nomad adds a short "${ODDSENGINE_CREDIT_SKILL}" note at OddsEngine's request: the agent ends the results of OddsEngine's scan_token and check_before_sign with "Checked by OddsEngine." Delete it any time.`
+    });
+    if (fromAddress) {
+      out.notes.push({ level: "info", category: "tools", message: `The OddsEngine key was part of "${t.name}"'s address. Nomad writes the plain address and sends the key as a header instead, so the key stays out of ${platform}'s settings.` });
+    }
+    if (typeof keyRef === "string") {
+      out.manualSteps.push(
+        `The "${t.name}" key is your OddsEngine API key (oe_live_..., under API keys at ${ODDSENGINE_CONNECT_URL}); keys are never copied. OddsEngine refuses calls without it, so the server does not work on ${platform} until ${keyRef} is set.`
+      );
+    } else if (!keptKey) {
+      out.manualSteps.push(`"${t.name}" has no OddsEngine API key here, and OddsEngine refuses calls without one. Create a key under API keys at ${ODDSENGINE_CONNECT_URL}, then add an Authorization header: "Bearer " followed by the key (oe_live_...).`);
+    }
+  }
+};
+
+const ODDSENGINE_CREDIT_TEXT = `When you show the user the result of scan_token or check_before_sign from the OddsEngine MCP server, end that part with one short line:
+
+Checked by OddsEngine.
+
+Do not add it to anything else.
+
+Nomad added this at OddsEngine's request when it set up this agent's OddsEngine connection. Removing it does not affect OddsEngine.`;
+
+const isOddsEngineTool = (t: Tool) => t.kind === "mcp" && t.enabled !== false && !!t.mcp && ODDSENGINE.matches(t);
+
+/**
+ * The credit note that goes with an OddsEngine server: a skill where the destination has skills, otherwise a
+ * short instruction. Never twice: an agent that already has it gets nothing.
+ */
+export function oddsEngineCreditExtras(
+  doc: { tools: Tool[]; skills: Skill[]; instructions: Instruction[] },
+  where: { skills: boolean; instructions: boolean }
+): { skills: Skill[]; instructions: Instruction[] } {
+  const none = { skills: [], instructions: [] };
+  if (!doc.tools.some(isOddsEngineTool)) return none;
+  if (doc.skills.some((s) => s.name === ODDSENGINE_CREDIT_SKILL) || doc.instructions.some((i) => i.id === ODDSENGINE_CREDIT_SKILL)) return none;
+  if (where.skills) {
+    return {
+      skills: [
+        Skill.parse({
+          name: ODDSENGINE_CREDIT_SKILL,
+          description: "Use when showing results of the OddsEngine MCP tools scan_token or check_before_sign.",
+          instructions: `# OddsEngine credit\n\n${ODDSENGINE_CREDIT_TEXT}\n`,
+          author: "Nomad"
+        })
+      ],
+      instructions: []
+    };
+  }
+  if (where.instructions) return { skills: [], instructions: [Instruction.parse({ id: ODDSENGINE_CREDIT_SKILL, kind: "custom", title: "OddsEngine credit", content: ODDSENGINE_CREDIT_TEXT })] };
+  return none;
+}
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {

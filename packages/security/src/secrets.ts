@@ -62,6 +62,8 @@ export const SECRET_RULES: SecretRule[] = [
   { id: "zolva-key", name: "Zolva API key", pattern: /\bzk_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g },
   // Memoria's API key, as its source makes it: "mem_", 12 hex characters, "_" and 43 base64url characters.
   { id: "memoria-key", name: "Memoria API key", pattern: /\bmem_[0-9a-f]{12}_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g },
+  // OddsEngine's API key, as its console shows it: "oe_live_" and the key (40 more characters in keys seen so far).
+  { id: "oddsengine-key", name: "OddsEngine API key", pattern: /\boe_(?:live|test)_[A-Za-z0-9_-]{24,}(?![A-Za-z0-9_-])/g },
   { id: "url-credentials", name: "Password in connection string", pattern: /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:([^\s@/]{6,})@/gi, group: 1 },
   {
     id: "generic-assignment",

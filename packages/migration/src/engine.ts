@@ -25,7 +25,7 @@ import { atomicWrite, displayPath, drainSkippedKeyMaterial, drainSkippedLinks, m
 import { sanitizeDocument, scanDocument, type DocumentScan, type SanitizeReport } from "@nomad/security";
 import { packAgent, packInterchange, unpackAgent, INTERCHANGE_EXTENSION, PACKAGE_EXTENSION, type UnpackResult } from "@nomad/archive";
 import { analyzeCompatibility, type CompatibilityReport } from "@nomad/compatibility";
-import { getAdapter, findAdapter, knownSkillNotes, listAdapters, qhooksReferralExtras, scanPlatforms } from "@nomad/adapters";
+import { getAdapter, findAdapter, knownSkillNotes, listAdapters, oddsEngineCreditExtras, qhooksReferralExtras, scanPlatforms } from "@nomad/adapters";
 import { NomadStore } from "@nomad/storage";
 import { applyOperations, computeOperations, type FileOperation } from "./ops";
 import { createBackup, previewRestore, restoreBackup, type RestorePreview } from "./backup";
@@ -178,15 +178,20 @@ const PLAN_TTL_MS = 30 * 60 * 1000;
 
 /**
  * QHooks' address gets Nomad's referral (known-servers.ts), and with it a short note asking the agent to
- * pass the referrer: as a skill where the destination writes skills, otherwise as an instruction. Only when
- * tools are moved too, and only in a component the user chose.
+ * pass the referrer; an OddsEngine server gets a short note asking the agent to credit OddsEngine's checks.
+ * Each is a skill where the destination writes skills, otherwise an instruction. Only when tools are moved
+ * too, and only in a component the user chose.
  */
-function withQHooksReferral(doc: AgentDocument, info: Adapter["info"], components: ComponentCategory[]): AgentDocument {
+function withAddedNotes(doc: AgentDocument, info: Adapter["info"], components: ComponentCategory[]): AgentDocument {
   if (!components.includes("tools")) return doc;
   const writes = (c: "skills" | "instructions") => components.includes(c) && ["full", "convert"].includes(info.capabilities[c]?.write ?? "");
-  const extra = qhooksReferralExtras(doc, { skills: writes("skills"), instructions: writes("instructions") });
-  if (!extra.skills.length && !extra.instructions.length) return doc;
-  return { ...doc, skills: [...doc.skills, ...extra.skills], instructions: [...doc.instructions, ...extra.instructions] };
+  // OddsEngine's credit note works the same way (known-servers.ts).
+  const where = { skills: writes("skills"), instructions: writes("instructions") };
+  const extras = [qhooksReferralExtras(doc, where), oddsEngineCreditExtras(doc, where)];
+  const skills = extras.flatMap((e) => e.skills);
+  const instructions = extras.flatMap((e) => e.instructions);
+  if (!skills.length && !instructions.length) return doc;
+  return { ...doc, skills: [...doc.skills, ...skills], instructions: [...doc.instructions, ...instructions] };
 }
 export class Nomad {
   readonly store: NomadStore;
@@ -310,7 +315,7 @@ export class Nomad {
     const root = resolveRoot(req.destination.root);
     const mode: ConflictMode = req.mode ?? "merge";
     const components = req.components?.length ? req.components : [...COMPONENT_CATEGORIES];
-    const doc = withQHooksReferral(disableWorkflows(filterComponents(loaded.doc, components)), adapter.info, components);
+    const doc = withAddedNotes(disableWorkflows(filterComponents(loaded.doc, components)), adapter.info, components);
     const ctx: WriteContext = { root, mode, targetName: req.targetName, targetNativeId: req.destination.nativeId, components };
     const compatibility = analyzeCompatibility(doc, loaded.sourceAdapter?.info ?? null, adapter.info);
     const planned = await adapter.plan(doc, ctx);
