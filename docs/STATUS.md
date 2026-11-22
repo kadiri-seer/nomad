@@ -296,3 +296,17 @@ Tested (automated, every push):
 Checked with real applications: `scripts/check-upoch.mjs` (Real apps workflow) checks npm still publishes `@upoch/guard` with the `upoch` command and its Node.js 24 requirement, then moves a setup with a planted `~/.upoch` to the real Codex, which lists the server as written, and OpenClaw, which accepts its config, with nothing from that folder in what Nomad wrote. Nothing from Upoch is installed or run. The Codex part was run here with Codex CLI 0.170.0 and passed.
 
 Not verified: checkpoints, restores and rollbacks themselves (they need an Upoch setup with ETH on Robinhood Chain).
+
+## OddsEngine setups (added)
+
+Written Nov 22, 2026. OddsEngine runs crypto safety checks and AI models behind one key, through a hosted MCP server (`https://api.oddsengine.live/mcp`, "Authorization: Bearer oe_live_...", or the key in the address as `/mcp/k/<key>`), paid per call from the account's balance. This follows what OddsEngine's team described to Nomad on Nov 22, 2026; OddsEngine has not reviewed it yet. See [docs/guides/oddsengine-setups.md](guides/oddsengine-setups.md).
+
+Tested (automated, every push):
+- OddsEngine setups moving between Claude Code, Codex, Cursor and OpenClaw (`tests/migration/oddsengine.test.ts`): a key in the header becomes `ODDSENGINE_API_KEY` holding the key alone (`bearer_token_env_var` in Codex, `Bearer ${ODDSENGINE_API_KEY}` in Claude Code, `${env:ODDSENGINE_API_KEY}` in Cursor, a step for OpenClaw that keeps the key out of `openclaw.json`); a key in the address is taken out, and the plain address with the variable arrives; a key kept on purpose (`--include-secrets`) stays, with a warning when it is in the address; a setup with no key gets a step with Nomad's link; the preview names OddsEngine and links to `engine.oddsengine.live/?ref=nomad`. Planted keys never appear in destinations, plans, receipts, Nomad's library or a `.nomad` package, and the sources are unchanged.
+- The `oddsengine-credit` skill (an instruction where the app has no skills) is added once, only with an enabled OddsEngine server and only when skills or instructions move, and never doubled on a round trip.
+- OddsEngine's key shape (`oe_live_` and the key) is a secret rule of its own, found in text and in addresses.
+- Which entries count as OddsEngine, and 11 look-alikes that do not, which get no note.
+
+Checked with real applications: `scripts/check-oddsengine.mjs` (Real apps workflow) checks that OddsEngine's server refuses a request with no key, then moves a setup with a fake key in its address to the real Codex and OpenClaw, with the key nowhere in what Nomad wrote.
+
+Not verified: OddsEngine's tools with a real key through a moved setup (Nomad AI calls `scan_token` with a real key outside Nomad).
