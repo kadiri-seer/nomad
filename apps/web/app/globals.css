@@ -1771,8 +1771,32 @@ details.diff summary {
   .ai-page {
     padding-top: 28px;
   }
+  .ai-page .kv {
+    grid-template-columns: 76px minmax(0, 1fr);
+    gap: 6px 12px;
+  }
+  .ai-page .panel-body {
+    padding: 14px;
+  }
   .ai-steps {
     grid-template-columns: 1fr;
-    gap: 14px;
+    gap: 0;
+  }
+  .ai-steps li {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    column-gap: 8px;
+    padding: 10px 0;
+    border-top: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .ai-steps .num {
+    padding-top: 2px;
+  }
+  .ai-steps h3 {
+    margin: 0 0 2px;
+  }
+  .ai-steps p {
+    grid-column: 2;
   }
 }
