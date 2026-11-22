@@ -24,7 +24,6 @@ export type AgentWallet = (typeof AGENT_WALLETS)[number];
 
 export const AGENT_LIMITS = {
   perTradeUsd: 0.3,
-  tradesPerDay: 2,
   maxImpactPct: 2,
   startingUsdg: 10
 } as const;

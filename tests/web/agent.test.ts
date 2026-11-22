@@ -12,7 +12,7 @@ const USDG = { address_hash: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", symbo
 
 describe("Nomad AI page", () => {
   it("has no em dashes, emojis or words the site avoids, and does not say where the agent runs", () => {
-    for (const f of ["apps/web/app/ai/page.tsx", "apps/web/components/AgentLive.tsx", "apps/web/lib/agent.ts"]) {
+    for (const f of ["apps/web/app/ai/page.tsx", "apps/web/components/AgentLive.tsx", "apps/web/components/AgentAbout.tsx", "apps/web/lib/agent.ts"]) {
       const text = readFileSync(join(ROOT, f), "utf8");
       expect(text.includes("—"), `${f}: em dash`).toBe(false);
       expect(/\p{Extended_Pictographic}/u.test(text), `${f}: emoji`).toBe(false);

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AGENT_LIMITS, AGENT_WALLETS, addressUrl, fmt, readAgent, tradesToday, txUrl, usd, type AgentSnapshot } from "@/lib/agent";
+import { AGENT_WALLETS, addressUrl, fmt, readAgent, txUrl, usd, type AgentSnapshot } from "@/lib/agent";
 import { Badge, Notice, Skeleton, formatDate } from "./ui";
 
 const REFRESH_MS = 60_000;
+const SHOWN = 5;
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 function CopyAddress({ address }: { address: string }) {
@@ -33,6 +34,7 @@ function CopyAddress({ address }: { address: string }) {
 export function AgentLive() {
   const [data, setData] = useState<AgentSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -64,11 +66,13 @@ export function AgentLive() {
   const total = data ? data.wallets.reduce((s, w) => s + (w.ethUsd ?? 0) + w.holdings.reduce((h, x) => h + (x.usd ?? 0), 0), 0) : 0;
   const usdg = data ? data.wallets.flatMap((w) => w.holdings).filter((h) => h.symbol === "USDG").reduce((s, h) => s + h.amount, 0) : 0;
   const eth = data ? data.wallets.reduce((s, w) => s + w.eth, 0) : 0;
-  const today = data ? tradesToday(data.activity) : 0;
+  const trades = data ? data.activity.filter((a) => a.kind === "trade" && a.ok).length : 0;
+  const activity = data?.activity ?? [];
+  const rows = showAll ? activity.slice(0, 50) : activity.slice(0, SHOWN);
   const last = data?.activity[0];
 
   return (
-    <div className="stack" style={{ gap: 28 }}>
+    <div className="stack" style={{ gap: 20 }}>
       {error && <Notice tone="warn">{error}</Notice>}
 
       {data && (
@@ -86,10 +90,8 @@ export function AgentLive() {
             <b>{fmt(eth, 4)}</b>
           </div>
           <div>
-            <span className="label">Trades today (UTC)</span>
-            <b>
-              {today} <span className="muted" style={{ fontSize: "1rem" }}>of {AGENT_LIMITS.tradesPerDay}</span>
-            </b>
+            <span className="label">Trades made</span>
+            <b>{trades}</b>
           </div>
           <div>
             <span className="label">Last on-chain activity</span>
@@ -165,7 +167,7 @@ export function AgentLive() {
           <div className="panel-body muted">Nothing on-chain yet.</div>
         ) : (
           <div className="table-wrap">
-            <table className="data">
+            <table className="data" id="agent-activity-table">
               <thead>
                 <tr>
                   <th>When</th>
@@ -175,7 +177,7 @@ export function AgentLive() {
                 </tr>
               </thead>
               <tbody>
-                {(data?.activity ?? []).slice(0, 25).map((a) => (
+                {rows.map((a) => (
                   <tr key={`${a.walletId}-${a.hash}`}>
                     <td style={{ whiteSpace: "nowrap" }}>{formatDate(a.time)}</td>
                     <td>{a.walletId === "oak" ? "Oak" : "Rushr"}</td>
@@ -193,6 +195,13 @@ export function AgentLive() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {activity.length > SHOWN && (
+          <div className="panel-body ai-more">
+            <button type="button" className="btn btn-ghost btn-sm" aria-expanded={showAll} aria-controls="agent-activity-table" onClick={() => setShowAll((v) => !v)}>
+              {showAll ? "Show less" : `Show all ${Math.min(activity.length, 50)}`}
+            </button>
           </div>
         )}
       </section>
