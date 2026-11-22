@@ -2,7 +2,7 @@
 
 OddsEngine runs crypto safety checks and AI models behind one key, through a hosted MCP server, `https://api.oddsengine.live/mcp`. Its safety tools (`scan_token`, `check_before_sign`, `wallet_approvals`, `trace_wallet`, `money_out`, `drain_report`) only read and never move funds; its AI tools (`list_models`, `estimate_cost`, `chat`, `compare`, `balance`) answer with models from other companies. Every call is paid from your OddsEngine balance. Nomad moves that MCP entry between agents, and never copies the key.
 
-This follows what OddsEngine's team described to Nomad on Nov 22, 2026. OddsEngine has not reviewed this guide yet.
+This follows what OddsEngine's team described to Nomad on Nov 22, 2026, and OddsEngine's team reviewed this guide the same day.
 
 ## Connect OddsEngine
 
@@ -12,7 +12,7 @@ Powered by OddsEngine. Three steps, on [engine.oddsengine.live/?ref=nomad](https
 2. Top up your balance with $ODDS.
 3. Under **API keys**, create a key (it starts with `oe_live_` and is shown once), then set it as `ODDSENGINE_API_KEY` where your app reads it (the table below).
 
-Through that link, OddsEngine gives MCP access without holding $ODDS. Holders pay a lower fee. OddsEngine says the first 100 wallets that come through Nomad get $1 of starter credit from them.
+Through that link, OddsEngine gives MCP access without holding $ODDS. Safety checks cost $0.02 per call. Holders pay a lower fee on the AI models. OddsEngine says the first 100 wallets that come through Nomad get $1 of starter credit from them.
 
 ## What moves
 
