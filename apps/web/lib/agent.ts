@@ -176,3 +176,27 @@ export function tradesToday(activity: Activity[], now = new Date()): number {
   const day = now.toISOString().slice(0, 10);
   return activity.filter((a) => a.kind === "trade" && a.ok && a.time.slice(0, 10) === day).length;
 }
+
+/** Where Nomad AI publishes its latest moves after each run (a public GitHub repo, read as raw JSON). */
+export const MOVES_URL = "https://raw.githubusercontent.com/kadiri-seer/nomad-ai-feed/main/moves.json";
+
+/**
+ * The latest moves, checked again here: 1 to 4 plain lines of at most 90 characters, with no links, markup,
+ * addresses or hashes. Anything else is left out, and a feed with nothing usable gives an empty list.
+ */
+export function parseMoves(json: unknown): string[] {
+  const list = obj(json).moves;
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((m): m is string => typeof m === "string")
+    .map((m) => m.replace(/\s+/g, " ").trim())
+    .filter((m) => m.length >= 3 && m.length <= 90 && !/:\/\/|www\.|[<>[\]{}`]|0x[0-9a-f]{6,}/i.test(m))
+    .slice(0, 4);
+}
+
+/** The latest moves from the feed. */
+export async function readMoves(signal?: AbortSignal): Promise<string[]> {
+  const r = await fetch(MOVES_URL, { signal, cache: "no-store" });
+  if (!r.ok) throw new Error(`${r.status} from the feed`);
+  return parseMoves(await r.json());
+}

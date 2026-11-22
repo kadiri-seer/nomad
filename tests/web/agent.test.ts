@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { AGENT_WALLETS, activityFor, fmt, tradesToday, units } from "../../apps/web/lib/agent";
+import { AGENT_WALLETS, activityFor, fmt, parseMoves, tradesToday, units } from "../../apps/web/lib/agent";
 
 /** The Nomad AI page: its copy follows the site's rules, and explorer data is described correctly. */
 const ROOT = resolve(__dirname, "../..");
@@ -12,7 +12,7 @@ const USDG = { address_hash: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", symbo
 
 describe("Nomad AI page", () => {
   it("has no em dashes, emojis or words the site avoids, and does not say where the agent runs", () => {
-    for (const f of ["apps/web/app/ai/page.tsx", "apps/web/components/AgentLive.tsx", "apps/web/components/AgentAbout.tsx", "apps/web/lib/agent.ts"]) {
+    for (const f of ["apps/web/app/ai/page.tsx", "apps/web/components/AgentLive.tsx", "apps/web/components/AgentAbout.tsx", "apps/web/components/AgentMoves.tsx", "apps/web/lib/agent.ts"]) {
       const text = readFileSync(join(ROOT, f), "utf8");
       expect(text.includes("—"), `${f}: em dash`).toBe(false);
       expect(/\p{Extended_Pictographic}/u.test(text), `${f}: emoji`).toBe(false);
@@ -63,5 +63,12 @@ describe("Nomad AI page", () => {
     const a = activityFor(rushr, txs, transfers);
     expect(a.find((x) => x.hash === "0xbuy")).toMatchObject({ kind: "trade", text: "Traded 0.0001 ETH for 5 MEME" });
     expect(a.find((x) => x.hash === "0xeth")).toMatchObject({ kind: "funding", text: "Received 0.002 ETH" });
+  });
+
+  it("shows at most four plain moves from the feed and leaves out anything unsafe or broken", () => {
+    expect(parseMoves({ moves: ["Scanned 50 Rushr tokens", "  Checked   HALBROOK  ", "Passed on both"] })).toEqual(["Scanned 50 Rushr tokens", "Checked HALBROOK", "Passed on both"]);
+    expect(parseMoves({ moves: ["One", "Two", "Three", "Four", "Five"] })).toHaveLength(4);
+    expect(parseMoves({ moves: ["Go to https://x.example", "www.y.example", "<img src=x>", "Sent to 0x60cf07B939AB", "[link]", "ok", "x".repeat(91), 42, null, "Kept"] })).toEqual(["Kept"]);
+    for (const bad of [null, "text", 5, {}, { moves: "one" }, []]) expect(parseMoves(bad)).toEqual([]);
   });
 });

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AGENT_WALLETS, addressUrl, fmt, readAgent, txUrl, usd, type AgentSnapshot } from "@/lib/agent";
+import { AgentMoves } from "./AgentMoves";
 import { Badge, Notice, Skeleton, formatDate } from "./ui";
 
 const REFRESH_MS = 60_000;
@@ -90,6 +91,8 @@ export function AgentLive() {
           </div>
         </div>
       )}
+
+      <AgentMoves />
 
       <div className="grid-2">
         {AGENT_WALLETS.map((w) => {

@@ -12,6 +12,7 @@ const FILES = [
   "apps/web/app/ai/page.tsx",
   "apps/web/components/AgentLive.tsx",
   "apps/web/components/AgentAbout.tsx",
+  "apps/web/components/AgentMoves.tsx",
   "apps/web/lib/agent.ts",
   "docs/STATUS.md",
   "docs/guides/priors-setups.md",
