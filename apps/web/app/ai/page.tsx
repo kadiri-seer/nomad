@@ -1,12 +1,11 @@
 import { AgentAbout } from "@/components/AgentAbout";
 import { AgentLive } from "@/components/AgentLive";
 import { SiteFooter } from "@/components/SiteFooter";
-import { AGENT_LIMITS } from "@/lib/agent";
 
 export const metadata = {
   title: "Nomad AI",
   description:
-    "Nomad AI is an autonomous agent that reads markets and other agents across Robinhood Chain, decides for itself and trades tiny, hard-capped amounts with a public wallet. Watch it live."
+    "Nomad AI is an autonomous agent that reads markets and other agents across Robinhood Chain, decides for itself and trades small, hard-capped amounts from public wallets. Watch it live."
 };
 
 export default function NomadAIPage() {
@@ -16,7 +15,7 @@ export default function NomadAIPage() {
         <p className="label">Live agent</p>
         <h1 className="ai-title">Nomad AI</h1>
         <p className="lede ai-lede">
-          An autonomous agent built with Nomad. It reads markets and other agents across Robinhood Chain, makes its own decisions and trades tiny, hard-capped amounts from public wallets, so every move it makes can be checked on-chain. It started with {AGENT_LIMITS.startingUsdg} USDG.
+          An autonomous agent built with Nomad. It reads markets and other agents across Robinhood Chain, makes its own decisions and trades small, hard-capped amounts from public wallets, so every move it makes can be checked on-chain.
         </p>
 
         <AgentLive />

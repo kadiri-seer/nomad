@@ -64,12 +64,11 @@ export function AgentLive() {
   if (!data && !error) return <Skeleton rows={5} />;
 
   const total = data ? data.wallets.reduce((s, w) => s + (w.ethUsd ?? 0) + w.holdings.reduce((h, x) => h + (x.usd ?? 0), 0), 0) : 0;
-  const usdg = data ? data.wallets.flatMap((w) => w.holdings).filter((h) => h.symbol === "USDG").reduce((s, h) => s + h.amount, 0) : 0;
-  const eth = data ? data.wallets.reduce((s, w) => s + w.eth, 0) : 0;
   const trades = data ? data.activity.filter((a) => a.kind === "trade" && a.ok).length : 0;
-  const activity = data?.activity ?? [];
+  // Deposits into its wallets are not its own activity, so they are left out.
+  const activity = (data?.activity ?? []).filter((a) => a.kind !== "funding");
   const rows = showAll ? activity.slice(0, 50) : activity.slice(0, SHOWN);
-  const last = data?.activity[0];
+  const last = activity[0];
 
   return (
     <div className="stack" style={{ gap: 20 }}>
@@ -82,19 +81,11 @@ export function AgentLive() {
             <b>{usd(total)}</b>
           </div>
           <div>
-            <span className="label">USDG</span>
-            <b>{fmt(usdg)}</b>
-          </div>
-          <div>
-            <span className="label">ETH</span>
-            <b>{fmt(eth, 4)}</b>
-          </div>
-          <div>
             <span className="label">Trades made</span>
             <b>{trades}</b>
           </div>
           <div>
-            <span className="label">Last on-chain activity</span>
+            <span className="label">Last activity</span>
             <b style={{ fontSize: "1rem", paddingTop: 8 }}>{last ? formatDate(last.time) : "None yet"}</b>
           </div>
         </div>
@@ -157,14 +148,14 @@ export function AgentLive() {
       <section className="panel" aria-labelledby="agent-activity">
         <div className="panel-head">
           <h3 id="agent-activity" style={{ margin: 0 }}>
-            On-chain activity
+            Activity
           </h3>
           <span className="muted" style={{ fontSize: "0.85rem" }}>
-            {data ? `Updated ${formatDate(data.fetchedAt)}` : ""}
+            {data ? `Live from Robinhood Chain, updated ${formatDate(data.fetchedAt)}` : ""}
           </span>
         </div>
-        {data && data.activity.length === 0 ? (
-          <div className="panel-body muted">Nothing on-chain yet.</div>
+        {data && activity.length === 0 ? (
+          <div className="panel-body muted">No activity yet.</div>
         ) : (
           <div className="table-wrap">
             <table className="data" id="agent-activity-table">
@@ -182,9 +173,13 @@ export function AgentLive() {
                     <td style={{ whiteSpace: "nowrap" }}>{formatDate(a.time)}</td>
                     <td>{a.walletId === "oak" ? "Oak" : "Rushr"}</td>
                     <td>
-                      {a.text}{" "}
-                      {a.kind === "trade" && <Badge kind="info">Trade</Badge>}
-                      {!a.ok && <Badge kind="bad">Failed</Badge>}
+                      {a.text}
+                      {!a.ok && (
+                        <>
+                          {" "}
+                          <Badge kind="bad">Failed</Badge>
+                        </>
+                      )}
                     </td>
                     <td>
                       <a className="mono" href={txUrl(a.hash)} target="_blank" rel="noopener noreferrer">
@@ -205,9 +200,6 @@ export function AgentLive() {
           </div>
         )}
       </section>
-      <p className="muted" style={{ fontSize: "0.85rem", margin: 0 }}>
-        Read live from the public Robinhood Chain explorer, every minute. Prices are the explorer&apos;s.
-      </p>
     </div>
   );
 }

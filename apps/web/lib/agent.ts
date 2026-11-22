@@ -24,8 +24,7 @@ export type AgentWallet = (typeof AGENT_WALLETS)[number];
 
 export const AGENT_LIMITS = {
   perTradeUsd: 0.3,
-  maxImpactPct: 2,
-  startingUsdg: 10
+  maxImpactPct: 2
 } as const;
 
 export const USDG = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168";
