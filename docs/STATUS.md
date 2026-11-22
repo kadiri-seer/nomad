@@ -307,6 +307,6 @@ Tested (automated, every push):
 - OddsEngine's key shape (`oe_live_` and the key) is a secret rule of its own, found in text and in addresses.
 - Which entries count as OddsEngine, and 11 look-alikes that do not, which get no note.
 
-Checked with real applications: `scripts/check-oddsengine.mjs` (Real apps workflow) checks that OddsEngine's server refuses a request with no key, then moves a setup with a fake key in its address to the real Codex and OpenClaw, with the key nowhere in what Nomad wrote.
+Checked with real applications: `scripts/check-oddsengine.mjs` (Real apps workflow) checks that OddsEngine's server answers and refuses a tool call with no key, then moves a setup with a fake key in its address to the real Codex and OpenClaw, with the key nowhere in what Nomad wrote.
 
 Not verified: OddsEngine's tools with a real key through a moved setup (Nomad AI calls `scan_token` with a real key outside Nomad).

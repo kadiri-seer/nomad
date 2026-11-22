@@ -99,7 +99,7 @@ jobs:
       # (fake) ~/.upoch moves to the real Codex and OpenClaw, with nothing from that folder in what Nomad wrote.
       - name: Check Upoch
         run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-upoch.mjs
-      # OddsEngine's server refuses a request with no key, and a setup with a (fake) key in its address moves to the
+      # OddsEngine's server refuses a tool call with no key, and a setup with a (fake) key in its address moves to the
       # real Codex (plain address, bearer_token_env_var = ODDSENGINE_API_KEY) and OpenClaw, with the key nowhere.
       - name: Check OddsEngine
         run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-oddsengine.mjs

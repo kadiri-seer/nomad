@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Checks Nomad's OddsEngine support with OddsEngine's real server and the real Codex and OpenClaw, in a throwaway home:
-// 1. OddsEngine's hosted server answers and refuses a request with no key, which is why the preview says to set
-//    ODDSENGINE_API_KEY before starting the app. One request, no key, no account.
+// 1. OddsEngine's hosted server answers, and refuses a tool call with no key, which is why the preview says to set
+//    ODDSENGINE_API_KEY before starting the app. Three requests, no key, no account.
 // 2. A Cursor setup with a (fake) key in its address is moved to Codex and OpenClaw. Codex lists the plain address
 //    with bearer_token_env_var = ODDSENGINE_API_KEY, OpenClaw accepts its config, and the key is nowhere in what Nomad wrote.
 // Run after `pnpm build:cli`, with codex and openclaw on PATH or in NOMAD_APPS_BIN.
@@ -52,14 +52,24 @@ const allText = (dir) => {
 };
 
 try {
-  const r = await fetch(URL_ODDS, {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "nomad-check", version: "1.0" } } }),
-    signal: AbortSignal.timeout(30000)
-  }).catch((e) => ({ status: String(e), text: async () => "" }));
-  const body = typeof r.text === "function" ? await r.text().catch(() => "") : "";
-  check(`OddsEngine answers at ${URL_ODDS} and refuses a request with no key`, r.status === 401 || r.status === 403 || (r.status === 200 && /"error"/.test(body)), `${r.status} ${body.slice(0, 200)}`);
+  // OddsEngine opens a session without a key; its tools need one. Open a session, then call balance with no key.
+  let session = null;
+  const post = async (payload) => {
+    const r = await fetch(URL_ODDS, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18", ...(session ? { "mcp-session-id": session } : {}) },
+      body: JSON.stringify({ jsonrpc: "2.0", ...payload }),
+      signal: AbortSignal.timeout(30000)
+    }).catch((e) => ({ status: String(e), headers: new Headers(), text: async () => "" }));
+    session = r.headers.get("mcp-session-id") ?? session;
+    return { status: r.status, body: await r.text().catch(() => "") };
+  };
+  const init = await post({ id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "nomad-check", version: "1.0" } } });
+  check(`OddsEngine answers at ${URL_ODDS}`, init.status === 200 && init.body.includes("oddsengine"), `${init.status} ${init.body.slice(0, 200)}`);
+  await post({ method: "notifications/initialized" });
+  const call = await post({ id: 2, method: "tools/call", params: { name: "balance", arguments: {} } });
+  const refused = call.status === 401 || call.status === 403 || /"error"\s*:/.test(call.body) || /"isError"\s*:\s*true/.test(call.body);
+  check("a tool call with no key is refused", refused, `${call.status} ${call.body.slice(0, 300)}`);
 
   mkdirSync(join(home, "project/.cursor"), { recursive: true });
   writeFileSync(join(home, "project/.cursorrules"), "Scan every token with OddsEngine before buying.\n");
