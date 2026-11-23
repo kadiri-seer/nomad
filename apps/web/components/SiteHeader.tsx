@@ -27,7 +27,6 @@ export function SiteHeader() {
   const moreRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   // Whether this device is signed in to a Nomad account: the account page keeps a small summary here while it is.
-  // The account sits top right on every screen size (where people look for it) and shows when you are signed in.
   const [account, setAccount] = useState<string | null>(null);
   useEffect(() => {
     const read = () => {
@@ -82,6 +81,9 @@ export function SiteHeader() {
               </svg>
             </button>
             <div id="nav-more-list" className="nav-more-list" data-open={more}>
+              <Link href="/account" aria-current={pathname === "/account" ? "page" : undefined}>
+                {account ? "Your account" : "Sign in"}
+              </Link>
               {MORE.map((l) => (
                 <Link key={l.href} href={l.href} aria-current={pathname === l.href ? "page" : undefined}>
                   {l.label}
@@ -95,16 +97,6 @@ export function SiteHeader() {
           </Link>
         </nav>
         <ThemeToggle />
-        <Link
-          href="/account"
-          className="header-profile"
-          data-signed-in={account ? "true" : "false"}
-          aria-label={account ? "Your account" : "Sign in"}
-          title={account ? "Your account" : "Sign in"}
-          aria-current={pathname === "/account" ? "page" : undefined}
-        >
-          <ProfileIcon />
-        </Link>
         <button className="menu-button" aria-expanded={open} aria-controls="mobile-menu" onClick={() => setOpen((o) => !o)}>
           {open ? "Close" : "Menu"}
         </button>
