@@ -47,6 +47,8 @@ export class MemoryRedis implements RedisLike {
         return 1;
       case "HGET":
         return this.hashes.get(key)?.get(rest[0]) ?? null;
+      case "HDEL":
+        return this.hashes.get(key)?.delete(rest[0]) ? 1 : 0;
       case "HGETALL":
         return [...(this.hashes.get(key)?.entries() ?? [])].flat();
       case "HINCRBY": {

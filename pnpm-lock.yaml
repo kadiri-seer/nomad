@@ -11,6 +11,9 @@ importers:
 
   .:
     devDependencies:
+      '@alchemy/smart-accounts':
+        specifier: 5.3.0
+        version: 5.3.0(viem@2.57.19(typescript@5.9.3)(zod@4.6.7))
       '@modelcontextprotocol/sdk':
         specifier: ^1.32.2
         version: 1.32.2(zod@4.6.7)
@@ -150,6 +153,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@alchemy/smart-accounts':
+        specifier: 5.3.0
+        version: 5.3.0(viem@2.57.19(typescript@5.9.3)(zod@4.6.7))
       '@fontsource-variable/schibsted-grotesk':
         specifier: ^5.2.0
         version: 5.3.0
@@ -390,6 +396,16 @@ packages:
 
   '@adraffy/ens-normalize@1.11.1':
     resolution: {integrity: sha512-nhCBV3quEgesuf7c7KYfperqSS14T8bYuvJ8PcLJp6znkZpFc0AuW4qBtr8eKVyPPe/8RSr7sglCWPU5eaxwKQ==}
+
+  '@alchemy/common@5.3.0':
+    resolution: {integrity: sha512-xH+0ymiQYEGnLHznMp7/fksiVfLHEuqkpnBH3eX/xRZwakbQl9SSyRcw7s/3zuRiEjnL4a7Tvu86VUNKIIkP5A==}
+    peerDependencies:
+      viem: ^2.45.0
+
+  '@alchemy/smart-accounts@5.3.0':
+    resolution: {integrity: sha512-o2A+94vrK+GJPQSqRlH3oYzgUEy5u0+rlyTP1ZnTg87GEFO8Y6ki/3mqlCA+jmd0CiTvtz5viNrSf9Uxkl4UWg==}
+    peerDependencies:
+      viem: ^2.45.0
 
   '@emnapi/runtime@1.11.3':
     resolution: {integrity: sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA==}
@@ -2045,12 +2061,25 @@ packages:
     peerDependencies:
       zod: ^3.25.28 || ^4
 
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
   '@adraffy/ens-normalize@1.11.1': {}
+
+  '@alchemy/common@5.3.0(viem@2.57.19(typescript@5.9.3)(zod@4.6.7))':
+    dependencies:
+      viem: 2.57.19(typescript@5.9.3)(zod@4.6.7)
+      zod: 3.25.76
+
+  '@alchemy/smart-accounts@5.3.0(viem@2.57.19(typescript@5.9.3)(zod@4.6.7))':
+    dependencies:
+      '@alchemy/common': 5.3.0(viem@2.57.19(typescript@5.9.3)(zod@4.6.7))
+      viem: 2.57.19(typescript@5.9.3)(zod@4.6.7)
 
   '@emnapi/runtime@1.11.3':
     dependencies:
@@ -3437,5 +3466,7 @@ snapshots:
   zod-to-json-schema@3.25.2(zod@4.6.7):
     dependencies:
       zod: 4.6.7
+
+  zod@3.25.76: {}
 
   zod@4.6.7: {}
