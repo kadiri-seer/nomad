@@ -311,6 +311,16 @@ Checked with real applications: `scripts/check-oddsengine.mjs` (Real apps workfl
 
 Not verified: OddsEngine's tools with a real key through a moved setup (Nomad AI calls `scan_token` with a real key outside Nomad).
 
+## Idlex setups (added, waiting for Idlex's review)
+
+Written Nov 23, 2026. Idlex runs AI jobs on community GPUs, paid per job in USDG on Robinhood Chain over x402, through a local MCP server, `idlex-mcp` (a zip from idlex.network, MIT), started with `node /path/to/idlex-mcp/src/server.ts`. It follows Idlex's README, its agents page and the code of `idlex-mcp` 0.1.0, read Nov 23, 2026. See [docs/guides/idlex-setups.md](guides/idlex-setups.md).
+
+Tested (automated, every push):
+- An Idlex setup moving from Claude Code to Codex (`tests/migration/idlex.test.ts`): the server and both spend limits arrive as written; the wallet key (`IDLEX_AGENT_KEY`) never appears in the destination, the plan, the receipt or Nomad's library, and the source is unchanged; the preview says what the server pays for and the steps for another computer and Node.js 22.18.
+- Which entries count as Idlex (POSIX and Windows paths, `node` or `node.exe`), and look-alikes that do not, which get no note; the read-only note without a key; the warning when `IDLEX_API` is another address; Idlex's defaults named when a limit is missing.
+
+Not verified: paid jobs through a moved setup (Nomad AI runs Idlex jobs from its own wallet outside Nomad).
+
 ## Venin's check-up (added, waiting for Venin's package)
 
 Written Nov 23, 2026, after the Venin x Nomad test (a planted strain survived a move; Venin's scan caught it before and after). Every move preview can now run Venin's scanner on the files it would write: planted orders need the person's `planted-orders` approval, which an assistant over MCP can never give; other findings are shown. Off until Venin publishes its scanner on npm: `VENIN_PACKAGE` in `packages/security/src/venin.ts` names it then (or `NOMAD_VENIN_PACKAGE` to try one). Tests: `tests/migration/venin.test.ts` and `tests/home/mcp.test.ts`; the real-scanner test ran here against a native build of Venin's `scan_json` and passed.

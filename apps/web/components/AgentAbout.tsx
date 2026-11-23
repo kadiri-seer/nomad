@@ -17,6 +17,7 @@ const LIMITS = [
   [`${AGENT_LIMITS.maxImpactPct}%`, "the most price impact a trade may have, from a quote taken just before it"],
   ["Checked tokens only", "every token needs a fresh safety check that passed, from Stoa or from Rushr"],
   ["Two pairs", "trades only against USDG through Oak, or against ETH on Rushr"],
+  ["4 AI jobs a day", "second opinions on Idlex, at most 0.01 USDG each, from a separate small wallet"],
   ["Nothing else", "no transfers, lending, borrowing, bridging, leverage, launches or approvals of its own"]
 ] as const;
 
@@ -24,6 +25,7 @@ const SERVICES = [
   ["Trades with", "Oak, Rushr"],
   ["Reads", "Stoa, HEY Research, Rushr, Zolva, QHooks, Priors, Hedgehood, BrainChain, Tokyo Futuro"],
   ["Remembers with", "Memoria"],
+  ["Second opinions from", "Idlex"],
   ["Moves between apps with", "Nomad"]
 ] as const;
 

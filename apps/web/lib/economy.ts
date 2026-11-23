@@ -143,6 +143,9 @@ export type CostPeriod = {
   networkFeesUsd: string | null;
   payments: number;
   paymentsUsd: string;
+  /** AI jobs on Idlex (second opinions), and what they cost: fractions of a cent, so four decimals. */
+  computeJobs: number;
+  computeUsd: string;
   totalUsd: string;
   trades: number;
   tradedUsd: string;
@@ -153,6 +156,7 @@ export const PARTNERS: Record<string, string> = {
   oak: "Oak",
   stoa: "Stoa",
   oddsengine: "OddsEngine",
+  idlex: "Idlex",
   upoch: "Upoch",
   memoria: "Memoria",
   hey: "HEY Research",
@@ -187,6 +191,7 @@ export type Costs = {
 };
 
 const money = (v: unknown) => (/^\d{1,9}\.\d{2}$/.test(str(v)) ? str(v) : "0.00");
+const money4 = (v: unknown) => (/^\d{1,9}\.\d{4}$/.test(str(v)) ? str(v) : "0.0000");
 const count = (v: unknown) => (Number.isInteger(v) && (v as number) >= 0 && (v as number) < 1e9 ? (v as number) : 0);
 const plain = (v: unknown, max = 40) => str(v).replace(/[^\p{L}\p{N} .,'$()-]/gu, "").slice(0, max);
 function period(v: unknown): CostPeriod {
@@ -201,6 +206,8 @@ function period(v: unknown): CostPeriod {
     networkFeesUsd: p.networkFeesUsd === null ? null : money(p.networkFeesUsd),
     payments: count(p.payments),
     paymentsUsd: money(p.paymentsUsd),
+    computeJobs: count(p.computeJobs),
+    computeUsd: money4(p.computeUsd),
     totalUsd: money(p.totalUsd),
     trades: count(p.trades),
     tradedUsd: money(p.tradedUsd)

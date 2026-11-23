@@ -45,6 +45,7 @@ export function AgentCosts() {
           <dd>
             AI ${m.aiUsd}, OddsEngine checks ${m.oddsEngineUsd}, network fees {m.networkFeesUsd != null ? `$${m.networkFeesUsd}` : `${m.networkFeesEth} ETH`}
             {m.payments > 0 && `, payments $${m.paymentsUsd}`}
+            {m.computeJobs > 0 && `, Idlex jobs $${m.computeUsd}`}
           </dd>
         </dl>
       </div>

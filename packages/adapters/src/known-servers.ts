@@ -1205,7 +1205,49 @@ export function oddsEngineCreditExtras(
   return none;
 }
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE];
+/**
+ * Idlex's local server (idlex-mcp, a zip from https://www.idlex.network/downloads/idlex-mcp.zip, MIT), started as
+ * `node <folder>/src/server.ts` (idlex-mcp 0.1.0, read Nov 23, 2026). It talks to Idlex's public API (IDLEX_API,
+ * https://www.idlex.network by default) and pays per job in USDG on Robinhood Chain over x402, from the agent's own
+ * wallet: IDLEX_AGENT_KEY (never copied), capped per job by IDLEX_MAX_JOB_USDG (0.01 by default) and per session
+ * by IDLEX_BUDGET_USDG (0.10 by default). Without the key it only reads (market, quotes, job status).
+ */
+const IDLEX_API = "https://www.idlex.network";
+const IDLEX_SCRIPT = /(^|[\\/])idlex-mcp[^\\/]*[\\/]src[\\/]server\.ts$/i;
+const isIdlexServer = (t: Tool) => !!t.mcp && t.mcp.transport === "stdio" && isNodeCommand(t.mcp.command) && t.mcp.args.some((a) => IDLEX_SCRIPT.test(a));
+const IDLEX: ServerProfile = {
+  id: "idlex",
+  vendor: "Idlex",
+  label: "Idlex (AI jobs on community GPUs, paid per job in USDG on Robinhood Chain)",
+  matches: isIdlexServer,
+  keyVars: ["IDLEX_AGENT_KEY"],
+  emptyOkEnv: [],
+  limitVars: ["IDLEX_MAX_JOB_USDG", "IDLEX_BUDGET_USDG"],
+  looserDefaults: { IDLEX_MAX_JOB_USDG: "0.01 USDG per job", IDLEX_BUDGET_USDG: "0.10 USDG per session" },
+  apply(t, out, platform) {
+    const mcp = t.mcp!;
+    const script = mcp.args.find((a) => IDLEX_SCRIPT.test(a))!;
+    const paying = !!mcp.env.IDLEX_AGENT_KEY;
+    const api = mcp.env.IDLEX_API;
+    const apiValue = api && "value" in api ? api.value.trim().replace(/\/$/, "") : undefined;
+    if (apiValue !== undefined && apiValue !== IDLEX_API) {
+      out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" uses ${apiValue} (IDLEX_API), not Idlex's own network (${IDLEX_API}). ${paying ? "The agent's wallet signs payments for the offers that address sends. " : ""}Keep it only if you trust that address.` });
+    }
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: paying
+        ? `"${t.name}" runs Idlex's server on this computer. It pays for each AI job in USDG on Robinhood Chain from the agent's own wallet (IDLEX_AGENT_KEY), only for verified jobs, within IDLEX_MAX_JOB_USDG per job and IDLEX_BUDGET_USDG per session.`
+        : `"${t.name}" runs Idlex's server on this computer without a wallet key, so it only reads: market prices, quotes and job status. It pays for nothing.`
+    });
+    for (const [k, d] of [["IDLEX_MAX_JOB_USDG", "0.01 USDG per job"], ["IDLEX_BUDGET_USDG", "0.10 USDG per session"]]) {
+      if (paying && !mcp.env[k]) out.notes.push({ level: "info", category: "permissions", message: `"${t.name}" has no ${k}, so Idlex's default applies: ${d}. Set ${k} on ${platform} to change it.` });
+    }
+    out.manualSteps.push(`"${t.name}" runs ${script}, from Idlex's idlex-mcp folder, which Nomad does not copy. If ${platform} runs on another computer, download idlex-mcp from https://www.idlex.network/downloads/idlex-mcp.zip, unzip it at the same path, run npm install in it, and use Node.js 22.18 or later.`);
+  }
+};
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE, IDLEX];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {
