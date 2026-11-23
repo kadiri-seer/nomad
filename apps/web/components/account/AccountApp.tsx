@@ -149,6 +149,10 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
       .catch(() => setMintingOpen(false));
   }, []);
 
+  useEffect(() => {
+    retryPendingRegistrations().then((n) => n && setVersion((v) => v + 1));
+  }, []);
+
   const refresh = useCallback(async () => {
     setBal(await balances(address));
     try {
@@ -326,10 +330,7 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
       after: async (txHash) => {
         if (!grant) throw new Error("The agent was minted, but its set-up was not finished.");
         const signature = await client.owner.signMessage({ message: registerMessage(txHash, salt.toString()) });
-        const r = await fetch("/api/agents/register", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
+        const payload = JSON.stringify({
             signer: client.signer,
             salt: salt.toString(),
             name: nm,
@@ -343,9 +344,12 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
             deferredAction: grant.deferredAction,
             mintTx: txHash,
             signature
-          })
-        });
+          });
+        // Kept until the registration goes through, so a dropped connection is retried on the next visit.
+        storeSet(`${PENDING_PREFIX}${txHash}`, payload);
+        const r = await fetch("/api/agents/register", { method: "POST", headers: { "content-type": "application/json" }, body: payload });
         const j = await r.json();
+        if (r.ok || r.status === 409) storeDel(`${PENDING_PREFIX}${txHash}`);
         if (!r.ok) throw new Error(j.error ?? "The agent was minted but could not be set up yet.");
         return `${fmtNomad(fee)} $NOMAD paid, ${fmtNomad(fee / 2n)} burned. Fund its wallet with USDG and keep some credits, and it starts within 15 minutes.`;
       },
@@ -605,6 +609,45 @@ function Approve({ client, confirm, onClose, onHome }: { client: Client; confirm
       </section>
     </div>
   );
+}
+
+const PENDING_PREFIX = "nomad:pending-agent:";
+const storeSet = (k: string, v: string) => {
+  try {
+    localStorage.setItem(k, v);
+  } catch {
+    /* storage unavailable: the page's own retries still run */
+  }
+};
+const storeDel = (k: string) => {
+  try {
+    localStorage.removeItem(k);
+  } catch {
+    /* nothing to do */
+  }
+};
+
+/** Finishes setting up agents whose mint went through but whose registration did not. Returns how many it finished. */
+async function retryPendingRegistrations(): Promise<number> {
+  let keys: string[] = [];
+  try {
+    keys = Object.keys(localStorage).filter((k) => k.startsWith(PENDING_PREFIX));
+  } catch {
+    return 0;
+  }
+  let done = 0;
+  for (const k of keys) {
+    const body = localStorage.getItem(k);
+    if (!body) continue;
+    try {
+      const r = await fetch("/api/agents/register", { method: "POST", headers: { "content-type": "application/json" }, body });
+      if (r.ok || r.status === 409 || r.status === 400 || r.status === 403) storeDel(k);
+      if (r.ok) done++;
+    } catch {
+      /* try again next visit */
+    }
+  }
+  return done;
 }
 
 /** Shows a short error at the top of the page for a few seconds (no browser dialogs). */
