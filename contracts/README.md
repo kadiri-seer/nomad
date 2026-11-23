@@ -55,3 +55,30 @@ npm test        # compiles with solc 0.8.28 and runs the tests on a local test c
    of key Upoch uses) and redeploy. Without it, creators can still mint with a public link.
 5. When you are ready, open minting from the Safe: `node scripts/economy/safe-batch.mjs open-minting` writes a
    batch for the Safe's Transaction Builder (two approvals).
+
+## NomadPaymaster
+
+Pays the gas of Nomad accounts and agents on Robinhood Chain (ERC-4337, EntryPoint v0.7
+`0x0000000071727De22E5E9d8BAf0edAc6f37da032`), from a deposit the treasury keeps in the EntryPoint. Nomad's server
+signs an operation only when the account has credits to cover it, and charges the cost to those credits with a
+margin, so the treasury is repaid. Users never need ETH.
+
+- **Pays only what Nomad signed.** Every operation carries a signature from Nomad's server that covers all its fields
+  and expires within minutes. A wrong, reused or expired signature pays nothing.
+- **A ceiling per operation.** `maxCostPerOp`, fixed at deployment, caps what any one operation can cost.
+- **Money leaves only to the treasury.** The deposit and any stake can be withdrawn to the treasury and nowhere else,
+  only by the owner (Nomad's Safe). Renouncing ownership is disabled.
+- **Small on purpose.** As an unstaked paymaster must be, it reads no storage while validating. If the signing key ever
+  leaked, the most it could cost is the deposit, which is kept small; the owner withdraws it and deploys a new one.
+
+| Setting | Fixed at deployment |
+| --- | --- |
+| EntryPoint | v0.7 on Robinhood Chain |
+| Signer | Nomad's server key (kept as a secret on the server, never in the repo) |
+| Treasury | Nomad's Safe |
+| maxCostPerOp | 0.0005 ETH suggested (about 100 times a typical trade's gas today) |
+
+Tested against the real v0.7 EntryPoint and the reference SimpleAccount (`test/paymaster.test.mjs`): a new account
+with no ETH sends a token transfer with its gas paid from the deposit (exactly the operation's cost); a wrong
+signer, a signature for another operation, an expired signature and an operation over the ceiling are all refused;
+only the EntryPoint can ask it to validate; withdrawals go to the treasury only.
