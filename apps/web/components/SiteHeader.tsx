@@ -26,6 +26,22 @@ export function SiteHeader() {
   const [more, setMore] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  // Whether this device is signed in to a Nomad account: the account page keeps a small summary here while it is.
+  // The account sits top right on every screen size (where people look for it) and shows when you are signed in.
+  const [account, setAccount] = useState<string | null>(null);
+  useEffect(() => {
+    const read = () => {
+      try {
+        const s = JSON.parse(localStorage.getItem("nomad:account-snapshot") ?? "null") as { address?: string; nomad?: string } | null;
+        setAccount(s?.address ? (s.nomad && s.nomad !== "..." ? `${s.nomad} $NOMAD` : `${s.address.slice(0, 6)}...${s.address.slice(-4)}`) : null);
+      } catch {
+        setAccount(null);
+      }
+    };
+    read();
+    window.addEventListener("storage", read);
+    return () => window.removeEventListener("storage", read);
+  }, [pathname]);
   useEffect(() => {
     setOpen(false);
     setMore(false);
@@ -78,16 +94,32 @@ export function SiteHeader() {
             Open the app
           </Link>
         </nav>
-        <Link href="/account" className="header-signin" aria-current={pathname === "/account" ? "page" : undefined}>
-          Sign in
-        </Link>
         <ThemeToggle />
+        <Link
+          href="/account"
+          className="header-profile"
+          data-signed-in={account ? "true" : "false"}
+          aria-label={account ? "Your account" : "Sign in"}
+          title={account ? "Your account" : "Sign in"}
+          aria-current={pathname === "/account" ? "page" : undefined}
+        >
+          <ProfileIcon />
+        </Link>
         <button className="menu-button" aria-expanded={open} aria-controls="mobile-menu" onClick={() => setOpen((o) => !o)}>
           {open ? "Close" : "Menu"}
         </button>
       </div>
       <div id="mobile-menu" className="mobile-menu" data-open={open}>
         <nav aria-label="Mobile">
+          <Link href="/account" className="mobile-profile">
+            <span className="mobile-profile-icon" aria-hidden="true">
+              <ProfileIcon />
+            </span>
+            <span>
+              <strong>{account ? "Your account" : "Sign in"}</strong>
+              <span>{account ? account : "With Google. No wallet app needed."}</span>
+            </span>
+          </Link>
           {LINKS.map((l) => (
             <Link key={l.href} href={l.href}>
               {l.label}
@@ -109,5 +141,14 @@ export function SiteHeader() {
         </nav>
       </div>
     </header>
+  );
+}
+
+function ProfileIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20c1.6-3.6 4.5-5.4 8-5.4s6.4 1.8 8 5.4" />
+    </svg>
   );
 }

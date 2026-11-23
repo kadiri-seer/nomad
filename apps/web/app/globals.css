@@ -419,23 +419,33 @@ pre {
 .mobile-menu {
   display: none;
 }
-/* Sign-in to Nomad accounts: always visible, on phones too, next to the menu. */
-.header-signin {
+/* The account: a profile button at the end of the bar on wide screens, the first row of the menu on phones. */
+.header-profile {
   display: inline-flex;
   align-items: center;
-  min-height: 38px;
-  padding: 0 14px;
-  border: 1.5px solid var(--brand);
-  border-radius: var(--radius-sm);
-  color: var(--brand);
-  font: 600 0.95rem var(--font);
-  text-decoration: none;
-  white-space: nowrap;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line-strong);
+  border-radius: 19px;
+  color: var(--ink);
+  flex: none;
 }
-.header-signin:hover,
-.header-signin[aria-current="page"] {
+.header-profile:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+.header-profile[data-signed-in="true"] {
   background: var(--brand);
+  border-color: var(--brand);
   color: #fff;
+}
+.header-profile:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+.mobile-profile {
+  display: none;
 }
 
 @media (max-width: 960px) {
@@ -445,12 +455,50 @@ pre {
   .site-header .wrap {
     gap: 10px;
   }
-  .header-signin {
+  .site-header .theme-toggle {
     margin-left: auto;
-    min-height: 44px;
+  }
+  .header-profile {
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
   }
   .site-header .menu-button {
     margin-left: 0;
+  }
+  .mobile-menu a.mobile-profile {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 8px 0 6px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--card);
+    color: var(--ink);
+  }
+  .mobile-profile > span:last-child {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .mobile-profile strong {
+    font-size: 1.05rem;
+  }
+  .mobile-profile > span:last-child > span {
+    font-size: 0.92rem;
+    color: var(--ink-2);
+  }
+  .mobile-profile-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 21px;
+    background: var(--brand);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
   }
   .menu-button {
     display: inline-flex;
