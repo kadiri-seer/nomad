@@ -4,6 +4,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { encodeCallsMAv2 } from "@alchemy/smart-accounts";
 import { STOA_ROUTER, USDG } from "../../apps/web/lib/accounts/chain";
 import { agentPackage, ownerActionMessage, validLimits, type AgentRecord } from "../../apps/web/lib/agents/shared";
+import { SESSION_FUNCTIONS } from "../../apps/web/lib/agents/wallet";
 import { agentStore } from "../../apps/web/lib/server/agents-store";
 import { gemini } from "../../apps/web/lib/server/gemini";
 import { verifyGithubToken } from "../../apps/web/lib/server/github-oidc";
@@ -135,15 +136,25 @@ function harness(opts: { ai?: RunnerDeps["ai"]; usdg?: bigint; credits?: bigint;
 
 describe("agent package and limits", () => {
   it("hashes the package the same way the page does", () => {
-    const a = agentPackage({ name: "Scout", template: "trader", perTradeUsd: "0.30", tradesPerDay: 3 });
-    expect(a.body).toBe('{"v":1,"name":"Scout","template":"trader","perTradeUsd":"0.30","tradesPerDay":3}');
+    const a = agentPackage({ name: "Scout", template: "trader", perTradeUsd: "0.30", tradesPerDay: 3, wallet: WALLET });
+    expect(a.body).toBe(`{"v":1,"name":"Scout","template":"trader","perTradeUsd":"0.30","tradesPerDay":3,"wallet":"${WALLET}"}`);
     expect(a.hash).toBe(keccak256(toHex(a.body)));
+    // Two people choosing the same name and limits still get different packages (the contract mints each hash once).
+    expect(agentPackage({ name: "Scout", template: "trader", perTradeUsd: "0.30", tradesPerDay: 3, wallet: OWNER }).hash).not.toBe(a.hash);
   });
   it("refuses limits outside the ceilings", () => {
     expect(validLimits({ perTradeUsd: "0.3", tradesPerDay: 3 })).toEqual({ perTradeUsd: "0.30", tradesPerDay: 3 });
     expect(() => validLimits({ perTradeUsd: "51", tradesPerDay: 3 })).toThrow();
     expect(() => validLimits({ perTradeUsd: "1", tradesPerDay: 11 })).toThrow();
     expect(() => validLimits({ perTradeUsd: "0.05", tradesPerDay: 1 })).toThrow();
+  });
+});
+
+describe("the runner's key on an agent wallet", () => {
+  it("may only call approve, and Stoa's swap on its router", () => {
+    expect(SESSION_FUNCTIONS.approve).toBe("0x095ea7b3");
+    expect(SESSION_FUNCTIONS.stoaSwap).toBe("0x8ccfa2ca");
+    expect(swapData(USDG, TOKEN, 1n, WALLET).slice(0, 10)).toBe(SESSION_FUNCTIONS.stoaSwap);
   });
 });
 

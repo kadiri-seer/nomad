@@ -103,7 +103,7 @@ export async function checkRegistration(env: NonNullable<ReturnType<typeof agent
   if (!signed) throw new AgentApiError(403, "Only the agent's creator can register it.");
   const owner = await mainAccountOf(signer);
   const { address: account } = await expectedAgentWallet(signer, BigInt(b.salt));
-  const pkg = agentPackage({ name, template, perTradeUsd: String(b.perTradeUsd), tradesPerDay: Number(b.tradesPerDay), ...(instructions ? { instructions } : {}) });
+  const pkg = agentPackage({ name, template, perTradeUsd: String(b.perTradeUsd), tradesPerDay: Number(b.tradesPerDay), ...(instructions ? { instructions } : {}), wallet: account });
 
   const receipt = await serverClient().getTransactionReceipt({ hash: b.mintTx as Hex }).catch(() => null);
   if (!receipt || receipt.status !== "success") throw new AgentApiError(409, "The mint is not on-chain yet. Try again in a moment.");

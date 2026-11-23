@@ -4,7 +4,7 @@
  *
  * Each agent has its own wallet: a Modular Account V2 owned by its creator's Google wallet (the same signer as their
  * Nomad account), so the creator can always withdraw. Nomad's runner holds a session key for it, installed by a
- * signature the creator gives once when creating the agent, and trades from it within the agent's limits.
+ * signature the creator gives once when creating the agent, that can only approve tokens and swap on Stoa.
  */
 import { keccak256, toHex, type Address, type Hex } from "viem";
 
@@ -18,7 +18,8 @@ export type AgentLimits = {
   tradesPerDay: number;
 };
 
-export type PackageInput = { name: string; template: Template; perTradeUsd: string; tradesPerDay: number; instructions?: string };
+/** `wallet` (the agent's own wallet) makes every package unique: the contract mints each package hash only once. */
+export type PackageInput = { name: string; template: Template; perTradeUsd: string; tradesPerDay: number; instructions?: string; wallet: Address };
 
 /** What is minted: the agent's package, hashed into the token. */
 export function agentPackage(input: PackageInput) {

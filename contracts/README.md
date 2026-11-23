@@ -105,7 +105,11 @@ checks the workflow's GitHub OpenID Connect token, so no secret is stored on Git
 
 - **Wallets.** Each agent has its own Modular Account V2, owned by its creator's Google wallet. When creating the agent
   the creator signs one grant (a deferred action) that installs the runner's session key with the runner's first
-  operation. The creator can withdraw everything back to their account, or pause the agent, at any time.
+  operation. The key can only call `approve` on a token and `swap` on Stoa's router: no transfers, no ETH, no other
+  contract, no changes to the wallet. Checked on Robinhood Chain's live contracts by simulation. The creator can
+  withdraw everything back to their account, or pause the agent, at any time.
+- **Packages.** An account-created agent's package hash is the keccak256 of its set-up (name, template, limits,
+  instructions and its wallet), so two agents with the same set-up still mint separately.
 - **Rules.** Trades only on Stoa against USDG, only tokens that pass Stoa's safety check (taxes 3% or less, can be
   bought and sold), with at least $20k liquidity and $1,000 traded in 24 hours, at no more than 2% price impact, within
   the agent's per-trade limit and trades a day. It sells at +25%, -20% or after 48 hours.

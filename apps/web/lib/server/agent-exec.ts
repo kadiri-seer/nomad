@@ -38,7 +38,7 @@ export async function agentSender(agent: AgentRecord, secret: Hex, sponsorDeps: 
     client,
     owner: sessionSigner(secret, agent.account),
     accountAddress: agent.account,
-    signerEntity: { entityId: agent.sessionEntityId, isGlobalValidation: true },
+    signerEntity: { entityId: agent.sessionEntityId, isGlobalValidation: false },
     deferredAction: agent.deferredAction,
     ...(deployed || !factoryArgs.factory ? {} : { factory: factoryArgs.factory, factoryData: factoryArgs.factoryData })
   });

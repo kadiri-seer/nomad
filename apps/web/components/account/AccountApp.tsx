@@ -294,7 +294,7 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
 
   const go = async () => {
     if (!fee || !bal) return;
-    const pkg = agentPackage({ name: name.trim(), template, perTradeUsd: perTrade, tradesPerDay: perDay, ...(template === "blank" ? { instructions: instructions.trim() } : {}) });
+
     let topUp: { usdg: bigint; calls: Call[] } | null = null;
     if (short > 0n) {
       // Buy what is missing with USDG, with a 3% cushion for the price moving.
@@ -307,6 +307,7 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
     const sr = await fetch(`/api/agents/session?signer=${client.signer}&salt=${salt}`, { cache: "no-store" });
     const sj = (await sr.json()) as { account?: Address; sessionAddress?: Address; error?: string };
     if (!sr.ok || !sj.account || !sj.sessionAddress) throw new Error(sj.error ?? "Agents are not switched on yet.");
+    const pkg = agentPackage({ name: name.trim(), template, perTradeUsd: perTrade, tradesPerDay: perDay, ...(template === "blank" ? { instructions: instructions.trim() } : {}), wallet: sj.account });
     let grant: Awaited<ReturnType<typeof grantSession>> | null = null;
     const nm = name.trim();
     onConfirm({
@@ -320,7 +321,7 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
         ["Its wallet", `${sj.account.slice(0, 6)}...${sj.account.slice(-4)}, yours`],
         ["Network fee", "Included"]
       ],
-      note: "Nomad's runner gets a key to trade from this agent's wallet within its limits. You stay its owner: withdraw or pause any time.",
+      note: "Nomad's runner gets a key that can only approve tokens and swap on Stoa from this agent's wallet, within its limits. You stay its owner: withdraw or pause any time.",
       build: async () => {
         const agentClient = await accountClient(client.owner, salt);
         if (agentClient.account.address.toLowerCase() !== sj.account!.toLowerCase()) throw new Error("The agent's wallet did not match. Nothing was sent.");
