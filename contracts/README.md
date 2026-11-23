@@ -44,13 +44,25 @@ npm test        # compiles with solc 0.8.28 and runs the tests on a local test c
 
 ## Deploy
 
-1. Open `https://www.thenomad.website/agents/deploy` in a browser with your wallet, on Robinhood Chain. Check the
-   settings, then deploy. Your wallet signs the deployment and pays its gas; it does not become the owner (the
-   Safe does).
-2. Verify it on the explorer: on the contract's Blockscout page, choose "Solidity (Standard JSON input)", compiler
-   v0.8.28, and upload `artifacts/NomadAgents.standard-input.json`. The page shows the constructor arguments to
+Both contracts (NomadAgents and NomadPaymaster) are deployed together from a maintainer's own computer, with no
+browser wallet and no public page:
+
+```
+git clone https://github.com/kadiri-seer/nomad
+npm ci --prefix nomad/contracts --ignore-scripts
+node nomad/contracts/deploy.mjs
+```
+
+1. The script makes a fresh deployer wallet (kept in `~/.nomad-deploy`, outside the repo) and asks for 0.0055 ETH on
+   Robinhood Chain. It deploys both contracts, owned by Nomad's Safe; minting starts closed. It makes the paymaster's
+   signer key and sends it to Vercel (`vercel env add`, sensitive) together with `NEXT_PUBLIC_AGENTS_CONTRACT`,
+   `NEXT_PUBLIC_NOMAD_PAYMASTER`, `NEXT_PUBLIC_PRIVY_APP_ID` and `ALCHEMY_RPC_URL` (asked for, hidden). The key is
+   never printed and is removed from disk once Vercel has it. Then it funds the deposit (0.005 ETH) and sends what is
+   left back to the Safe. Run it again to pick up where it stopped.
+2. Verify both on the explorer: on each contract's Blockscout page, choose "Solidity (Standard JSON input)", compiler
+   v0.8.28, and upload `artifacts/NomadAgents.standard-input.json` or `artifacts/NomadPaymaster.standard-input.json`. The page shows the constructor arguments to
    paste.
-3. Set `NEXT_PUBLIC_AGENTS_CONTRACT` to the contract's address in the site's Vercel settings and redeploy the site.
+3. Redeploy the site so it picks up the new settings.
 4. For encrypted paid copies, set `FILEBASE_IPFS_TOKEN` in Vercel to a Filebase IPFS RPC API key (the same kind
    of key Upoch uses) and redeploy. Without it, creators can still mint with a public link.
 5. When you are ready, open minting from the Safe: `node scripts/economy/safe-batch.mjs open-minting` writes a
@@ -78,15 +90,8 @@ margin, so the treasury is repaid. Users never need ETH.
 | Treasury | Nomad's Safe |
 | maxCostPerOp | 0.0005 ETH suggested (about 100 times a typical trade's gas today) |
 
-### Deploy and switch on accounts
-
-1. Open `https://www.thenomad.website/agents/deploy`, section "Deploy the paymaster". Press "Make a signer key" and
-   copy the key straight into Vercel as `NOMAD_PAYMASTER_SIGNER_KEY` (sensitive). It is made in the browser and shown
-   once.
-2. Deploy the paymaster, then fund its deposit (0.005 ETH to start).
-3. In Vercel, set `NEXT_PUBLIC_NOMAD_PAYMASTER` (the paymaster's address), `ALCHEMY_RPC_URL` (the Robinhood Chain
-   endpoint from Alchemy, sensitive) and `NEXT_PUBLIC_PRIVY_APP_ID`, then redeploy. `/account` opens once the Privy
-   app id and the paymaster are both set; creating agents also needs `NEXT_PUBLIC_AGENTS_CONTRACT` and minting open.
+Deployed with `contracts/deploy.mjs`, together with NomadAgents (see Deploy above). `/account` opens once the site has
+the Privy app id and the paymaster's address.
 
 Tested against the real v0.7 EntryPoint and the reference SimpleAccount (`test/paymaster.test.mjs`): a new account
 with no ETH sends a token transfer with its gas paid from the deposit (exactly the operation's cost); a wrong

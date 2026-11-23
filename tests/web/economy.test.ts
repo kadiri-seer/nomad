@@ -19,7 +19,7 @@ const tok = (symbol: string, address: string, decimals = "18") => ({ address_has
 
 describe("economy page copy", () => {
   it("follows the site's rules and never promises returns", () => {
-    for (const f of ["apps/web/app/economy/page.tsx", "apps/web/components/EconomyLive.tsx", "apps/web/components/AgentCosts.tsx", "apps/web/lib/economy.ts", "apps/web/app/agents/page.tsx", "apps/web/components/AgentsMarket.tsx", "apps/web/components/AgentsDeploy.tsx", "apps/web/app/agents/deploy/page.tsx", "docs/token.md", "docs/economy.md", "apps/web/app/docs/token/page.tsx"]) {
+    for (const f of ["apps/web/app/economy/page.tsx", "apps/web/components/EconomyLive.tsx", "apps/web/components/AgentCosts.tsx", "apps/web/lib/economy.ts", "apps/web/app/agents/page.tsx", "apps/web/components/AgentsMarket.tsx", "apps/web/components/account/AccountApp.tsx", "apps/web/app/account/page.tsx", "docs/token.md", "docs/economy.md", "apps/web/app/docs/token/page.tsx"]) {
       const text = readFileSync(join(ROOT, f), "utf8");
       expect(text.includes("—"), `${f}: em dash`).toBe(false);
       expect(/\p{Extended_Pictographic}/u.test(text), `${f}: emoji`).toBe(false);

@@ -13,3 +13,4 @@ next-env.d.ts
 release/
 .next-export/
 out/
+.vercel
