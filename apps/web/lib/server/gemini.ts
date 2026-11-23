@@ -12,6 +12,24 @@ export function gemini(apiKey: string, opts: { model?: string; fetchImpl?: typeo
   let working: string | null = null;
   return {
     name: "Gemini",
+    /** One small test question: which model answered, or why none did (Google's error text holds no key). */
+    async probe(): Promise<{ ok: boolean; model?: string; detail: string }> {
+      for (const model of models) {
+        const r = await fetchImpl(`${API}/${model}:generateContent`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+          body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Reply with the word OK." }] }], generationConfig: { maxOutputTokens: 200 } }),
+          signal: AbortSignal.timeout(25_000),
+          cache: "no-store"
+        });
+        const j = (await r.json().catch(() => ({}))) as { error?: { message?: string; status?: string }; candidates?: { finishReason?: string; content?: { parts?: { text?: string }[] } }[] };
+        if (r.status === 404) continue;
+        if (!r.ok) return { ok: false, model, detail: `HTTP ${r.status} ${j.error?.status ?? ""}: ${(j.error?.message ?? "").slice(0, 160)}` };
+        const text = (j.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
+        return { ok: !!text, model, detail: `finish ${j.candidates?.[0]?.finishReason ?? "?"}, ${text ? "answered" : "empty answer"}` };
+      }
+      return { ok: false, detail: `none of ${models.join(", ")} is offered` };
+    },
     async ask(prompt: string, system: string, maxTokens = 200): Promise<string | null> {
       for (const model of working ? [working] : models) {
         const r = await fetchImpl(`${API}/${model}:generateContent`, {

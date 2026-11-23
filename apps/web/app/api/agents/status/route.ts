@@ -12,13 +12,15 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const env = agentEnv();
   const key = process.env.GEMINI_API_KEY?.trim();
-  let aiOk: boolean | null = null;
+  let probe: { ok: boolean; model?: string; detail: string } | null = null;
   if (env && key) {
-    aiOk = await env.store.cacheGet<boolean>("gemini-ok");
-    if (aiOk === null) {
-      aiOk = !!(await gemini(key, { model: process.env.GEMINI_MODEL?.trim() }).ask("Reply with the word OK.", "Answer in one word.", 5).catch(() => null));
-      await env.store.cacheSet("gemini-ok", aiOk, aiOk ? 3600 : 300);
+    probe = await env.store.cacheGet<typeof probe>("gemini-probe");
+    if (!probe) {
+      probe = await gemini(key, { model: process.env.GEMINI_MODEL?.trim() })
+        .probe()
+        .catch((e) => ({ ok: false, detail: String((e as Error).message).slice(0, 120) }));
+      await env.store.cacheSet("gemini-probe", probe, probe.ok ? 3600 : 120);
     }
   }
-  return json({ ready: !!env, ai: key ? "gemini" : "idlex", aiAnswering: aiOk, idlexPayer: env ? idlexPayer(env.secret).address : null });
+  return json({ ready: !!env, ai: key ? "gemini" : "idlex", aiAnswering: probe?.ok ?? null, aiModel: probe?.model ?? null, aiDetail: probe?.detail ?? null, idlexPayer: env ? idlexPayer(env.secret).address : null });
 }
