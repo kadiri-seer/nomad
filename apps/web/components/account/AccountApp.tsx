@@ -187,11 +187,26 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
     ]);
   }, [address]);
 
+  // The $NOMAD price and balances refresh every 30 seconds while the page is on screen, and at once when it comes
+  // back into view, so dollar values move with the price. A failed price check keeps the last price.
   useEffect(() => {
+    const loadPrice = () =>
+      nomadForUsd(1)
+        .then((n) => n > 0n && setPrice(1 / Number(formatUnits(n, 18))))
+        .catch(() => undefined);
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      refresh();
+      loadPrice();
+    };
     refresh();
-    nomadForUsd(1)
-      .then((n) => setPrice(n > 0n ? 1 / Number(formatUnits(n, 18)) : null))
-      .catch(() => setPrice(null));
+    loadPrice();
+    const timer = setInterval(tick, 30_000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
   }, [refresh]);
 
   const usdOf = (n: bigint) => (price ? `$${(Number(formatUnits(n, 18)) * price).toFixed(2)}` : "");
