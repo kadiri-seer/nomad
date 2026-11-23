@@ -36,7 +36,7 @@ Builder; you load it in the Safe, check it and sign it with two approvals.
 | Burn $NOMAD | `node scripts/economy/safe-batch.mjs burn 250000` |
 | Pay a bounty | `node scripts/economy/safe-batch.mjs bounty 12 0xBuilderAddress 250000` |
 | Open or close minting | `node scripts/economy/safe-batch.mjs open-minting 0xNomadAgents` |
-| Change the mint fee | `node scripts/economy/safe-batch.mjs mint-fee 0xNomadAgents 10000 50` |
+| Change the mint fee | `node scripts/economy/safe-batch.mjs mint-fee 0xNomadAgents 142000 50` |
 | Change the copy share | `node scripts/economy/safe-batch.mjs platform 0xNomadAgents 10 50` |
 | Record a buyback | `node scripts/economy/safe-batch.mjs record-buyback --date 2026-12-01 --spent "500 USDG" --bought "1200000 $NOMAD" --tx 0x... --burn-tx 0x...` |
 

@@ -9,7 +9,7 @@ import { REWARD_SAFE, TOKEN_CA } from "@/lib/token";
 import { connect, getWallet, send, waitFor, walletMessage } from "@/lib/wallet";
 import { Notice } from "./ui";
 
-const DEFAULTS = { owner: REWARD_SAFE, treasury: REWARD_SAFE, maxMintFee: "1000000", mintFee: "10000", mintBurnPct: "50", platformPct: "10", platformBurnPct: "50" };
+const DEFAULTS = { owner: REWARD_SAFE, treasury: REWARD_SAFE, maxMintFee: "10000000", mintFee: "142000", mintBurnPct: "50", platformPct: "10", platformBurnPct: "50" };
 const pctToBps = (v: string) => {
   if (!/^\d{1,3}(\.\d{1,2})?$/.test(v.trim())) throw new Error(`${v} is not a percentage`);
   return BigInt(Math.round(Number(v) * 100));
