@@ -38,10 +38,26 @@ const num = (v: unknown) => {
   return v != null && v !== "" && Number.isFinite(n) ? n : null;
 };
 
+const TIMEOUT_MS = 15_000;
+/** The caller's signal, plus a timeout, so one slow source never holds the page. */
+const withTimeout = (signal?: AbortSignal) => (signal ? AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS));
+
 async function getJson(url: string, signal?: AbortSignal): Promise<unknown> {
-  const r = await fetch(url, { signal, headers: { accept: "application/json" }, cache: "no-store" });
+  const r = await fetch(url, { signal: withTimeout(signal), headers: { accept: "application/json" }, cache: "no-store" });
   if (!r.ok) throw new Error(`${r.status}`);
   return r.json();
+}
+
+export const RPC_URL = "https://rpc.mainnet.chain.robinhood.com";
+
+/** A token balance read from the chain itself (balanceOf), in base units. */
+export async function balanceOf(token: string, holder: string, signal?: AbortSignal): Promise<bigint> {
+  const data = `0x70a08231${holder.toLowerCase().replace(/^0x/, "").padStart(64, "0")}`;
+  const r = await fetch(RPC_URL, { method: "POST", signal: withTimeout(signal), headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: token, data }, "latest"] }) });
+  if (!r.ok) throw new Error(`${r.status}`);
+  const j = obj(await r.json());
+  if (typeof j.result !== "string" || !/^0x[0-9a-fA-F]{1,64}$/.test(j.result)) throw new Error("bad balance");
+  return BigInt(j.result);
 }
 
 // ---------------------------------------------------------------- balances
@@ -292,7 +308,7 @@ const settle = async <T,>(p: Promise<T>, label: string, errors: string[]): Promi
   try {
     return await p;
   } catch (e) {
-    if ((e as Error).name === "AbortError") throw e;
+    if ((e as Error).name === "AbortError" && !(e as Error).message?.includes("timed out")) throw e;
     errors.push(label);
     return null;
   }
@@ -312,7 +328,8 @@ export async function readEconomy(signal?: AbortSignal): Promise<Economy> {
       return parseBalances(w, info, tokens, nomadUsd);
     })
   );
-  const burnBalanceP = getJson(`${API}/addresses/${BURN_ADDRESS}/token-balances`, signal);
+  // The dead address holds thousands of tokens, so its balance of $NOMAD is read from the chain, not the explorer.
+  const burnBalanceP = balanceOf(TOKEN_CA, BURN_ADDRESS, signal);
   const burnsP = getJson(`${API}/addresses/${BURN_ADDRESS}/token-transfers?type=ERC-20&filter=to&token=${TOKEN_CA}`, signal);
   const referral = ECONOMY_WALLETS.find((w) => w.id === "referral")!.address;
   const revenueP = getJson(`${API}/addresses/${referral}/token-transfers?type=ERC-20&filter=to`, signal);
@@ -334,11 +351,7 @@ export async function readEconomy(signal?: AbortSignal): Promise<Economy> {
     settle(agentsP, "minted agents", errors)
   ]);
 
-  let burnedTotal: number | null = null;
-  if (Array.isArray(burnBalance)) {
-    const row = burnBalance.map((v) => obj(v)).find((t) => lc(obj(t.token).address_hash || obj(t.token).address) === lc(TOKEN_CA));
-    burnedTotal = row ? units(row.value, obj(row.token).decimals ?? NOMAD_DECIMALS) : 0;
-  }
+  const burnedTotal = burnBalance === null ? null : units(burnBalance.toString(), NOMAD_DECIMALS);
   const inflows = revenue ? parseTransfers(revenue).filter((t) => lc(t.to) === lc(referral)) : [];
   return {
     nomad: { usd: nomadUsd, supply, holders },
