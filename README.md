@@ -72,6 +72,8 @@ Upoch setups move too: Upoch Guard's local server (`upoch mcp`, or `npx @upoch/g
 
 OddsEngine setups move too: OddsEngine's hosted server (`https://api.oddsengine.live/mcp`) arrives in each destination's format. The key is never copied, also when it was part of the address (`/mcp/k/<key>`): the destination reads it from `ODDSENGINE_API_KEY` (`bearer_token_env_var` in Codex, `Bearer ${ODDSENGINE_API_KEY}` elsewhere), and the preview links to [engine.oddsengine.live/?ref=nomad](https://engine.oddsengine.live/?ref=nomad) to connect it. At OddsEngine's request, a short skill has the agent end its OddsEngine check results with "Checked by OddsEngine." OddsEngine runs crypto safety checks and AI models behind one key, paid per call. See [docs/guides/oddsengine-setups.md](docs/guides/oddsengine-setups.md).
 
+Idlex setups move too: Idlex's local server (`node /path/to/idlex-mcp/src/server.ts`) arrives in each destination's format, with its spend limits (`IDLEX_MAX_JOB_USDG`, `IDLEX_BUDGET_USDG`). The agent wallet's key (`IDLEX_AGENT_KEY`) is never copied, and the preview says to put the `idlex-mcp` folder at the same path on another computer, and warns when `IDLEX_API` points anywhere but Idlex's own network. Idlex runs AI jobs on community GPUs, paid per job in USDG on Robinhood Chain. See [docs/guides/idlex-setups.md](docs/guides/idlex-setups.md).
+
 Agent folders can carry MCP servers too: a `.mcp.json` next to `SOUL.md`, `AGENTS.md`, `memory/` and `skills/` is read with the rest of the folder.
 
 Installed Codex plugins are read too: their servers and skills move to other apps as ordinary entries, and another Codex gets the plugin's install commands.

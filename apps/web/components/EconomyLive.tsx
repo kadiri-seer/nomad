@@ -229,6 +229,11 @@ export function EconomyLive() {
                     <td>{c.allTime.networkFeesUsd != null ? `$${c.allTime.networkFeesUsd}` : `${c.allTime.networkFeesEth} ETH`}</td>
                   </tr>
                   <tr>
+                    <td>AI jobs on Idlex ({c.thisMonth.computeJobs} this month)</td>
+                    <td>${c.thisMonth.computeUsd}</td>
+                    <td>${c.allTime.computeUsd}</td>
+                  </tr>
+                  <tr>
                     <td>Payments for services ({c.thisMonth.payments} this month)</td>
                     <td>${c.thisMonth.paymentsUsd}</td>
                     <td>${c.allTime.paymentsUsd}</td>

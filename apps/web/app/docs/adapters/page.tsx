@@ -144,6 +144,10 @@ export default function Adapters() {
       <p>
         OddsEngine runs crypto safety checks and AI models behind one key, through a hosted MCP server, paid per call. Nomad moves the server (<code>https://api.oddsengine.live/mcp</code>) into the destination&apos;s own format. The key is never copied, also when it was part of the address: the destination reads it from <code>ODDSENGINE_API_KEY</code>. Connect OddsEngine at <a href="https://engine.oddsengine.live/?ref=nomad">engine.oddsengine.live</a>. At OddsEngine&apos;s request, a short skill has the agent end its OddsEngine check results with &quot;Checked by OddsEngine.&quot; The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/oddsengine-setups.md">OddsEngine setups guide</a>.
       </p>
+      <h2>Idlex setups</h2>
+      <p>
+        Idlex runs AI jobs on community GPUs, paid per job in USDG on Robinhood Chain, through a local MCP server, <code>idlex-mcp</code>. Nomad moves the server (<code>node /path/to/idlex-mcp/src/server.ts</code>) into the destination&apos;s own format, with its spend limits. The agent wallet&apos;s key is never copied, and the preview says to put the <code>idlex-mcp</code> folder at the same path on another computer. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/idlex-setups.md">Idlex setups guide</a>.
+      </p>
       <h3>Guided platforms</h3>
       <p>
         Hosted products (ChatGPT, Claude, Gemini, Grok, Perplexity) do not offer an agent import, and frameworks (CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n, Letta) define agents in code or in their own apps. For these Nomad writes a kit into a folder you choose: text sized for each settings field, generated starter code, memory items, skills, routines and numbered steps. Nothing is sent to those services.
