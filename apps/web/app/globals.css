@@ -318,31 +318,60 @@ pre {
 }
 .nav {
   display: flex;
-  gap: 22px;
+  gap: 28px;
   margin-left: auto;
   align-items: center;
 }
-.nav a {
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+.nav a,
+.nav-more-button {
+  font-family: var(--font);
+  font-size: 0.95rem;
+  font-weight: 500;
   text-decoration: none;
   color: var(--ink-2);
   padding: 10px 0;
   white-space: nowrap;
 }
-@media (max-width: 1180px) {
-  .nav {
-    gap: 14px;
-  }
-  .nav a {
-    letter-spacing: 0.05em;
-  }
-}
 .nav a:hover,
-.nav a[aria-current="page"] {
+.nav a[aria-current="page"],
+.nav-more-button:hover,
+.nav-more-button[aria-expanded="true"] {
   color: var(--blue);
+}
+.nav-more {
+  position: relative;
+}
+.nav-more-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  min-height: 44px;
+}
+.nav-more-list {
+  display: none;
+  position: absolute;
+  right: -12px;
+  top: calc(100% + 6px);
+  min-width: 190px;
+  padding: 8px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 32px rgba(14, 16, 19, 0.12);
+}
+.nav-more-list[data-open="true"] {
+  display: flex;
+  flex-direction: column;
+}
+.nav .nav-more-list a {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+}
+.nav .nav-more-list a:hover {
+  background: var(--overlay);
 }
 /* Token page: the flywheel as a numbered loop. */
 .prose ol.flywheel {
@@ -360,9 +389,6 @@ pre {
   font-family: var(--mono);
   font-size: 0.78rem;
   color: var(--blue);
-}
-.nav a.nav-social {
-  padding: 10px 2px;
 }
 .nav a.nav-cta {
   padding: 0 16px;
@@ -422,6 +448,18 @@ pre {
   }
   .mobile-menu .btn {
     margin-top: 16px;
+  }
+  .mobile-menu-label {
+    margin: 20px 0 4px;
+    font: 500 0.75rem var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .mobile-menu a.mobile-menu-small {
+    font-size: 0.95rem;
+    padding: 10px 0;
+    color: var(--ink-2);
   }
 }
 

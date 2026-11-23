@@ -17,6 +17,7 @@ const SOURCES = ALL_INFOS.filter((a) => a.support !== "GUIDED" && a.support !== 
 export function CompatDemo() {
   const [from, setFrom] = useState("openclaw");
   const [to, setTo] = useState("claude-code");
+  const [all, setAll] = useState(false);
   const report = useMemo(() => {
     const src = infoById(from)!;
     return analyzeCompatibility(sampleFrom(from), src, infoById(to)!);
@@ -62,7 +63,7 @@ export function CompatDemo() {
         </label>
       </div>
       <ul style={{ listStyle: "none", margin: 0, padding: "4px 18px 8px" }}>
-        {rows.map((c) => (
+        {(all ? rows : rows.slice(0, 5)).map((c) => (
           <li key={c.category} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: "1px solid var(--line)" }}>
             <span>
               {c.label} <span className="muted">({c.items})</span>
@@ -71,6 +72,11 @@ export function CompatDemo() {
           </li>
         ))}
       </ul>
+      {rows.length > 5 && (
+        <button type="button" className="btn btn-quiet" style={{ margin: "4px 18px 0", minHeight: 36, fontSize: "0.85rem" }} aria-expanded={all} onClick={() => setAll((a) => !a)}>
+          {all ? "Show less" : `Show ${rows.length - 5} more`}
+        </button>
+      )}
       <div className="panel-body" style={{ paddingTop: 8, fontSize: "0.88rem" }}>
         {report.attention.length ? (
           <p>
@@ -79,9 +85,6 @@ export function CompatDemo() {
         ) : (
           <p className="muted">Everything this agent uses has a place at the destination.</p>
         )}
-        <p className="muted" style={{ marginTop: 6 }}>
-          Support level for {infoById(to)!.displayName}: <Badge kind={infoById(to)!.support}>{infoById(to)!.support.toLowerCase()}</Badge>
-        </p>
       </div>
     </div>
   );
