@@ -48,6 +48,16 @@ async function getJson(url: string, signal?: AbortSignal): Promise<unknown> {
   return r.json();
 }
 
+/** Like getJson, but a file that is not there yet (404) is null rather than an error. */
+async function getJsonIfAny(url: string, signal?: AbortSignal): Promise<unknown> {
+  try {
+    return await getJson(url, signal);
+  } catch (e) {
+    if ((e as Error).message === "404") return null;
+    throw e;
+  }
+}
+
 export const RPC_URL = "https://rpc.mainnet.chain.robinhood.com";
 
 /** A token balance read from the chain itself (balanceOf), in base units. */
@@ -334,9 +344,9 @@ export async function readEconomy(signal?: AbortSignal): Promise<Economy> {
   const referral = ECONOMY_WALLETS.find((w) => w.id === "referral")!.address;
   const revenueP = getJson(`${API}/addresses/${referral}/token-transfers?type=ERC-20&filter=to`, signal);
   const payoutsP = getJson(`${API}/addresses/${REWARD_SAFE}/token-transfers?type=ERC-20&filter=from&token=${TOKEN_CA}`, signal);
-  const costsP = getJson(ECONOMY_FEED_URL, signal);
+  const costsP = getJsonIfAny(ECONOMY_FEED_URL, signal);
   const bountiesP = getJson(BOUNTIES_URL, signal);
-  const recordP = getJson(ECONOMY_RECORD_URL, signal);
+  const recordP = getJsonIfAny(ECONOMY_RECORD_URL, signal);
   const agentsP = readAgents(signal);
 
   const [wallets, burnBalance, burns, revenue, payouts, costs, bounties, record, agents] = await Promise.all([
