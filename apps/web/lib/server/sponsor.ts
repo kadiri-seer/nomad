@@ -98,7 +98,7 @@ export function maxCostWei(op: RpcUserOp): bigint {
   return gas * hexToBigInt(op.maxFeePerGas);
 }
 
-export type Kind = "topup" | "buy-nomad" | "mint" | "paid";
+export type Kind = "topup" | "buy-nomad" | "mint" | "withdraw" | "fund-agent" | "paid";
 
 /**
  * What an operation does, from its calls. The treasury pays only when every call is part of one of these, exactly:
@@ -153,6 +153,41 @@ export function classify(callData: Hex, sender: Address, agents: Address | ""): 
   return [...kinds][0];
 }
 
+/**
+ * Moves between a person's account and their agents' wallets, which the treasury also pays for: taking everything
+ * out of an agent's wallet back to its creator's account ("withdraw"), and sending USDG from an account to one of its
+ * own agents ("fund-agent"). Anything else from an agent's wallet is charged to its creator's credits.
+ */
+export async function classifyAgentMove(
+  callData: Hex,
+  sender: Address,
+  agentOfSender: { owner: Address } | null,
+  agentByAccount: (a: Address) => Promise<{ owner: Address } | null>
+): Promise<Kind> {
+  let calls: readonly { to: Address; data?: Hex; value?: bigint }[];
+  try {
+    calls = decodeCallsMAv2(callData, sender);
+  } catch {
+    return "paid";
+  }
+  if (!calls.length || calls.length > 12) return "paid";
+  const transfers = [];
+  for (const c of calls) {
+    if ((c.value ?? 0n) !== 0n) return "paid";
+    try {
+      const d = decodeFunctionData({ abi: erc20Abi, data: c.data ?? "0x" });
+      if (d.functionName !== "transfer") return "paid";
+      transfers.push({ token: c.to, to: d.args[0] as Address });
+    } catch {
+      return "paid";
+    }
+  }
+  if (agentOfSender) return transfers.every((t) => lc(t.to) === lc(agentOfSender.owner)) ? "withdraw" : "paid";
+  if (transfers.length !== 1 || lc(transfers[0].token) !== lc(USDG)) return "paid";
+  const target = await agentByAccount(transfers[0].to);
+  return target && lc(target.owner) === lc(sender) ? "fund-agent" : "paid";
+}
+
 /** Stoa's router swap, as its public API encodes it: swap((tokenIn, tokenOut, mid, leg1, leg2, amountIn, minOut, to, deadline, referrer)). */
 const STOA_SWAP_ABI = [
   {
@@ -202,6 +237,8 @@ export type SponsorDeps = {
    * (to settle at the real cost once it lands, or release once it expires); false when the credits do not cover it.
    */
   hold: (account: Address, maxCostWei: bigint, userOpHash: Hex, validUntil: number) => Promise<boolean>;
+  /** Agent wallets and whose account pays for them (agent operations are charged to the creator's credits). */
+  agentByAccount?: (account: Address) => Promise<{ owner: Address } | null>;
   now?: () => Date;
 };
 
@@ -256,14 +293,17 @@ export async function sponsor(deps: SponsorDeps, params: unknown[]) {
   const op = parseOp(params[0]);
   const now = (deps.now ?? (() => new Date()))();
   const validUntil = Math.floor(now.getTime() / 1000) + SPONSOR_VALID_SECONDS;
-  const kind = classify(op.callData, op.sender, deps.agents);
+  const agent = deps.agentByAccount ? await deps.agentByAccount(op.sender) : null;
+  const payer = agent?.owner ?? op.sender;
+  let kind = classify(op.callData, op.sender, deps.agents);
+  if (kind === "paid" && deps.agentByAccount) kind = await classifyAgentMove(op.callData, op.sender, agent, deps.agentByAccount);
   let paidBy: "treasury" | "credits" = "credits";
-  if (kind !== "paid" && (await deps.useFreeOp(op.sender, now.toISOString().slice(0, 10)))) paidBy = "treasury";
+  if (kind !== "paid" && (await deps.useFreeOp(payer, now.toISOString().slice(0, 10)))) paidBy = "treasury";
   const hash = paymasterHash(op, deps.paymaster, validUntil, 0);
   const signature = await deps.signer.signMessage({ message: { raw: hash } });
   const window = encodeAbiParameters([{ type: "uint48" }, { type: "uint48" }], [validUntil, 0]);
   const paymasterData = concat([window, signature]);
-  if (paidBy === "credits" && !(await deps.hold(op.sender, maxCostWei(op), userOpHash(op, deps.paymaster, paymasterData), validUntil))) {
+  if (paidBy === "credits" && !(await deps.hold(payer, maxCostWei(op), userOpHash(op, deps.paymaster, paymasterData), validUntil))) {
     throw new SponsorError(402, "Not enough credits for this. Add credits, then try again.");
   }
   return { paymaster: deps.paymaster, paymasterData, ...gasFields, kind, paidBy };

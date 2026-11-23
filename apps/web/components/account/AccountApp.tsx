@@ -11,6 +11,10 @@ import { PrivyProvider, usePrivy, useWallets } from "@privy-io/react-auth";
 import { formatUnits, parseAbi, parseUnits, type Address } from "viem";
 import { PRIVY_APP_ID, PAYMASTER, NOMAD, USDG } from "@/lib/accounts/chain";
 import { AGENTS_CONTRACT } from "@/lib/economy";
+import { DEFAULT_RUN_EVERY_HOURS, registerMessage, RUN_EVERY_HOURS } from "@/lib/agents/shared";
+import { grantSession, newSalt } from "@/lib/agents/wallet";
+import { MyAgents } from "./MyAgents";
+import { Sheet } from "./Sheet";
 import { Mark, Wordmark } from "@/components/Logo";
 import {
   accountClient,
@@ -32,17 +36,7 @@ import {
   type Call
 } from "@/lib/accounts/client";
 
-type Client = Awaited<ReturnType<typeof accountClient>>;
-type Confirm = {
-  title: string;
-  amount: string;
-  amountNote: string;
-  rows: [string, string][];
-  note?: string;
-  build: () => Promise<Call[]>;
-  after?: (txHash: string) => Promise<string | void>;
-  done: { title: string; body: string };
-};
+import type { Client, Confirm } from "./types";
 
 export function AccountApp() {
   // Opens only once the paymaster is live too: without it, funds sent to an account could not be moved without ETH.
@@ -89,8 +83,9 @@ function Account() {
       if (!embedded) return;
       try {
         const provider = await embedded.getEthereumProvider();
-        const c = await accountClient(ownerFromProvider(embedded.address as Address, provider as never));
-        if (!off) setClient(c);
+        const owner = ownerFromProvider(embedded.address as Address, provider as never);
+        const c = await accountClient(owner);
+        if (!off) setClient({ ...c, owner, signer: embedded.address as Address });
       } catch {
         if (!off) setError("Your account could not be opened. Reload the page to try again.");
       }
@@ -145,6 +140,7 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
   const [sheet, setSheet] = useState<"funds" | "credits" | "buy" | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [mintingOpen, setMintingOpen] = useState(false);
+  const [version, setVersion] = useState(0);
   useEffect(() => {
     if (!AGENTS_CONTRACT) return;
     publicClient
@@ -204,6 +200,8 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
             </button>
           </section>
 
+          <MyAgents client={client} onConfirm={setConfirm} version={version} />
+
           <section className="acct-card">
             <div className="acct-between">
               <h2 className="acct-h3">Credits</h2>
@@ -261,11 +259,13 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
           onClose={() => {
             setConfirm(null);
             refresh();
+            setVersion((v) => v + 1);
           }}
           onHome={() => {
             setConfirm(null);
             setView("home");
             refresh();
+            setVersion((v) => v + 1);
           }}
         />
       )}
@@ -279,6 +279,7 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
   const [instructions, setInstructions] = useState("");
   const [perTrade, setPerTrade] = useState("0.30");
   const [perDay, setPerDay] = useState(3);
+  const [every, setEvery] = useState<number>(DEFAULT_RUN_EVERY_HOURS);
   const [fee, setFee] = useState<bigint | null>(null);
   const agents = AGENTS_CONTRACT as Address;
   useEffect(() => {
@@ -298,18 +299,57 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
       if (usdg > bal.usdg) throw new Error("Not enough $NOMAD or USDG to create the agent.");
       topUp = { usdg, calls: (await stoaQuote(USDG, NOMAD, usdg, client.account.address as Address)).calls };
     }
+    const salt = newSalt();
+    const sr = await fetch(`/api/agents/session?signer=${client.signer}&salt=${salt}`, { cache: "no-store" });
+    const sj = (await sr.json()) as { account?: Address; sessionAddress?: Address; error?: string };
+    if (!sr.ok || !sj.account || !sj.sessionAddress) throw new Error(sj.error ?? "Agents are not switched on yet.");
+    let grant: Awaited<ReturnType<typeof grantSession>> | null = null;
+    const nm = name.trim();
     onConfirm({
-      title: `Approve: create agent "${name.trim()}"`,
+      title: `Approve: create agent "${nm}"`,
       amount: `-${fmtNomad(fee)} $NOMAD`,
       amountNote: usdOf(fee),
       rows: [
         ...(topUp ? ([["First, swap", `${fmtUsdg(topUp.usdg)} USDG for the missing $NOMAD`]] as [string, string][]) : []),
         ["Burned", `${fmtNomad(fee / 2n)} $NOMAD`],
         ["To Nomad's treasury", `${fmtNomad(fee - fee / 2n)} $NOMAD`],
+        ["Its wallet", `${sj.account.slice(0, 6)}...${sj.account.slice(-4)}, yours`],
         ["Network fee", "Included"]
       ],
-      build: async () => [...(topUp?.calls ?? []), ...mintCalls(agents, fee, name.trim(), pkg.hash)],
-      done: { title: `${name.trim()} is created`, body: `${fmtNomad(fee)} $NOMAD paid, ${fmtNomad(fee / 2n)} burned. Add credits so it can start running.` }
+      note: "Nomad's runner gets a key to trade from this agent's wallet within its limits. You stay its owner: withdraw or pause any time.",
+      build: async () => {
+        const agentClient = await accountClient(client.owner, salt);
+        if (agentClient.account.address.toLowerCase() !== sj.account!.toLowerCase()) throw new Error("The agent's wallet did not match. Nothing was sent.");
+        grant = await grantSession(agentClient.account, sj.sessionAddress!);
+        return [...(topUp?.calls ?? []), ...mintCalls(agents, fee, nm, pkg.hash)];
+      },
+      after: async (txHash) => {
+        if (!grant) throw new Error("The agent was minted, but its set-up was not finished.");
+        const signature = await client.owner.signMessage({ message: registerMessage(txHash, salt.toString()) });
+        const r = await fetch("/api/agents/register", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            signer: client.signer,
+            salt: salt.toString(),
+            name: nm,
+            template,
+            perTradeUsd: perTrade,
+            tradesPerDay: perDay,
+            ...(template === "blank" ? { instructions: instructions.trim() } : {}),
+            runEveryHours: every,
+            sessionEntityId: grant.entityId,
+            sessionDeadline: grant.deadline,
+            deferredAction: grant.deferredAction,
+            mintTx: txHash,
+            signature
+          })
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error ?? "The agent was minted but could not be set up yet.");
+        return `${fmtNomad(fee)} $NOMAD paid, ${fmtNomad(fee / 2n)} burned. Fund its wallet with USDG and keep some credits, and it starts within 15 minutes.`;
+      },
+      done: { title: `${nm} is created`, body: "" }
     });
   };
 
@@ -358,6 +398,16 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
           <input value={perDay} inputMode="numeric" onChange={(e) => setPerDay(Math.max(1, Math.min(10, Number(e.target.value.replace(/\D/g, "")) || 1)))} />
         </label>
       </div>
+      <label className="acct-field">
+        <span>How often it runs</span>
+        <select value={every} onChange={(e) => setEvery(Number(e.target.value))}>
+          {RUN_EVERY_HOURS.map((h) => (
+            <option key={h} value={h}>
+              {h === 1 ? "Every hour" : h === 24 ? "Once a day" : `Every ${h} hours`}
+            </option>
+          ))}
+        </select>
+      </label>
       <section className="acct-card">
         <div className="acct-between">
           <span>Creating an agent</span>
@@ -476,7 +526,7 @@ function Approve({ client, confirm, onClose, onHome }: { client: Client; confirm
     setState("sending");
     try {
       const calls = await confirm.build();
-      const { txHash } = await send(client, calls);
+      const { txHash } = await send(confirm.via ?? client, calls);
       setTx(txHash);
       let extra = "";
       if (confirm.after) {
@@ -497,7 +547,7 @@ function Approve({ client, confirm, onClose, onHome }: { client: Client; confirm
       setState("error");
     }
   };
-  const address = client.account.address;
+  const address = (confirm.via ?? client).account.address;
   return (
     <div className="acct-overlay" role="presentation">
       <section className="acct-sheet" role="dialog" aria-modal="true" aria-labelledby="approve-title">
@@ -534,13 +584,14 @@ function Approve({ client, confirm, onClose, onHome }: { client: Client; confirm
               <div className="acct-muted">{confirm.amountNote}</div>
             </div>
             <dl className="acct-rows">
-              {[...confirm.rows, ["From", `Your account ${address.slice(0, 6)}...${address.slice(-4)}`] as [string, string]].map(([k, v]) => (
+              {[...confirm.rows, ["From", `${confirm.via ? "Agent wallet" : "Your account"} ${address.slice(0, 6)}...${address.slice(-4)}`] as [string, string]].map(([k, v]) => (
                 <div key={k}>
                   <dt>{k}</dt>
                   <dd>{v}</dd>
                 </div>
               ))}
             </dl>
+            {confirm.note && <p className="acct-small">{confirm.note}</p>}
             {state === "error" && <p className="acct-error">{message}</p>}
             <div className="acct-grid2">
               <button type="button" className="acct-secondary" onClick={onClose} disabled={state === "sending"}>Cancel</button>
@@ -556,23 +607,8 @@ function Approve({ client, confirm, onClose, onHome }: { client: Client; confirm
   );
 }
 
-function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="acct-overlay" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <section className="acct-sheet" role="dialog" aria-modal="true" aria-label={title}>
-        <div className="acct-handle" aria-hidden="true" />
-        <div className="acct-between">
-          <h2 className="acct-h2" style={{ margin: 0 }}>{title}</h2>
-          <button type="button" className="acct-quiet" onClick={onClose}>Close</button>
-        </div>
-        {children}
-      </section>
-    </div>
-  );
-}
-
 /** Shows a short error at the top of the page for a few seconds (no browser dialogs). */
-function alertSoft(e: unknown) {
+export function alertSoft(e: unknown) {
   window.dispatchEvent(new CustomEvent("nomad-account-error", { detail: (e as Error)?.message ?? "Something went wrong. Nothing was sent." }));
 }
 

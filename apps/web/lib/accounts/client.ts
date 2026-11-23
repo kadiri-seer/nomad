@@ -3,7 +3,7 @@
  * Privy keeps behind their Google sign-in), sending its operations through Nomad's bundler route with gas from
  * NomadPaymaster, balances, Stoa quotes and the calls for each action. Runs in the browser.
  */
-import { createPublicClient, encodeFunctionData, erc20Abi, formatUnits, http, keccak256, parseUnits, toHex, type Address, type EIP1193Provider, type Hex } from "viem";
+import { createPublicClient, encodeFunctionData, erc20Abi, formatUnits, http, parseUnits, toHex, type Address, type EIP1193Provider, type Hex } from "viem";
 import { toAccount } from "viem/accounts";
 import { createBundlerClient, createPaymasterClient } from "viem/account-abstraction";
 import { toModularAccountV2 } from "@alchemy/smart-accounts";
@@ -40,8 +40,8 @@ export function ownerFromProvider(address: Address, provider: EIP1193Provider) {
 }
 
 /** The smart account and a client that sends its operations, gas paid through Nomad's paymaster route. */
-export async function accountClient(owner: ReturnType<typeof ownerFromProvider>) {
-  const account = await toModularAccountV2({ client: publicClient, owner });
+export async function accountClient(owner: ReturnType<typeof ownerFromProvider>, salt = 0n) {
+  const account = await toModularAccountV2({ client: publicClient, owner, salt });
   const bundler = createBundlerClient({
     account,
     client: publicClient,
@@ -114,10 +114,7 @@ export const topUpNomadCalls = async (amount: bigint) => (await stoaQuote(NOMAD,
 export const buyNomadCalls = async (usdg: bigint, account: Address) => stoaQuote(USDG, NOMAD, usdg, account);
 
 /** The agent's package: what was chosen, hashed, so the minted agent is tied to exactly this set-up. */
-export function agentPackage(input: { name: string; template: string; perTradeUsd: string; tradesPerDay: number; instructions?: string }) {
-  const body = JSON.stringify({ v: 1, ...input });
-  return { body, hash: keccak256(toHex(body)) };
-}
+export { agentPackage } from "../agents/shared";
 
 /** Minting: approve exactly the fee, then mint (free copies by default; the creator can set a price later). */
 export function mintCalls(agents: Address, fee: bigint, name: string, packageHash: Hex): Call[] {

@@ -1,0 +1,57 @@
+/**
+ * One agent: its record, moves and holdings (GET), and its creator's changes (POST): pause, resume, or how often it
+ * runs. Changes are signed by the creator's Google wallet, which owns the agent's wallet.
+ */
+import { verifyMessage, type Hex } from "viem";
+import { json } from "@/lib/server/account-routes";
+import { agentEnv, publicAgent } from "@/lib/server/agent-api";
+import { ownerActionMessage, RUN_EVERY_HOURS } from "@/lib/agents/shared";
+
+export const dynamic = "force-dynamic";
+
+type Ctx = { params: Promise<{ id: string }> };
+
+export async function GET(_req: Request, ctx: Ctx) {
+  const { id } = await ctx.params;
+  const env = agentEnv();
+  if (!env || !/^\d{1,30}$/.test(id)) return json({ error: "Not found." }, 404);
+  const a = await env.store.get(id);
+  if (!a) return json({ error: "Not found." }, 404);
+  return json({ agent: publicAgent(a), moves: await env.store.moves(id, 30), positions: await env.store.positions(id) });
+}
+
+export async function POST(req: Request, ctx: Ctx) {
+  const { id } = await ctx.params;
+  const env = agentEnv();
+  if (!env || !/^\d{1,30}$/.test(id)) return json({ error: "Not found." }, 404);
+  const a = await env.store.get(id);
+  if (!a) return json({ error: "Not found." }, 404);
+  let b: { action?: string; at?: number; signature?: string; runEveryHours?: number };
+  try {
+    b = await req.json();
+  } catch {
+    return json({ error: "Not JSON." }, 400);
+  }
+  const action = b.action === "pause" || b.action === "resume" ? b.action : b.action === "schedule" && (RUN_EVERY_HOURS as readonly number[]).includes(Number(b.runEveryHours)) ? `run every ${Number(b.runEveryHours)} hours` : null;
+  if (!action) return json({ error: "Unknown change." }, 400);
+  const at = Number(b.at);
+  if (!Number.isFinite(at) || Math.abs(Date.now() - at) > 10 * 60_000) return json({ error: "The signature is too old. Try again." }, 400);
+  const ok = typeof b.signature === "string" && (await verifyMessage({ address: a.signer, message: ownerActionMessage(id, action, at), signature: b.signature as Hex }).catch(() => false));
+  if (!ok) return json({ error: "Only the agent's creator can change it." }, 403);
+  const now = Date.now();
+  if (b.action === "pause") {
+    a.status = "paused";
+    await env.store.unschedule(id);
+    await env.store.addMove(id, { at: now, text: "Paused by its creator." });
+  } else if (b.action === "resume") {
+    a.status = "active";
+    await env.store.schedule(id, now);
+    await env.store.addMove(id, { at: now, text: "Resumed by its creator. Its next run is within 15 minutes." });
+  } else {
+    a.runEveryHours = Number(b.runEveryHours);
+    if (a.status === "active") await env.store.schedule(id, Math.min(now + a.runEveryHours * 3_600_000, (a.lastRunAt ?? now) + a.runEveryHours * 3_600_000));
+    await env.store.addMove(id, { at: now, text: `Now runs every ${a.runEveryHours} hours.` });
+  }
+  await env.store.save(a);
+  return json({ agent: publicAgent(a) });
+}

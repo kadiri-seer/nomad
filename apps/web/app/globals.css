@@ -2026,3 +2026,7 @@ details.diff summary {
 .acct-done .acct-primary { width: 100%; }
 .acct-check { width: 64px; height: 64px; border-radius: 32px; background: #dcebdd; color: #2e7d4f; display: flex; align-items: center; justify-content: center; }
 .acct-toast { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); max-width: 400px; background: var(--bad-bg); border: 1px solid var(--bad-line); color: var(--bad); padding: 10px 14px; border-radius: 10px; z-index: 70; margin: 0; font-size: 14px; }
+.acct-field select, .acct-input { min-height: 48px; box-sizing: border-box; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--card); padding: 10px 14px; font: 500 16px var(--font); color: var(--ink); width: 100%; }
+.acct-moves { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.acct-moves li { display: flex; flex-direction: column; gap: 2px; font-size: 14px; line-height: 1.4; border-bottom: 1px solid #eeebe2; padding-bottom: 10px; }
+.acct-moves li:last-child { border-bottom: none; }

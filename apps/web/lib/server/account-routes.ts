@@ -12,6 +12,7 @@ import { redisFromEnv, type RedisLike } from "../vote/redis";
 import { AGENTS_CONTRACT } from "../economy";
 import { CHAIN_ID, PAYMASTER, PUBLIC_RPC } from "../accounts/chain";
 import { hold, useFreeOp, type CreditsDeps } from "./credits";
+import { agentStore } from "./agents-store";
 import type { SponsorDeps } from "./sponsor";
 
 const NO_STORE = { "cache-control": "no-store" };
@@ -94,7 +95,8 @@ export function sponsorDeps(): { sponsor: SponsorDeps; credits: CreditsDeps } | 
       agents: (AGENTS_CONTRACT ?? "") as Address | "",
       signer: privateKeyToAccount(key as Hex),
       useFreeOp: (account, day) => useFreeOp(redis, account, day),
-      hold: (account, wei, hash, until) => hold(credits, account, wei, hash, until)
+      hold: (account, wei, hash, until) => hold(credits, account, wei, hash, until),
+      agentByAccount: (account) => agentStore(redis).byAccount(account)
     }
   };
 }

@@ -97,3 +97,21 @@ Tested against the real v0.7 EntryPoint and the reference SimpleAccount (`test/p
 with no ETH sends a token transfer with its gas paid from the deposit (exactly the operation's cost); a wrong
 signer, a signature for another operation, an expired signature and an operation over the ceiling are all refused;
 only the EntryPoint can ask it to validate; withdrawals go to the treasury only.
+
+## Agent runner
+
+Agents created from `/account` run on Nomad's site, called every 15 minutes by `.github/workflows/agents.yml` (the site
+checks the workflow's GitHub OpenID Connect token, so no secret is stored on GitHub).
+
+- **Wallets.** Each agent has its own Modular Account V2, owned by its creator's Google wallet. When creating the agent
+  the creator signs one grant (a deferred action) that installs the runner's session key with the runner's first
+  operation. The creator can withdraw everything back to their account, or pause the agent, at any time.
+- **Rules.** Trades only on Stoa against USDG, only tokens that pass Stoa's safety check (taxes 3% or less, can be
+  bought and sold), with at least $20k liquidity and $1,000 traded in 24 hours, at no more than 2% price impact, within
+  the agent's per-trade limit and trades a day. It sells at +25%, -20% or after 48 hours.
+- **AI.** A Trader asks Idlex (qwen2.5-7b) for a red-flag check before buying; an agent with its own instructions asks
+  Idlex what to do and the runner acts only within the checks and limits. Each Idlex job is charged $0.005 to the
+  creator's credits; network fees are charged to credits by the paymaster.
+- **Switch on.** `node nomad/contracts/setup-runner.mjs` makes `AGENT_RUNNER_SECRET` and adds it to Vercel (every
+  session key and the Idlex payer wallet come from it; it is never printed). Fund the Idlex wallet it prints with a
+  few USDG, redeploy, then open minting from the Safe.

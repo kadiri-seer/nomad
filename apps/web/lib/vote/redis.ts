@@ -30,6 +30,8 @@ export class MemoryRedis implements RedisLike {
   private strings = new Map<string, string>();
   private hashes = new Map<string, Map<string, string>>();
   private sets = new Map<string, Set<string>>();
+  private zsets = new Map<string, Map<string, number>>();
+  private lists = new Map<string, string[]>();
   async cmd(args: (string | number)[]) {
     const [op, key, ...rest] = args.map(String);
     const hash = () => {
@@ -70,6 +72,55 @@ export class MemoryRedis implements RedisLike {
       }
       case "EXPIRE":
         return 1;
+      case "GET":
+        return this.strings.get(key) ?? null;
+      case "SET": {
+        const flags = rest.slice(1).map((f) => f.toUpperCase());
+        if (flags.includes("NX") && this.strings.has(key)) return null;
+        this.strings.set(key, rest[0]);
+        return "OK";
+      }
+      case "DEL": {
+        const had = this.strings.delete(key) || this.hashes.delete(key) || this.sets.delete(key) || this.zsets.delete(key) || this.lists.delete(key);
+        return had ? 1 : 0;
+      }
+      case "SMEMBERS":
+        return [...(this.sets.get(key) ?? [])];
+      case "SREM":
+        return this.sets.get(key)?.delete(rest[0]) ? 1 : 0;
+      case "ZADD": {
+        const z = this.zsets.get(key) ?? new Map<string, number>();
+        this.zsets.set(key, z);
+        z.set(rest[1], Number(rest[0]));
+        return 1;
+      }
+      case "ZREM":
+        return this.zsets.get(key)?.delete(rest[0]) ? 1 : 0;
+      case "ZRANGEBYSCORE": {
+        const max = rest[1] === "+inf" ? Infinity : Number(rest[1]);
+        const min = rest[0] === "-inf" ? -Infinity : Number(rest[0]);
+        const limit = rest[2]?.toUpperCase() === "LIMIT" ? Number(rest[4]) : Infinity;
+        return [...(this.zsets.get(key)?.entries() ?? [])]
+          .filter(([, sc]) => sc >= min && sc <= max)
+          .sort((a, b) => a[1] - b[1])
+          .slice(0, limit)
+          .map(([m]) => m);
+      }
+      case "LPUSH": {
+        const l = this.lists.get(key) ?? [];
+        this.lists.set(key, l);
+        l.unshift(...rest.reverse());
+        return l.length;
+      }
+      case "LTRIM": {
+        const l = this.lists.get(key) ?? [];
+        this.lists.set(key, l.slice(Number(rest[0]), Number(rest[1]) + 1));
+        return "OK";
+      }
+      case "LRANGE": {
+        const l = this.lists.get(key) ?? [];
+        return l.slice(Number(rest[0]), Number(rest[1]) + 1);
+      }
       default:
         throw new Error(`MemoryRedis does not implement ${op}`);
     }

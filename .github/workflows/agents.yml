@@ -1,0 +1,26 @@
+name: Agent runner
+
+# Every 15 minutes, asks the site to run the Nomad agents that are due. The site checks this workflow's OpenID Connect
+# token (this repository, main branch), so no secret is stored here.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: agent-runner
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Run due agents
+        run: |
+          TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=nomad-agents" | jq -r .value)
+          curl -sS --fail-with-body --max-time 320 -X POST -H "Authorization: Bearer $TOKEN" https://www.thenomad.website/api/agents/tick
