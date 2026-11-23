@@ -117,7 +117,7 @@ export function EconomyLive() {
           <b>{!treasury ? "Not read yet" : treasury.usd != null ? usd(treasury.usd) : tokenAmount(nomadBalance("treasury"))}</b>
         </div>
         <div>
-          <span className="label">Revenue received</span>
+          <span className="label">Received</span>
           <b>{data.revenue.received.length ? data.revenue.received.map((r) => `${fmt(r.amount)} ${r.symbol}`).join(", ") : "None yet"}</b>
         </div>
         <div>
@@ -171,6 +171,16 @@ export function EconomyLive() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="panel" aria-labelledby="eco-received">
+        <Head id="eco-received" title="Received by the referral wallet" note="Every token that arrived, and who sent it" />
+        <div className="panel-body stack" style={{ gap: 12 }}>
+          <p className="muted" style={{ margin: 0 }}>
+            QHooks pays Nomad&apos;s share of its fees to this wallet. Anything else sent here shows too, with its sender, so each amount can be checked on the explorer.
+          </p>
+          {data.revenue.recent.length ? <TransferTable id="eco-received-list" rows={data.revenue.recent} who="from" /> : <p className="muted" style={{ margin: 0 }}>Nothing has arrived yet.</p>}
         </div>
       </section>
 

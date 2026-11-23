@@ -50,6 +50,12 @@ describe("reading the explorer", () => {
     expect(b.usd).toBe(1762.5);
   });
 
+  it("spam airdrops are left out of balances and transfers", () => {
+    const SPAM = "0x71Fa6238a4F61673B0bf81f2F64F54ea651C59B7";
+    expect(parseBalances(ECONOMY_WALLETS[2], { coin_balance: "0" }, [{ token: tok("ROBINCAT", SPAM), value: "60000000000000000000000" }], null).balances.map((b) => b.symbol)).toEqual(["ETH"]);
+    expect(parseTransfers({ items: [{ transaction_hash: H, token: tok("ROBINCAT", SPAM), total: { value: "1" }, from: { hash: ADDR }, to: { hash: ADDR } }] })).toEqual([]);
+  });
+
   it("transfers: only fungible ones with real hashes, summed per token", () => {
     const list = parseTransfers({
       items: [

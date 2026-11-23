@@ -12,3 +12,12 @@ export const TOKEN_EXPLORER_URL = `${EXPLORER}/token/${TOKEN_CA}`;
 export const TOKEN_HOLDERS_URL = `${EXPLORER}/token/${TOKEN_CA}?tab=holders`;
 export const TOKEN_CHART_URL = `https://dexscreener.com/robinhood/${TOKEN_CA}`;
 export const REWARD_SAFE_URL = `${EXPLORER}/address/${REWARD_SAFE}`;
+
+/**
+ * Tokens sent to Nomad's wallets unasked (spam airdrops), by address, lower case. They are left out of balances,
+ * totals and activity on the site; they stay on the explorer. Add one here when it turns up.
+ */
+export const SPAM_TOKENS = new Set<string>([
+  "0x71fa6238a4f61673b0bf81f2f64f54ea651c59b7" // ROBINCAT, airdropped to Nomad AI's Rushr wallet; Rushr blocks it
+]);
+export const isSpamToken = (address: unknown) => typeof address === "string" && SPAM_TOKENS.has(address.toLowerCase());

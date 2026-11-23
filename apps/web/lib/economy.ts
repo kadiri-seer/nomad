@@ -6,7 +6,7 @@
  */
 import { decodeEventLog, type Abi } from "viem";
 import { AGENT_WALLETS, fmt, units } from "./agent";
-import { EXPLORER, REWARD_SAFE, TOKEN_CA } from "./token";
+import { EXPLORER, REWARD_SAFE, TOKEN_CA, isSpamToken } from "./token";
 import { AGENTS_ABI } from "./agents-contract";
 
 export const BURN_ADDRESS = "0x000000000000000000000000000000000000dEaD";
@@ -85,6 +85,7 @@ export function parseBalances(wallet: EconomyWallet, info: unknown, tokens: unkn
     const tok = obj(obj(t).token);
     if (tok.decimals == null || str(tok.type).includes("721") || str(tok.type).includes("1155")) continue;
     const address = str(tok.address_hash || tok.address) || null;
+    if (isSpamToken(address)) continue;
     const amount = units(obj(t).value, tok.decimals);
     if (amount === 0) continue;
     const isNomad = lc(address) === lc(TOKEN_CA);
@@ -109,6 +110,7 @@ export function parseTransfers(json: unknown): Transfer[] {
     const hash = str(x.transaction_hash);
     if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) continue;
     const token = str(tok.address_hash || tok.address);
+    if (isSpamToken(token)) continue;
     out.push({
       hash,
       time: str(x.timestamp),

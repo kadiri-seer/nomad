@@ -1,5 +1,5 @@
 /** Nomad AI: its public wallets, its limits and how its live activity is read from Robinhood Chain. */
-import { EXPLORER } from "./token";
+import { EXPLORER, isSpamToken } from "./token";
 
 export const AGENT_WALLETS = [
   {
@@ -88,6 +88,7 @@ async function readWallet(wallet: AgentWallet, signal?: AbortSignal) {
   let identityNfts = 0;
   for (const t of Array.isArray(tokens) ? tokens : []) {
     const tok = obj(obj(t).token);
+    if (isSpamToken(tok.address_hash || tok.address)) continue;
     if (tok.decimals == null || str(tok.type).includes("721")) {
       identityNfts += 1;
       continue;
@@ -128,6 +129,7 @@ export function activityFor(wallet: AgentWallet, txs: unknown, transfers: unknow
     if (!hash) continue;
     const e = entry(hash, str(x.timestamp));
     const tok = obj(x.token);
+    if (isSpamToken(tok.address_hash || tok.address)) continue;
     if (tok.decimals == null) continue; // the identity NFT, described by its registration
     const label = `${fmt(units(obj(x.total).value, tok.decimals))} ${str(tok.symbol) || "tokens"}`;
     if (lc(obj(x.to).hash) === me) e.tokIn.push(label);
