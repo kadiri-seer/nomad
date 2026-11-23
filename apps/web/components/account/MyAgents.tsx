@@ -10,6 +10,7 @@ import { USDG } from "@/lib/accounts/chain";
 import { accountClient, fmtUsdg, publicClient, type Call } from "@/lib/accounts/client";
 import { ownerActionMessage, RUN_EVERY_HOURS, type Move, type Position } from "@/lib/agents/shared";
 import { Sheet } from "./Sheet";
+import { writeSnapshot } from "./snapshot";
 import type { Client, Confirm } from "./types";
 
 type AgentView = {
@@ -42,6 +43,7 @@ export function MyAgents({ client, onConfirm, version }: { client: Client; onCon
       const r = await fetch(`/api/agents/mine?owner=${owner}`, { cache: "no-store" });
       const j = await r.json();
       setAgents(r.ok ? j.agents : []);
+      if (r.ok) writeSnapshot({ agents: (j.agents as AgentView[]).map((a) => ({ name: a.name, status: a.status })) });
     } catch {
       setAgents([]);
     }

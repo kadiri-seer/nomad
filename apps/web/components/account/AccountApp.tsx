@@ -15,6 +15,7 @@ import { DEFAULT_RUN_EVERY_HOURS, registerMessage, RUN_EVERY_HOURS } from "@/lib
 import { grantSession, newSalt } from "@/lib/agents/wallet";
 import { MyAgents } from "./MyAgents";
 import { Sheet } from "./Sheet";
+import { clearSnapshot, readSnapshot, writeSnapshot } from "./snapshot";
 import { Mark, Wordmark } from "@/components/Logo";
 import {
   accountClient,
@@ -38,7 +39,7 @@ import {
 
 import type { Client, Confirm } from "./types";
 
-export function AccountApp() {
+export function AccountApp({ placeholder, autoLogin = false }: { placeholder?: React.ReactNode; autoLogin?: boolean } = {}) {
   // Opens only once the paymaster is live too: without it, funds sent to an account could not be moved without ETH.
   if (!PRIVY_APP_ID || !PAYMASTER) {
     return (
@@ -65,13 +66,21 @@ export function AccountApp() {
         supportedChains: [robinhood]
       }}
     >
-      <Account />
+      <Account placeholder={placeholder} autoLogin={autoLogin} />
     </PrivyProvider>
   );
 }
 
-function Account() {
+function Account({ placeholder, autoLogin }: { placeholder?: React.ReactNode; autoLogin: boolean }) {
   const { ready, authenticated, login, logout } = usePrivy();
+  const [asked, setAsked] = useState(false);
+  useEffect(() => {
+    // A tap on "Continue with Google" made before sign-in was ready opens it now.
+    if (ready && !authenticated && autoLogin && !asked) {
+      setAsked(true);
+      login();
+    }
+  }, [ready, authenticated, autoLogin, asked, login]);
   const { wallets } = useWallets();
   const [client, setClient] = useState<Client | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +104,7 @@ function Account() {
     };
   }, [embedded]);
 
-  if (!ready) return <Shell><p className="acct-muted">Loading</p></Shell>;
+  if (!ready) return placeholder ?? <Shell><p className="acct-muted">Loading</p></Shell>;
   if (!authenticated) {
     return (
       <Shell>
@@ -111,8 +120,16 @@ function Account() {
     );
   }
   if (error) return <Shell><p className="acct-error">{error}</p></Shell>;
-  if (!client) return <Shell><p className="acct-muted">Opening your account</p></Shell>;
-  return <Home client={client} onSignOut={() => logout()} />;
+  if (!client) return placeholder ?? <Shell><p className="acct-muted">Opening your account</p></Shell>;
+  return (
+    <Home
+      client={client}
+      onSignOut={() => {
+        clearSnapshot();
+        logout();
+      }}
+    />
+  );
 }
 
 function Shell({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
@@ -154,14 +171,20 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
   }, []);
 
   const refresh = useCallback(async () => {
-    setBal(await balances(address));
-    try {
-      const r = await fetch(`/api/account/credits?account=${address}`, { cache: "no-store" });
-      const j = await r.json();
-      setCredits(r.ok ? j.availableUsd : null);
-    } catch {
-      setCredits(null);
-    }
+    // Balances and credits load side by side; each shows as soon as it arrives.
+    await Promise.all([
+      balances(address).then((b) => {
+        setBal(b);
+        writeSnapshot({ address, nomad: fmtNomad(b.nomad), usdg: fmtUsdg(b.usdg) });
+      }),
+      fetch(`/api/account/credits?account=${address}`, { cache: "no-store" })
+        .then(async (r) => {
+          const j = await r.json();
+          setCredits(r.ok ? j.availableUsd : null);
+          if (r.ok) writeSnapshot({ credits: j.availableUsd });
+        })
+        .catch(() => setCredits(null))
+    ]);
   }, [address]);
 
   useEffect(() => {
@@ -172,6 +195,15 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
   }, [refresh]);
 
   const usdOf = (n: bigint) => (price ? `$${(Number(formatUnits(n, 18)) * price).toFixed(2)}` : "");
+  // Last visit's numbers, shown until fresh ones arrive.
+  const [snap] = useState(() => {
+    const s = readSnapshot();
+    return s && s.address.toLowerCase() === address.toLowerCase() ? s : null;
+  });
+  useEffect(() => {
+    if (bal && price) writeSnapshot({ usd: usdOf(bal.nomad) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bal, price]);
 
   return (
     <Shell right={<button type="button" className="acct-quiet" onClick={onSignOut}>Sign out</button>}>
@@ -182,11 +214,11 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
           <section className="acct-balance" aria-label="Balance">
             <div className="acct-label-dark">Your balance</div>
             <div className="acct-big">
-              <span>{bal ? fmtNomad(bal.nomad) : "..."}</span>
+              <span>{bal ? fmtNomad(bal.nomad) : (snap?.nomad ?? "...")}</span>
               <span className="acct-ticker">$NOMAD</span>
             </div>
             <div className="acct-sub-dark">
-              {bal ? `${usdOf(bal.nomad)}${usdOf(bal.nomad) ? " · " : ""}USDG ${fmtUsdg(bal.usdg)}` : ""}
+              {bal ? `${usdOf(bal.nomad)}${usdOf(bal.nomad) ? " · " : ""}USDG ${fmtUsdg(bal.usdg)}` : snap ? `${snap.usd}${snap.usd ? " · " : ""}USDG ${snap.usdg}` : ""}
             </div>
             <div className="acct-row">
               <button type="button" className="acct-lime" onClick={() => setSheet("buy")}>Get $NOMAD</button>
@@ -209,7 +241,7 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
           <section className="acct-card">
             <div className="acct-between">
               <h2 className="acct-h3">Credits</h2>
-              <strong>{credits === null ? "..." : `$${credits}`}</strong>
+              <strong>{credits === null ? (snap?.credits ? `$${snap.credits}` : "...") : `$${credits}`}</strong>
             </div>
             <p className="acct-body">Credits pay for your agents&apos; thinking and their network fees.</p>
             <button type="button" className="acct-secondary" onClick={() => setSheet("credits")}>Add credits</button>
