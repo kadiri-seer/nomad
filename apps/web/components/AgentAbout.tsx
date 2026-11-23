@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRef, useState, type KeyboardEvent } from "react";
 import { AGENT_LIMITS } from "@/lib/agent";
+import { AGENT_LINKS } from "@/lib/agent-links";
 
 const STEPS = [
   ["Check in", "It recalls what it did before from its memory on Memoria, so every run builds on the last."],
@@ -30,7 +31,8 @@ const SERVICES = [
 const TABS = [
   { id: "runs", label: "How it runs" },
   { id: "limits", label: "Its limits" },
-  { id: "uses", label: "What it uses" }
+  { id: "uses", label: "What it uses" },
+  { id: "links", label: "Links" }
 ] as const;
 
 type Tab = (typeof TABS)[number]["id"];
@@ -131,6 +133,28 @@ export function AgentAbout() {
                   OddsEngine
                 </a>
               </dd>
+            </dl>
+          </>
+        )}
+
+        {tab === "links" && (
+          <>
+            <p className="ai-panel-intro">Everything public about Nomad AI in one place.</p>
+            <dl className="kv">
+              {AGENT_LINKS.filter((l) => l.href !== "/ai").map((l) => (
+                <div key={l.href} style={{ display: "contents" }}>
+                  <dt>
+                    {l.external ? (
+                      <a href={l.href} target="_blank" rel="noopener noreferrer">
+                        {l.label}
+                      </a>
+                    ) : (
+                      <Link href={l.href}>{l.label}</Link>
+                    )}
+                  </dt>
+                  <dd>{l.note}</dd>
+                </div>
+              ))}
             </dl>
           </>
         )}

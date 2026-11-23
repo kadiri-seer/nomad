@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/docs/format", label: "Agent format" },
   { href: "/docs/adapters", label: "Platforms" },
   { href: "/docs/security", label: "Security" },
+  { href: "/docs/nomad-ai", label: "Nomad AI" },
   { href: "/docs/token", label: "Token and bounties" }
 ];
 
