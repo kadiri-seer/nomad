@@ -22,7 +22,7 @@ import {
   type WriteContext
 } from "@nomad/core";
 import { atomicWrite, displayPath, drainSkippedKeyMaterial, drainSkippedLinks, makeTempDir, nomadHome, resolveRoot, safeJoin } from "@nomad/core/node";
-import { sanitizeDocument, scanDocument, type DocumentScan, type SanitizeReport } from "@nomad/security";
+import { isInfection, loadVenin, sanitizeDocument, scanDocument, textFiles, type DocumentScan, type SanitizeReport, type VeninFinding, type VeninScanner } from "@nomad/security";
 import { packAgent, packInterchange, unpackAgent, INTERCHANGE_EXTENSION, PACKAGE_EXTENSION, type UnpackResult } from "@nomad/archive";
 import { analyzeCompatibility, type CompatibilityReport } from "@nomad/compatibility";
 import { getAdapter, findAdapter, knownSkillNotes, listAdapters, oddsEngineCreditExtras, qhooksReferralExtras, scanPlatforms } from "@nomad/adapters";
@@ -64,9 +64,47 @@ export interface Approvals {
   broaderPermissions?: boolean;
   /** Approve commands from a package or the library that the destination app will start by itself. */
   runCommands?: boolean;
+  /** Approve writing files in which Venin's check-up found planted orders. */
+  plantedOrders?: boolean;
 }
 
-export type ApprovalKind = "replace" | "overwrite-modified" | "broader-permissions" | "run-commands";
+export type ApprovalKind = "replace" | "overwrite-modified" | "broader-permissions" | "run-commands" | "planted-orders";
+
+export type { VeninFinding, VeninReport, VeninScanner } from "@nomad/security";
+
+/** The approvals a plan needs that were not given. */
+export function missingApprovals(required: ApprovalKind[], a: Approvals): ApprovalKind[] {
+  const given: Record<ApprovalKind, boolean | undefined> = {
+    replace: a.replace,
+    "overwrite-modified": a.overwriteModified,
+    "broader-permissions": a.broaderPermissions,
+    "run-commands": a.runCommands,
+    "planted-orders": a.plantedOrders
+  };
+  return required.filter((k) => !given[k]);
+}
+
+/** Approvals from a list of approval kinds (the ones a person said yes to). */
+export function approvalsFor(kinds: ApprovalKind[]): Approvals {
+  return {
+    replace: kinds.includes("replace"),
+    overwriteModified: kinds.includes("overwrite-modified"),
+    broaderPermissions: kinds.includes("broader-permissions"),
+    runCommands: kinds.includes("run-commands"),
+    plantedOrders: kinds.includes("planted-orders")
+  };
+}
+
+/** Venin's check-up of the files a move writes: whether it ran, and what it found. */
+export interface VeninCheck {
+  /** False when Venin's scanner is not installed or did not answer; the move is not checked then. */
+  ran: boolean;
+  read: number;
+  findings: VeninFinding[];
+  /** Findings that are planted orders (in plain or hidden text): writing them needs approval. */
+  plantedOrders: number;
+  error?: string;
+}
 
 /** A local MCP server the destination app will start by itself: the exact command, and the names of its environment values. */
 export interface PlannedCommand {
@@ -123,6 +161,8 @@ export interface MigrationPlan {
   approvalsRequired: ApprovalKind[];
   /** Commands from a package or the library that the destination app will start by itself. Empty for agents read from this computer. */
   commands: PlannedCommand[];
+  /** Venin's check-up of the files this move writes. */
+  venin: VeninCheck;
   blocked: string[];
 }
 
@@ -147,6 +187,8 @@ export interface MigrationReceipt {
   backupId: string | null;
   manualSteps: string[];
   disabledRoutines: string[];
+  /** Venin's check-up of the files written, when it ran. */
+  venin?: { read: number; findings: number; plantedOrders: number; approved: boolean };
   error?: string;
 }
 
@@ -197,8 +239,25 @@ export class Nomad {
   readonly store: NomadStore;
   private plans = new Map<string, PreparedPlan & { at: number }>();
 
-  constructor(options: { home?: string; store?: NomadStore } = {}) {
+  /** Venin's scanner: given (tests), off (null), or loaded from its npm package on first use. */
+  private veninScanner: Promise<VeninScanner | null>;
+
+  constructor(options: { home?: string; store?: NomadStore; venin?: VeninScanner | null } = {}) {
     this.store = options.store ?? NomadStore.open(options.home ?? nomadHome());
+    this.veninScanner = options.venin !== undefined ? Promise.resolve(options.venin) : Promise.resolve(null).then(() => loadVenin());
+  }
+
+  /** Runs Venin's check-up on the files a move writes. Never throws: a failure is reported, not fatal. */
+  private async veninCheck(ops: FileOperation[]): Promise<VeninCheck> {
+    const scanner = await this.veninScanner.catch(() => null);
+    if (!scanner) return { ran: false, read: 0, findings: [], plantedOrders: 0 };
+    const files = textFiles(ops.filter((o) => (o.action === "create" || o.action === "update") && o.after).map((o) => ({ path: o.display || o.rel, bytes: o.after! })));
+    try {
+      const r = await scanner(files);
+      return { ran: true, read: r.read, findings: r.findings, plantedOrders: r.findings.filter(isInfection).length };
+    } catch (e) {
+      return { ran: false, read: 0, findings: [], plantedOrders: 0, error: (e as Error).message };
+    }
   }
 
   close() {
@@ -363,6 +422,10 @@ export class Nomad {
             .map((t) => ({ tool: t.name, from: commandSource, command: commandLine(t.mcp!.command!, t.mcp!.args), env: Object.keys(t.mcp!.env) }));
     if (commands.length && changing.length) approvalsRequired.push("run-commands");
 
+    // Venin's check-up of exactly what this move would write.
+    const venin = await this.veninCheck(ops);
+    if (venin.plantedOrders && changing.length) approvalsRequired.push("planted-orders");
+
     const notes = [...loaded.notes, ...planned.notes];
     // Skills that only work with the setup they were written for are moved, and the preview says so.
     if (components.includes("skills")) notes.push(...knownSkillNotes(doc.skills, adapter.info.id, adapter.info.displayName));
@@ -386,6 +449,19 @@ export class Nomad {
     }
     if (loaded.sanitize.walletKeysKept) {
       notes.push({ level: "warning", message: `${loaded.sanitize.walletKeysKept} wallet key(s) or recovery phrase(s) were left out although secrets are included: Nomad never copies them as values, because a leaked wallet key cannot be revoked. Set them again on the destination.` });
+    }
+
+    if (venin.ran && venin.findings.length) {
+      const orders = venin.findings.filter(isInfection);
+      const other = venin.findings.length - orders.length;
+      if (orders.length) {
+        notes.push({ level: "warning", message: `Venin's check-up found ${orders.length} planted order${orders.length === 1 ? "" : "s"} in what this move would write: ${orders.slice(0, 3).map((f) => `${f.file}${f.line ? `:${f.line}` : ""}: ${f.says}`).join("; ")}${orders.length > 3 ? `; and ${orders.length - 3} more` : ""}. Someone may have planted instructions in this agent. Approve only if you wrote them yourself.` });
+      }
+      if (other) notes.push({ level: "warning", message: `Venin's check-up also flags ${other} risky setting${other === 1 ? "" : "s"} (wide permissions, tools that act with no one asking, or pay tools without limits). See the details.` });
+    } else if (venin.ran) {
+      notes.push({ level: "info", message: `Venin's check-up read ${venin.read} file${venin.read === 1 ? "" : "s"} this move writes and found nothing.` });
+    } else if (venin.error) {
+      notes.push({ level: "warning", message: `Venin's check-up could not run (${venin.error}), so this move was not checked for planted orders.` });
     }
 
     for (const c of commands) {
@@ -445,6 +521,7 @@ export class Nomad {
       },
       approvalsRequired,
       commands,
+      venin,
       blocked
     };
     this.plans.set(id, { plan, ops, doc, adapter, ctx, planned, at: Date.now() });
@@ -507,9 +584,7 @@ export class Nomad {
     const { plan, ops, doc, adapter, ctx, planned } = prepared;
     if (options.token && options.token !== plan.token) throw new NomadError("The approval does not match this preview.", "token-mismatch");
     if (plan.blocked.length) throw new NomadError("This migration cannot run: " + plan.blocked.join(" "), "blocked");
-    const missing = plan.approvalsRequired.filter(
-      (a) => (a === "replace" && !approvals.replace) || (a === "overwrite-modified" && !approvals.overwriteModified) || (a === "broader-permissions" && !approvals.broaderPermissions) || (a === "run-commands" && !approvals.runCommands)
-    );
+    const missing = missingApprovals(plan.approvalsRequired, approvals);
     if (missing.length) {
       throw new NomadError(`Explicit approval is required: ${missing.join(", ")}.`, "approval-required", "Review the preview and approve these changes to continue.");
     }
@@ -535,7 +610,8 @@ export class Nomad {
       warnings: [...plan.notes.filter((n) => n.level !== "info").map((n) => n.message), ...plan.conflicts.map((c) => `${c.path}: ${c.detail}`), ...plan.permissions.unenforced.map((u) => `Not enforced at the destination: ${u}`)],
       backupId: null,
       manualSteps: planned.manualSteps,
-      disabledRoutines: plan.disabledRoutines
+      disabledRoutines: plan.disabledRoutines,
+      ...(plan.venin.ran ? { venin: { read: plan.venin.read, findings: plan.venin.findings.length, plantedOrders: plan.venin.plantedOrders, approved: !!approvals.plantedOrders } } : {})
     };
     try {
       if (changing.length) {

@@ -8,6 +8,7 @@ import { NOMAD_VERSION, NomadError } from "@nomad/core";
 import { expandHome, nomadHome, resolveRoot } from "@nomad/core/node";
 import { findAdapter, getAdapter } from "@nomad/adapters";
 import { analyzeCompatibility } from "@nomad/compatibility";
+import type { VeninScanner } from "@nomad/migration";
 import {
   appFromClientName,
   appName,
@@ -31,6 +32,8 @@ export interface McpOptions {
   allowReplace?: boolean;
   /** The app this server runs in (set by nomad connect). Without it, the app is guessed from the client's name. */
   app?: string;
+  /** Venin's scanner (tests); by default it is loaded from Venin's npm package when installed. */
+  venin?: VeninScanner | null;
 }
 
 const CONNECT_APPS: ConnectApp[] = ["claude-code", "codex", "openclaw", "hermes", "gemini-cli", "cursor", "claude-desktop"];
@@ -72,6 +75,7 @@ function summarizePlan(p: MigrationPlan) {
     disabledRoutines: p.disabledRoutines,
     manualSteps: p.manualSteps,
     approvalsRequired: p.approvalsRequired,
+    veninCheckup: p.venin.ran ? { filesRead: p.venin.read, plantedOrders: p.venin.findings.filter((f) => f.check === "order" || f.check === "comment").map((f) => ({ file: f.file, line: f.line, says: f.says })), otherFindings: p.venin.findings.filter((f) => f.check !== "order" && f.check !== "comment").length } : null,
     blocked: p.blocked
   };
 }
@@ -83,7 +87,7 @@ function summarizePlan(p: MigrationPlan) {
  * assistant cannot write anything the user has not seen as a preview.
  */
 export function createMcpServer(options: McpOptions = {}) {
-  const nomad = new Nomad({ home: options.home ? resolve(options.home) : nomadHome() });
+  const nomad = new Nomad({ home: options.home ? resolve(options.home) : nomadHome(), ...(options.venin !== undefined ? { venin: options.venin } : {}) });
   const server = new McpServer({ name: "nomad", version: NOMAD_VERSION }, { instructions: SERVER_INSTRUCTIONS });
   const exportsDir = join(nomad.store.home, "exports");
 
@@ -210,6 +214,10 @@ export function createMcpServer(options: McpOptions = {}) {
         const plan = nomad.getPlan(planId);
         if (!plan) throw new NomadError("Unknown or expired preview.", "plan-missing");
         const sensitive = plan.approvalsRequired;
+        // Planted orders are never approved by an assistant, whatever the server allows: only the person can.
+        if (sensitive.includes("planted-orders")) {
+          throw new NomadError("Venin's check-up found planted orders in what this move would write. An assistant cannot approve that.", "forbidden", "Ask the user to read the preview and apply it with the Nomad CLI or web app if they wrote those instructions themselves.");
+        }
         if (sensitive.length && !options.allowReplace) {
           throw new NomadError(`This migration needs approvals an assistant cannot give here: ${sensitive.join(", ")}.`, "forbidden", "Ask the user to apply it with the Nomad CLI or web app.");
         }

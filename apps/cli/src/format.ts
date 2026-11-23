@@ -76,6 +76,11 @@ export function planText(p: MigrationPlan, verbose: boolean): string[] {
   if (p.permissions.unenforced.length) lines.push("", yellow("Restrictions the destination will not enforce"), ...p.permissions.unenforced.map((w) => `  ${w}`));
   if (p.disabledRoutines.length) lines.push("", bold("Routines imported disabled"), ...p.disabledRoutines.map((w) => `  ${w}`));
   if (p.secrets.findings || p.secrets.strippedEnv.length) lines.push("", yellow("Secrets"), `  ${p.secrets.findings} detected, ${p.secrets.redacted} redacted, ${p.secrets.strippedEnv.length} credential(s) replaced by references`);
+  if (p.venin?.ran && p.venin.findings.length) {
+    lines.push("", (p.venin.plantedOrders ? red : yellow)(`Venin check-up: ${p.venin.findings.length} finding(s) in the files this move writes`));
+    lines.push(...p.venin.findings.slice(0, verbose ? 100 : 8).map((f) => `  ${["order", "comment"].includes(f.check) ? red("planted order") : yellow(f.check)}  ${f.file}${f.line ? `:${f.line}` : ""}  ${f.says}`));
+    if (!verbose && p.venin.findings.length > 8) lines.push(dim(`  and ${p.venin.findings.length - 8} more (use --details)`));
+  }
   if (p.manualSteps.length) lines.push("", bold("After migration"), ...p.manualSteps.map((s, i) => `  ${i + 1}. ${s}`));
   const notes = p.notes.filter((n) => verbose || n.level !== "info");
   if (notes.length) lines.push("", bold("Notes"), ...notes.map((n) => `  ${n.level === "error" ? red("x") : n.level === "warning" ? yellow("!") : "-"} ${n.message}`));
@@ -94,6 +99,7 @@ export function receiptText(r: MigrationReceipt): string[] {
   if (r.error) lines.push(red(r.error));
   lines.push("", bold("Verification"), ...r.verification.map((v) => `  ${v.ok ? green("ok") : red("fail")}  ${v.name}${v.detail ? dim(" " + v.detail) : ""}`));
   if (r.files.length) lines.push("", `${r.files.filter((f) => f.action === "create" || f.action === "update").length} file(s) written`);
+  if (r.venin) lines.push(`Venin check-up: ${r.venin.read} file(s) read, ${r.venin.findings} finding(s)${r.venin.plantedOrders ? `, ${r.venin.plantedOrders} planted order(s) written with your approval` : ""}`);
   if (r.backupId) lines.push(`Backup ${r.backupId}. Undo with: ${CMD} restore ${r.backupId}`);
   if (r.manualSteps.length) lines.push("", bold("Next steps"), ...r.manualSteps.map((s, i) => `  ${i + 1}. ${s}`));
   if (r.disabledRoutines.length) lines.push("", `Routines imported disabled: ${r.disabledRoutines.join(", ")}`);
@@ -178,6 +184,7 @@ export function approvalQuestion(p: MigrationPlan): string | null {
   if (p.approvalsRequired.includes("replace")) parts.push(`it replaces content Nomad did not create`);
   if (p.approvalsRequired.includes("overwrite-modified")) parts.push(`it overwrites files you edited after Nomad wrote them`);
   if (p.approvalsRequired.includes("broader-permissions")) parts.push(`the destination would allow more than it does now (${p.permissions.widened.join("; ")})`);
+  if (p.approvalsRequired.includes("planted-orders")) parts.push(`Venin's check-up found ${p.venin.plantedOrders} planted order${p.venin.plantedOrders === 1 ? "" : "s"} in the files it would write. Approve only if you wrote them yourself`);
   if (p.approvalsRequired.includes("run-commands")) parts.push(`${p.destination.displayName} will start ${p.commands.length === 1 ? "this command" : "these commands"} by itself: ${p.commands.map((c) => `"${c.tool}" (from ${c.from === "package" ? "the package" : c.from === "folder" ? "the agent folder" : "the Nomad library"}): ${c.command}`).join("; ")}. Approve only if you trust where it came from`);
   return parts.length ? `Heads up: ${parts.join(", and ")}.` : null;
 }

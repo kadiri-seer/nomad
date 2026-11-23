@@ -50,7 +50,7 @@ export function MigrationWizard() {
   const [targetName, setTargetName] = useState("");
   const [components, setComponents] = useState<Set<ComponentCategory>>(new Set(COMPONENT_CATEGORIES));
   const [plan, setPlan] = useState<any>(null);
-  const [approvals, setApprovals] = useState({ replace: false, overwriteModified: false, broaderPermissions: false, runCommands: false });
+  const [approvals, setApprovals] = useState({ replace: false, overwriteModified: false, broaderPermissions: false, runCommands: false, plantedOrders: false });
   const [confirmed, setConfirmed] = useState(false);
   const [receipt, setReceipt] = useState<any>(null);
   const [busy, setBusy] = useState(false);
@@ -87,7 +87,7 @@ export function MigrationWizard() {
     setPlan(null);
     setReceipt(null);
     setConfirmed(false);
-    setApprovals({ replace: false, overwriteModified: false, broaderPermissions: false, runCommands: false });
+    setApprovals({ replace: false, overwriteModified: false, broaderPermissions: false, runCommands: false, plantedOrders: false });
     setFurthest((f) => Math.min(f, 3));
   };
 
@@ -130,7 +130,7 @@ export function MigrationWizard() {
       });
       if (overrideMode) setMode(overrideMode);
       setPlan(p);
-      setApprovals({ replace: false, overwriteModified: false, broaderPermissions: false, runCommands: false });
+      setApprovals({ replace: false, overwriteModified: false, broaderPermissions: false, runCommands: false, plantedOrders: false });
       setConfirmed(false);
       go(overrideMode ? 6 : 4);
     } catch (e: any) {
@@ -156,7 +156,7 @@ export function MigrationWizard() {
   };
 
   const missingApprovals = plan
-    ? plan.approvalsRequired.filter((a: string) => (a === "replace" && !approvals.replace) || (a === "overwrite-modified" && !approvals.overwriteModified) || (a === "broader-permissions" && !approvals.broaderPermissions) || (a === "run-commands" && !approvals.runCommands))
+    ? plan.approvalsRequired.filter((a: string) => (a === "replace" && !approvals.replace) || (a === "overwrite-modified" && !approvals.overwriteModified) || (a === "broader-permissions" && !approvals.broaderPermissions) || (a === "run-commands" && !approvals.runCommands) || (a === "planted-orders" && !approvals.plantedOrders))
     : [];
 
   const canNext: Record<number, boolean> = {
@@ -613,6 +613,26 @@ export function MigrationWizard() {
                 <label className="check">
                   <input type="checkbox" checked={approvals.broaderPermissions} onChange={(e) => setApprovals({ ...approvals, broaderPermissions: e.target.checked })} />
                   <span>Apply the broader permissions listed above.</span>
+                </label>
+              )}
+              {plan.approvalsRequired.includes("planted-orders") && (
+                <label className="check">
+                  <input type="checkbox" checked={approvals.plantedOrders} onChange={(e) => setApprovals({ ...approvals, plantedOrders: e.target.checked })} />
+                  <span>
+                    Venin&apos;s check-up found planted orders in what this move writes. I wrote these instructions myself.
+                    {(plan.venin?.findings ?? [])
+                      .filter((f: { check: string }) => f.check === "order" || f.check === "comment")
+                      .slice(0, 6)
+                      .map((f: { file: string; line: number; says: string }, i: number) => (
+                        <span key={`${f.file}-${f.line}-${i}`} style={{ display: "block" }}>
+                          <code>
+                            {f.file}
+                            {f.line ? `:${f.line}` : ""}
+                          </code>{" "}
+                          {f.says}
+                        </span>
+                      ))}
+                  </span>
                 </label>
               )}
               {plan.approvalsRequired.includes("run-commands") && (

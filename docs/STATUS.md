@@ -310,3 +310,7 @@ Tested (automated, every push):
 Checked with real applications: `scripts/check-oddsengine.mjs` (Real apps workflow) checks that OddsEngine's server answers and refuses a tool call with no key, then moves a setup with a fake key in its address to the real Codex and OpenClaw, with the key nowhere in what Nomad wrote.
 
 Not verified: OddsEngine's tools with a real key through a moved setup (Nomad AI calls `scan_token` with a real key outside Nomad).
+
+## Venin's check-up (added, waiting for Venin's package)
+
+Written Nov 23, 2026, after the Venin x Nomad test (a planted strain survived a move; Venin's scan caught it before and after). Every move preview can now run Venin's scanner on the files it would write: planted orders need the person's `planted-orders` approval, which an assistant over MCP can never give; other findings are shown. Off until Venin publishes its scanner on npm: `VENIN_PACKAGE` in `packages/security/src/venin.ts` names it then (or `NOMAD_VENIN_PACKAGE` to try one). Tests: `tests/migration/venin.test.ts` and `tests/home/mcp.test.ts`; the real-scanner test ran here against a native build of Venin's `scan_json` and passed.

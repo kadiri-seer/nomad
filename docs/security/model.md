@@ -28,6 +28,18 @@ A package can carry local MCP servers: commands the destination app starts by it
 
 MCP servers named `__proto__`, `constructor` or `prototype` are neither read nor written: those names would change how a settings object behaves instead of naming a server.
 
+## Venin's check-up on every move
+
+When Venin's scanner is installed (its npm package, from [Venin](https://venin.io)), every move preview runs it on exactly the files the move would write: the text Nomad is about to put in the destination app, after conversion. Venin reports planted orders (instructions someone hid or planted in tool, skill, rule or note text) and risky setup (wide permissions, tools that act with no one asking, pay tools without limits). Nomad shows every finding in the preview and does not change Venin's verdicts.
+
+- Planted orders need the `planted-orders` approval (`--approve-planted-orders` in the CLI, a checkbox in the dashboard). Approve only if you wrote those instructions yourself.
+- An assistant can never give that approval: the MCP server refuses to apply such a move, whatever it was started with.
+- Other findings are shown as warnings and need no extra approval.
+- Without Venin's scanner, moves work as before and the preview says nothing about it. If the scanner fails, the preview says the move was not checked.
+- Venin reads only the text it is given. Nomad passes it the files the move writes (text files under 512 KB), never key files or wallet folders.
+
+Tested with a stand-in scanner in every CI run, and with a build of Venin's own scan (`VENIN_JSON_BIN`), which found the planted order in what a move would write.
+
 ## Steps you copy
 
 Names in the preview's steps (servers, plugins, marketplaces, variables) come from the agent being moved, which may be a package from someone else. A step prints a command only when every name in it is plain (letters, digits, `-`, `_`, and for plugin and marketplace names `.`, `@`, `/`, `:`, `+`); otherwise it says where to set the value by hand and prints no command. BrainChain's approval and wallet steps print only its own package spec (`brainchain-mcp`, a version or a tag).
