@@ -6,6 +6,7 @@ import { decodeFunctionData, encodeAbiParameters, encodeEventTopics, parseAbi, t
 import { agentsFromLogs, parseBalances, parseBounties, parseBuybacks, parseCosts, parseTransfers, sumBySymbol, ECONOMY_WALLETS, BURN_ADDRESS } from "../../apps/web/lib/economy";
 import { AGENTS_ABI } from "../../apps/web/lib/agents-contract";
 import { AGENTS_BYTECODE } from "../../apps/web/lib/agents-bytecode";
+import { PAYMASTER_ABI, PAYMASTER_BYTECODE } from "../../apps/web/lib/paymaster-contract";
 // @ts-expect-error plain JavaScript module
 import { agentsTx, batch, bountyTx, burnTx, nomadAmount, recordBuyback, SAFE } from "../../scripts/economy/lib.mjs";
 
@@ -143,6 +144,9 @@ describe("minted agents from the contract's events", () => {
     const art = JSON.parse(readFileSync(join(ROOT, "contracts/artifacts/NomadAgents.json"), "utf8"));
     expect(AGENTS_ABI).toEqual(art.abi);
     expect(AGENTS_BYTECODE).toBe(art.bytecode);
+    const pm = JSON.parse(readFileSync(join(ROOT, "contracts/artifacts/NomadPaymaster.json"), "utf8"));
+    expect(PAYMASTER_ABI).toEqual(pm.abi);
+    expect(PAYMASTER_BYTECODE).toBe(pm.bytecode);
   });
 });
 

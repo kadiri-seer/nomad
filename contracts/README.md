@@ -78,6 +78,16 @@ margin, so the treasury is repaid. Users never need ETH.
 | Treasury | Nomad's Safe |
 | maxCostPerOp | 0.0005 ETH suggested (about 100 times a typical trade's gas today) |
 
+### Deploy and switch on accounts
+
+1. Open `https://www.thenomad.website/agents/deploy`, section "Deploy the paymaster". Press "Make a signer key" and
+   copy the key straight into Vercel as `NOMAD_PAYMASTER_SIGNER_KEY` (sensitive). It is made in the browser and shown
+   once.
+2. Deploy the paymaster, then fund its deposit (0.005 ETH to start).
+3. In Vercel, set `NEXT_PUBLIC_NOMAD_PAYMASTER` (the paymaster's address), `ALCHEMY_RPC_URL` (the Robinhood Chain
+   endpoint from Alchemy, sensitive) and `NEXT_PUBLIC_PRIVY_APP_ID`, then redeploy. `/account` opens once the Privy
+   app id and the paymaster are both set; creating agents also needs `NEXT_PUBLIC_AGENTS_CONTRACT` and minting open.
+
 Tested against the real v0.7 EntryPoint and the reference SimpleAccount (`test/paymaster.test.mjs`): a new account
 with no ETH sends a token transfer with its gas paid from the deposit (exactly the operation's cost); a wrong
 signer, a signature for another operation, an expired signature and an operation over the ceiling are all refused;

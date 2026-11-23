@@ -60,7 +60,7 @@ export async function readContract<T>(eth: Eip1193, address: string, abi: Abi, f
 }
 
 /** Sends a transaction from the wallet (it shows it and asks first) and returns its hash. */
-export async function send(eth: Eip1193, from: string, tx: { to?: string; data: `0x${string}` }): Promise<`0x${string}`> {
+export async function send(eth: Eip1193, from: string, tx: { to?: string; data: `0x${string}`; value?: `0x${string}` }): Promise<`0x${string}`> {
   await ensureChain(eth);
   return (await eth.request({ method: "eth_sendTransaction", params: [{ from, ...tx }] })) as `0x${string}`;
 }
