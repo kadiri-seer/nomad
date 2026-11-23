@@ -80,6 +80,12 @@ export async function waitFor(eth: Eip1193, hash: string): Promise<Receipt> {
   throw new Error("The transaction has not been confirmed yet. Check it on the explorer before trying again.");
 }
 
+/** Asks the wallet to sign a plain-text message (free; nothing is sent on chain). */
+export async function signMessage(eth: Eip1193, address: string, message: string): Promise<string> {
+  const hex = `0x${[...new TextEncoder().encode(message)].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
+  return (await eth.request({ method: "personal_sign", params: [hex, address] })) as string;
+}
+
 /** The SHA-256 of a file, as a 0x-prefixed 32-byte hex value. */
 export async function sha256File(file: Blob): Promise<`0x${string}`> {
   const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());

@@ -1858,6 +1858,31 @@ details.diff summary {
   gap: 6px;
   font-weight: 500;
 }
+.mint-choice {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+.mint-choice legend {
+  font-weight: 500;
+  padding: 0 6px;
+}
+.mint-form .mint-radio {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  font-weight: 500;
+}
+.mint-radio .muted {
+  display: block;
+  font-weight: 400;
+  font-size: 0.88rem;
+  margin-top: 2px;
+}
 .mint-form input[type="text"],
 .mint-form input[type="url"],
 .mint-form input[type="number"] {

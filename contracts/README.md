@@ -51,5 +51,7 @@ npm test        # compiles with solc 0.8.28 and runs the tests on a local test c
    v0.8.28, and upload `artifacts/NomadAgents.standard-input.json`. The page shows the constructor arguments to
    paste.
 3. Set `NEXT_PUBLIC_AGENTS_CONTRACT` to the contract's address in the site's Vercel settings and redeploy the site.
-4. When you are ready, open minting from the Safe: `node scripts/economy/safe-batch.mjs open-minting` writes a
+4. For encrypted paid copies, set `FILEBASE_IPFS_TOKEN` in Vercel to a Filebase IPFS RPC API key (the same kind
+   of key Upoch uses) and redeploy. Without it, creators can still mint with a public link.
+5. When you are ready, open minting from the Safe: `node scripts/economy/safe-batch.mjs open-minting` writes a
    batch for the Safe's Transaction Builder (two approvals).

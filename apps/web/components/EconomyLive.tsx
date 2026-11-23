@@ -280,6 +280,34 @@ export function EconomyLive() {
         )}
       </section>
 
+      <section className="panel" aria-labelledby="eco-partners">
+        <Head id="eco-partners" title="Services Nomad AI uses" note="Calls that ran, counted after each run" />
+        {!c || c.partners.allTime.length === 0 ? (
+          <div className="panel-body muted">Nomad AI publishes how often it uses each service after its next run.</div>
+        ) : (
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Service</th>
+                  <th>This month</th>
+                  <th>Since counting began</th>
+                </tr>
+              </thead>
+              <tbody>
+                {c.partners.allTime.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.name}</td>
+                    <td>{c.partners.thisMonth.find((x) => x.id === p.id)?.calls ?? 0}</td>
+                    <td>{p.calls}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       <section className="panel" aria-labelledby="eco-bounties">
         <Head id="eco-bounties" title="Builder bounties" note="Paid in $NOMAD from the treasury" />
         <div className="panel-body stack" style={{ gap: 14 }}>

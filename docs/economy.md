@@ -18,7 +18,13 @@ How money moves around Nomad, and where each part can be checked. The live numbe
    two approvals. Bounties are GitHub issues labelled `bounty`; each payout is linked on its issue.
 5. **Minted agents.** Creators mint agents with the NomadAgents contract (`contracts/`) for a fee in $NOMAD and set a
    price for copies. Part of each fee is burned. See [contracts/README.md](../contracts/README.md).
-6. **Buybacks and burns.** When finances permit, the treasury may buy $NOMAD and burn it. None are promised.
+6. **Paid copies.** A creator can deliver an agent encrypted: the browser encrypts the `.nomad` file before upload,
+   the encrypted file goes to IPFS (through Filebase), and its key is kept in the site's database. The key is given
+   only to a wallet that signs in and, checked on the contract at that moment, owns the agent, created it or has a
+   copy (anyone, for a free agent). The buyer's browser decrypts the file and checks it against the SHA-256 recorded
+   on-chain. Anyone who has downloaded a package can still share it; this makes paying the way to get it, not a lock.
+   The site needs `FILEBASE_IPFS_TOKEN` (a Filebase IPFS RPC API key) set in Vercel for uploads.
+7. **Buybacks and burns.** When finances permit, the treasury may buy $NOMAD and burn it. None are promised.
 
 ## Treasury actions
 

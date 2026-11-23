@@ -147,12 +147,42 @@ export type CostPeriod = {
   trades: number;
   tradedUsd: string;
 };
+/** Services Nomad AI uses, by the id its feed counts them under, with the name the page shows. */
+export const PARTNERS: Record<string, string> = {
+  rushr: "Rushr",
+  oak: "Oak",
+  stoa: "Stoa",
+  oddsengine: "OddsEngine",
+  upoch: "Upoch",
+  memoria: "Memoria",
+  hey: "HEY Research",
+  zolva: "Zolva",
+  qhooks: "QHooks",
+  priors: "Priors",
+  hedgehood: "Hedgehood",
+  brainchain: "BrainChain",
+  tokyo: "Tokyo Futuro",
+  ostra: "Ostra"
+};
+
+export type PartnerCount = { id: string; name: string; calls: number };
+
+/** Calls per service from the feed: known services only, whole counts, most used first. */
+export function parsePartners(v: unknown): PartnerCount[] {
+  const o = obj(v);
+  return Object.entries(PARTNERS)
+    .map(([id, name]) => ({ id, name, calls: count(o[id]) }))
+    .filter((p) => p.calls > 0)
+    .sort((a, b) => b.calls - a.calls || a.name.localeCompare(b.name));
+}
+
 export type Costs = {
   updated: string;
   month: string;
   thisMonth: CostPeriod;
   allTime: CostPeriod;
   budget: { monthlyUsd: string; usedPct: number } | null;
+  partners: { thisMonth: PartnerCount[]; allTime: PartnerCount[] };
   payments: { time: string; name: string; amount: string; token: string; txHash: string | null }[];
 };
 
@@ -188,6 +218,7 @@ export function parseCosts(json: unknown): Costs | null {
     thisMonth: period(j.thisMonth),
     allTime: period(j.allTime),
     budget: j.budget ? { monthlyUsd: money(b.monthlyUsd), usedPct: Math.min(999, count(b.usedPct)) } : null,
+    partners: { thisMonth: parsePartners(obj(j.partners).thisMonth), allTime: parsePartners(obj(j.partners).allTime) },
     payments: (Array.isArray(j.payments) ? j.payments : []).slice(0, 10).map((p) => {
       const x = obj(p);
       return { time: str(x.time), name: plain(x.name), amount: /^\d{1,30}(\.\d{1,18})?$/.test(str(x.amount)) ? str(x.amount) : "?", token: plain(x.token, 16), txHash: /^0x[0-9a-fA-F]{64}$/.test(str(x.txHash)) ? str(x.txHash) : null };
@@ -242,6 +273,15 @@ export function parseBounties(json: unknown): Bounty[] {
 // ---------------------------------------------------------------- minted agents (the contract's events)
 
 export type MintedAgent = { id: number; name: string; creator: string; packageHash: string; uri: string; price: number; copies: number; mintedAt: string; hash: string };
+
+/** A package link the site will show: an https address, or ipfs://<cid> for an encrypted package. Anything else is dropped. */
+export function safeUri(v: unknown): string {
+  const s = str(v);
+  if (/^https:\/\/[^\s"<>]{1,250}$/.test(s)) return s;
+  if (/^ipfs:\/\/(Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{20,100})$/.test(s)) return s;
+  return "";
+}
+export const isEncryptedUri = (uri: string) => uri.startsWith("ipfs://");
 export type AgentsSummary = { agents: MintedAgent[]; burned: number; toTreasury: number; toCreators: number };
 
 /** Minted, PriceSet, UriSet and Copied events from the explorer's logs for the contract, newest agent first. */
@@ -270,11 +310,11 @@ export function agentsFromLogs(json: unknown): AgentsSummary {
       const b = units(String(a.burned), NOMAD_DECIMALS);
       burned += b;
       toTreasury += fee - b;
-      agents.set(id, { id, name: plain(a.name, 64) || `Agent ${id}`, creator: str(a.creator), packageHash: str(a.packageHash), uri: /^https:\/\/[^\s"<>]{1,250}$/.test(str(a.uri)) ? str(a.uri) : "", price: units(String(a.price), NOMAD_DECIMALS), copies: 0, mintedAt: str(x.timestamp), hash: str(x.transaction_hash) });
+      agents.set(id, { id, name: plain(a.name, 64) || `Agent ${id}`, creator: str(a.creator), packageHash: str(a.packageHash), uri: safeUri(a.uri), price: units(String(a.price), NOMAD_DECIMALS), copies: 0, mintedAt: str(x.timestamp), hash: str(x.transaction_hash) });
     } else if (ev.eventName === "PriceSet" && agents.has(id)) {
       agents.get(id)!.price = units(String(a.price), NOMAD_DECIMALS);
     } else if (ev.eventName === "UriSet" && agents.has(id)) {
-      agents.get(id)!.uri = /^https:\/\/[^\s"<>]{1,250}$/.test(str(a.uri)) ? str(a.uri) : "";
+      agents.get(id)!.uri = safeUri(a.uri);
     } else if (ev.eventName === "Copied" && agents.has(id)) {
       agents.get(id)!.copies += 1;
       burned += units(String(a.burned), NOMAD_DECIMALS);
