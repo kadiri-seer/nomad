@@ -1,4 +1,5 @@
 import { AgentAbout } from "@/components/AgentAbout";
+import { AgentCosts } from "@/components/AgentCosts";
 import { AgentLive } from "@/components/AgentLive";
 import { SiteFooter } from "@/components/SiteFooter";
 
@@ -19,6 +20,10 @@ export default function NomadAIPage() {
         </p>
 
         <AgentLive />
+
+        <div style={{ marginTop: 20 }}>
+          <AgentCosts />
+        </div>
 
         <AgentAbout />
 

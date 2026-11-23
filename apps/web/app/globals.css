@@ -1785,6 +1785,84 @@ details.diff summary {
   margin: 32px 0 0;
   font-size: 0.9rem;
 }
+
+/* ------------------------------ economy and agents ------------------------------ */
+
+.eco-flow {
+  margin: 0 0 28px;
+}
+.eco-wallet {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  min-width: 0;
+}
+.eco-wallet-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.eco-wallet-role {
+  margin: 6px 0 12px;
+  font-size: 0.88rem;
+}
+.eco-budget-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.eco-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.eco-bar span {
+  display: block;
+  height: 100%;
+  background: var(--blue);
+}
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.agent-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  min-width: 0;
+}
+.agent-card h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+.agent-hash {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.mint-form {
+  display: grid;
+  gap: 14px;
+  max-width: 640px;
+}
+.mint-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 500;
+}
+.mint-form input[type="text"],
+.mint-form input[type="url"],
+.mint-form input[type="number"] {
+  width: 100%;
+}
 @media (max-width: 960px) {
   .ai-steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));

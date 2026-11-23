@@ -38,6 +38,12 @@ export function SiteFooter() {
               <li>
                 <Link href="/vote">Holder vote</Link>
               </li>
+              <li>
+                <Link href="/agents">Minted agents</Link>
+              </li>
+              <li>
+                <Link href="/economy">Economy</Link>
+              </li>
             </ul>
           </div>
           <div>

@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/docs", label: "Docs" },
   { href: "/vote", label: "Vote" },
   { href: "/ai", label: "Nomad AI" },
+  { href: "/economy", label: "Economy" },
   { href: "/inspect", label: "Inspector" }
 ];
 

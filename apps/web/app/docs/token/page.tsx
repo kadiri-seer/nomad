@@ -113,9 +113,17 @@ export default function Token() {
         Bounties are paid from a Safe multisig on {TOKEN_CHAIN}. Sending from it needs two approvals, so no single key can move the funds. Each bounty is funded when it is posted: its amount is moved into the reward wallet and the deposit is linked on the bounty issue. The amount of every bounty is stated when it is posted.
       </p>
 
+      <h2>Fees, buybacks and burns</h2>
+      <p>
+        {TOKEN_TICKER} also pays for <Link href="/agents">minting an agent</Link> and for copies of minted agents. Part of each mint fee, and part of Nomad&apos;s share of each copy, is burned: sent to the dead address, where no one can move it again. The rest goes to the treasury, and a copy&apos;s price minus Nomad&apos;s share goes to the agent&apos;s owner.
+      </p>
+      <p>
+        When finances permit, the treasury may buy {TOKEN_TICKER} and burn it. Each buyback and burn is sent from the Safe and shown with its transaction on the <Link href="/economy">economy page</Link>, together with the treasury, revenue and Nomad AI&apos;s running costs.
+      </p>
+
       <h2>What the token does not include</h2>
       <p>
-        The token comes with no buybacks, no staking and no share of revenue, and none are promised. Holding it gives a vote on Nomad&apos;s roadmap and nothing else.
+        Buybacks, burns and fees can change or stop at any time, and none are promised, on any schedule or in any amount. The token comes with no staking and no share of revenue, and holding it is not a share in Nomad or its income. Holding it gives a vote on Nomad&apos;s roadmap.
       </p>
 
       <h2>Building an integration for a bounty</h2>
