@@ -1995,7 +1995,8 @@ details.diff summary {
 
 /* ------------------------------ Nomad accounts ------------------------------ */
 /* Built to be read on a phone: 17px text, high contrast, white cards on the page colour, 54px buttons. */
-.acct-wrap { --acct-card: #ffffff; --acct-ink: var(--ink); --acct-text: var(--ink-2); --acct-soft: #4d5058; max-width: 480px; margin: 0 auto; padding: 12px 18px 56px; display: flex; flex-direction: column; gap: 16px; font-size: 17px; line-height: 1.5; color: var(--acct-text); font-variant-numeric: tabular-nums; }
+.acct-wrap { --acct-card: #ffffff; --acct-ink: var(--ink); --acct-text: var(--ink-2); --acct-soft: #4d5058; max-width: 480px; margin: 0 auto; padding: 12px 18px 56px; display: flex; flex-direction: column; gap: 16px; font-size: 17px; line-height: 1.5; color: var(--acct-text); }
+.acct-big, .acct-amount, .acct-between strong, .acct-rows dd, .acct-sub-dark { font-variant-numeric: tabular-nums; }
 html[data-theme="dark"] .acct-wrap { --acct-card: #1f1e1b; --acct-soft: #b9b7b0; }
 @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) .acct-wrap { --acct-card: #1f1e1b; --acct-soft: #b9b7b0; } }
 .acct-top { display: flex; align-items: center; justify-content: flex-end; min-height: 44px; }
