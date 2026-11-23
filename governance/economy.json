@@ -1,0 +1,4 @@
+{
+  "about": "Nomad's record of buybacks. Each entry links its own transaction on Robinhood Chain, and the economy page shows only entries that do. Burns are read straight from the chain. Add entries with: node scripts/economy/safe-batch.mjs record-buyback.",
+  "buybacks": []
+}

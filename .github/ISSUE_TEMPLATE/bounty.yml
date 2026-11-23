@@ -14,7 +14,7 @@ body:
     id: vote
     attributes:
       label: Vote result
-      description: Link to the Snapshot vote this integration won.
+      description: Link to the holder vote round this integration won.
     validations:
       required: true
   - type: input

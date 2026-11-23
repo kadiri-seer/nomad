@@ -60,9 +60,15 @@ Every bounty payment is sent from the reward wallet and linked on its [bounty is
 
 Bounties are paid from a Safe multisig on Robinhood Chain. Sending from it needs two approvals, so no single key can move the funds. Each bounty is funded when it is posted: its amount is moved into the reward wallet and the deposit is linked on the bounty issue. The amount of every bounty is stated when it is posted.
 
+## Fees, buybacks and burns
+
+$NOMAD also pays for [minting an agent](https://www.thenomad.website/agents) and for copies of minted agents (see [the economy](economy.md)). Part of each mint fee, and part of Nomad's share of each copy, is burned: sent to the dead address, `0x000000000000000000000000000000000000dEaD`, where no one can move it again. The rest goes to the treasury, and a copy's price minus Nomad's share goes to the agent's owner.
+
+When finances permit, the treasury may buy $NOMAD and burn it. Each buyback and burn is sent from the Safe and shown with its transaction on the [economy page](https://www.thenomad.website/economy), together with the treasury, revenue and Nomad AI's running costs.
+
 ## What the token does not include
 
-The token comes with no buybacks, no staking and no share of revenue, and none are promised. Holding it gives a vote on Nomad's roadmap and nothing else.
+Buybacks, burns and fees can change or stop at any time, and none are promised, on any schedule or in any amount. The token comes with no staking and no share of revenue, and holding it is not a share in Nomad or its income. Holding it gives a vote on Nomad's roadmap.
 
 ## Building an integration for a bounty
 
