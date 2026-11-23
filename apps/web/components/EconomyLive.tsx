@@ -184,11 +184,11 @@ export function EconomyLive() {
               <div className="eco-budget">
                 <div className="eco-budget-label">
                   <span>
-                    This month: <strong>${c.thisMonth.totalUsd}</strong> of its ${c.budget.monthlyUsd} budget
+                    AI this month: <strong>${c.thisMonth.aiUsd}</strong> of its ${c.budget.monthlyUsd} AI budget
                   </span>
                   <span className="muted">{c.budget.usedPct}%</span>
                 </div>
-                <div className="eco-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, c.budget.usedPct)} aria-label="Budget used this month">
+                <div className="eco-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, c.budget.usedPct)} aria-label="AI budget used this month">
                   <span style={{ width: `${Math.min(100, c.budget.usedPct)}%` }} />
                 </div>
               </div>

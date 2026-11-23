@@ -9,7 +9,7 @@ export const metadata = {
 
 const FLOW = [
   { n: "01", title: "Revenue comes in", text: "Referral shares from integrations, and fees from minted agents, go to Nomad's wallets." },
-  { n: "02", title: "Nomad AI runs on a budget", text: "Its AI, safety checks and network fees are counted after every run, against a monthly budget." },
+  { n: "02", title: "Nomad AI runs on a budget", text: "Its AI, safety checks and network fees are counted after every run; its AI runs on a fixed monthly budget." },
   { n: "03", title: "Bounties pay builders", text: "Integrations that win a holder vote get a bounty in $NOMAD from the treasury." },
   { n: "04", title: "Agents are minted", text: "Creators mint agents for a fee in $NOMAD and set a price for copies; part of each fee is burned." },
   { n: "05", title: "Buybacks and burns", text: "When finances permit, the treasury buys $NOMAD and burns it. None are promised." }

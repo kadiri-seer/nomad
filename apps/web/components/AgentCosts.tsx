@@ -32,10 +32,15 @@ export function AgentCosts() {
       <div className="panel-body">
         <dl className="kv">
           <dt>This month</dt>
-          <dd>
-            ${m.totalUsd}
-            {costs.budget && <span className="muted"> of its ${costs.budget.monthlyUsd} budget</span>}
-          </dd>
+          <dd>${m.totalUsd}</dd>
+          {costs.budget && (
+            <>
+              <dt>AI budget</dt>
+              <dd>
+                ${m.aiUsd} of ${costs.budget.monthlyUsd} used this month
+              </dd>
+            </>
+          )}
           <dt>Made of</dt>
           <dd>
             AI ${m.aiUsd}, OddsEngine checks ${m.oddsEngineUsd}, network fees {m.networkFeesUsd != null ? `$${m.networkFeesUsd}` : `${m.networkFeesEth} ETH`}
