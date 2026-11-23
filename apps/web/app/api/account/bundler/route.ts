@@ -36,7 +36,8 @@ export async function POST(req: Request) {
   try {
     const r = await bundlerCall(method, params);
     return json({ jsonrpc: "2.0", id, ...(r.error ? { error: r.error } : { result: r.result }) });
-  } catch {
-    return json({ jsonrpc: "2.0", id, error: { code: -32603, message: "The bundler did not answer. Try again." } });
+  } catch (e) {
+    console.error("bundler", (e as Error).message);
+    return json({ jsonrpc: "2.0", id, error: { code: -32603, message: "The bundler did not answer. Try again.", data: (e as Error).message.slice(0, 160) } });
   }
 }

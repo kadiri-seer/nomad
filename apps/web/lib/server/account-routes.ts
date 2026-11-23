@@ -49,7 +49,13 @@ export async function bundlerCall(method: string, params: unknown[]): Promise<{ 
   const url = process.env.ALCHEMY_RPC_URL?.trim();
   if (!url) throw new Error("ALCHEMY_RPC_URL is not set");
   const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), signal: AbortSignal.timeout(20_000), cache: "no-store" });
-  return (await r.json()) as { result?: unknown; error?: { code: number; message: string } };
+  const text = await r.text();
+  try {
+    return JSON.parse(text) as { result?: unknown; error?: { code: number; message: string } };
+  } catch {
+    // Never echo the URL (it holds the API key); the status and the start of the answer are enough to see what failed.
+    throw new Error(`HTTP ${r.status}: ${text.slice(0, 120).replace(url, "[endpoint]")}`);
+  }
 }
 
 export function creditsDeps(redis: RedisLike): CreditsDeps {
