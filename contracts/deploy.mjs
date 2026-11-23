@@ -144,7 +144,7 @@ async function main() {
       let value = given;
       if (name === "ALCHEMY_RPC_URL") {
         value = await ask("Paste the Robinhood Chain endpoint from dashboard.alchemy.com (hidden): ", true);
-        if (!/^https:\/\/robinhood-mainnet\.g\.alchemy\.com\/v2\/\S+$/.test(value)) throw new Error("That is not an Alchemy Robinhood Chain endpoint. Run this script again.");
+        if (!/^https:\/\/robinhood-mainnet\.g\.alchemy\.com\/v2\/[A-Za-z0-9_-]{16,}$/.test(value)) throw new Error("That is not an Alchemy Robinhood Chain endpoint. Run this script again.");
       }
       if (!value) throw new Error(`No value for ${name}.`);
       vercel(["env", "rm", name, "production", "--yes"], "");

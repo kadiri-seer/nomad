@@ -38,6 +38,6 @@ export async function POST(req: Request) {
     return json({ jsonrpc: "2.0", id, ...(r.error ? { error: r.error } : { result: r.result }) });
   } catch (e) {
     console.error("bundler", (e as Error).message);
-    return json({ jsonrpc: "2.0", id, error: { code: -32603, message: "The bundler did not answer. Try again.", data: (e as Error).message.slice(0, 160) } });
+    return json({ jsonrpc: "2.0", id, error: { code: -32603, message: "The bundler did not answer. Try again.", data: (e as Error).message.match(/^HTTP \d+/)?.[0] ?? "no answer" } });
   }
 }
