@@ -35,7 +35,7 @@ The contract has not had an outside audit.
 
 ```bash
 cd contracts
-npm ci
+npm ci --force   # the test chain lists a macOS-only package; --force lets npm skip it
 npm test        # compiles with solc 0.8.28 and runs the tests on a local test chain
 ```
 
