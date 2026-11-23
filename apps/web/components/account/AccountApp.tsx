@@ -8,7 +8,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PrivyProvider, usePrivy, useWallets } from "@privy-io/react-auth";
-import { formatUnits, parseUnits, type Address } from "viem";
+import { formatUnits, parseAbi, parseUnits, type Address } from "viem";
 import { PRIVY_APP_ID, PAYMASTER, NOMAD, USDG } from "@/lib/accounts/chain";
 import { AGENTS_CONTRACT } from "@/lib/economy";
 import { Mark, Wordmark } from "@/components/Logo";
@@ -23,6 +23,7 @@ import {
   mintFee,
   nomadForUsd,
   ownerFromProvider,
+  publicClient,
   robinhood,
   send,
   stoaQuote,
@@ -143,6 +144,14 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
   const [view, setView] = useState<"home" | "create">("home");
   const [sheet, setSheet] = useState<"funds" | "credits" | "buy" | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
+  const [mintingOpen, setMintingOpen] = useState(false);
+  useEffect(() => {
+    if (!AGENTS_CONTRACT) return;
+    publicClient
+      .readContract({ address: AGENTS_CONTRACT as Address, abi: parseAbi(["function mintingOpen() view returns (bool)"]), functionName: "mintingOpen" })
+      .then(setMintingOpen)
+      .catch(() => setMintingOpen(false));
+  }, []);
 
   const refresh = useCallback(async () => {
     setBal(await balances(address));
@@ -190,8 +199,8 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
             <span className="acct-chip">NEXT STEP</span>
             <h2 className="acct-h2">Create your first agent</h2>
             <p className="acct-body">Name it, pick what it does and set its limits. It runs by itself in Nomad&apos;s cloud.</p>
-            <button type="button" className="acct-primary" onClick={() => setView("create")} disabled={!AGENTS_CONTRACT}>
-              {AGENTS_CONTRACT ? "Create agent" : "Creating agents opens soon"}
+            <button type="button" className="acct-primary" onClick={() => setView("create")} disabled={!mintingOpen}>
+              {mintingOpen ? "Create agent" : "Creating agents opens soon"}
             </button>
           </section>
 
