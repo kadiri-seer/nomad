@@ -5,6 +5,7 @@ import { encodeCallsMAv2 } from "@alchemy/smart-accounts";
 import { STOA_ROUTER, USDG } from "../../apps/web/lib/accounts/chain";
 import { agentPackage, ownerActionMessage, validLimits, type AgentRecord } from "../../apps/web/lib/agents/shared";
 import { agentStore } from "../../apps/web/lib/server/agents-store";
+import { gemini } from "../../apps/web/lib/server/gemini";
 import { verifyGithubToken } from "../../apps/web/lib/server/github-oidc";
 import { idlexPayer, runnerSecret, sessionKey, sessionSigner } from "../../apps/web/lib/server/runner-keys";
 import { buildCandidates, cleanSymbol, parseDecision, passesChecks, runAgent, swapCalls, tick, type Candidate, type RunnerDeps } from "../../apps/web/lib/server/runner";
@@ -95,7 +96,7 @@ function agent(over: Partial<AgentRecord> = {}): AgentRecord {
   };
 }
 
-function harness(opts: { usdg?: bigint; credits?: bigint; candidates?: Candidate[]; idlex?: RunnerDeps["idlex"]; now?: number; tokenBalances?: Record<string, bigint>; quotes?: (sell: Address, buy: Address, amount: bigint) => Quote }) {
+function harness(opts: { ai?: RunnerDeps["ai"]; usdg?: bigint; credits?: bigint; candidates?: Candidate[]; idlex?: RunnerDeps["idlex"]; now?: number; tokenBalances?: Record<string, bigint>; quotes?: (sell: Address, buy: Address, amount: bigint) => Quote }) {
   const redis = new MemoryRedis();
   const store = agentStore(redis);
   const sent: { to: Address; data: Hex }[][] = [];
@@ -126,6 +127,7 @@ function harness(opts: { usdg?: bigint; credits?: bigint; candidates?: Candidate
         return `0x${"ab".repeat(32)}` as Hex;
       }
     }),
+    ai: opts.ai ?? null,
     idlex: opts.idlex ?? null
   };
   return { d, store, sent, charges, balances, redis };
@@ -279,13 +281,50 @@ describe("a Trader's run", () => {
   });
 });
 
+describe("asking Gemini", () => {
+  const ai = (answer: string | null): RunnerDeps["ai"] => ({ name: "Gemini", ask: async () => answer });
+  it("a Trader buys in the same run when Gemini sees no red flag, without charging for the answer", async () => {
+    const h = harness({ ai: ai("RED FLAG: no\nLooks ordinary.") });
+    expect((await runAgent(h.d, agent()))[0]).toMatch(/^Bought HOOKR.*second opinion from Gemini saw no red flag/);
+    expect(h.charges).toEqual([]);
+  });
+  it("a Trader skips a token Gemini flags", async () => {
+    const h = harness({ ai: ai("RED FLAG: yes\nAll volume in one hour.") });
+    expect((await runAgent(h.d, agent()))[0]).toBe("Gemini saw a red flag in HOOKR, so it was not bought: All volume in one hour.");
+    expect(h.sent).toHaveLength(0);
+  });
+  it("falls back to Idlex when Gemini does not answer", async () => {
+    const h = harness({ ai: ai(null), idlex: { submit: async () => ({ jobId: "j" }), job: async () => ({ done: false, failed: false, text: null }) } });
+    expect((await runAgent(h.d, agent()))[0]).toMatch(/Asked Idlex/);
+  });
+  it("an agent with its own instructions acts on Gemini's answer in the same run, within the checks", async () => {
+    const h = harness({ ai: ai("ACTION: BUY HOOKR\nREASON: steady") });
+    expect((await runAgent(h.d, agent({ template: "blank", instructions: "x" })))[0]).toMatch(/^Bought HOOKR.*Reason \(Gemini\): steady/);
+    const h2 = harness({ ai: ai("ACTION: BUY RUG\nREASON: moon") });
+    expect((await runAgent(h2.d, agent({ template: "blank", instructions: "x" })))[0]).toMatch(/Gemini chose to buy RUG, which did not pass/);
+  });
+  it("the client tries the next model name when one is not offered, and reads the answer", async () => {
+    const seen: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      seen.push(String(url).split("/models/")[1]);
+      if (seen.length === 1) return new Response("{}", { status: 404 });
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "RED FLAG: no" }] } }] }));
+    }) as unknown as typeof fetch;
+    const g = gemini("k", { fetchImpl });
+    expect(await g.ask("p", "s")).toBe("RED FLAG: no");
+    expect(seen).toEqual(["gemini-3.1-flash-lite:generateContent", "gemini-flash-lite-latest:generateContent"]);
+    const quota = gemini("k", { fetchImpl: (async () => new Response("{}", { status: 429 })) as unknown as typeof fetch });
+    expect(await quota.ask("p", "s")).toBeNull();
+  });
+});
+
 describe("an agent with its own instructions", () => {
   it("asks Idlex, then acts only within the checked tokens and its limits", async () => {
     let answer = "ACTION: BUY HOOKR\nREASON: steady volume";
     const h = harness({ idlex: { submit: async () => ({ jobId: "d1" }), job: async () => ({ done: true, failed: false, text: answer }) } });
     const a = agent({ template: "blank", instructions: "Buy what is steady." });
     expect((await runAgent(h.d, a))[0]).toMatch(/Asked Idlex what to do/);
-    expect((await runAgent(h.d, a))[0]).toMatch(/^Bought HOOKR.*Reason: steady volume/);
+    expect((await runAgent(h.d, a))[0]).toMatch(/^Bought HOOKR.*Reason \(Idlex\): steady volume/);
     answer = "ACTION: BUY SCAMCOIN\nREASON: moon";
     await runAgent(h.d, a);
     expect((await runAgent(h.d, a))[0]).toMatch(/SCAMCOIN, which did not pass/);

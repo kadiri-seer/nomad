@@ -109,9 +109,10 @@ checks the workflow's GitHub OpenID Connect token, so no secret is stored on Git
 - **Rules.** Trades only on Stoa against USDG, only tokens that pass Stoa's safety check (taxes 3% or less, can be
   bought and sold), with at least $20k liquidity and $1,000 traded in 24 hours, at no more than 2% price impact, within
   the agent's per-trade limit and trades a day. It sells at +25%, -20% or after 48 hours.
-- **AI.** A Trader asks Idlex (qwen2.5-7b) for a red-flag check before buying; an agent with its own instructions asks
-  Idlex what to do and the runner acts only within the checks and limits. Each Idlex job is charged $0.005 to the
-  creator's credits; network fees are charged to credits by the paymaster.
+- **AI.** A Trader asks for a red-flag check before buying; an agent with its own instructions asks what to do, and the
+  runner acts only within the checks and limits. Gemini (free tier, set `GEMINI_API_KEY`) answers within the run;
+  without it, or when it does not answer, Idlex (qwen2.5-7b) answers by the next run, charged $0.005 a job to the
+  creator's credits. Network fees are charged to credits by the paymaster.
 - **Switch on.** `node nomad/contracts/setup-runner.mjs` makes `AGENT_RUNNER_SECRET` and adds it to Vercel (every
   session key and the Idlex payer wallet come from it; it is never printed). Fund the Idlex wallet it prints with a
   few USDG, redeploy, then open minting from the Safe.

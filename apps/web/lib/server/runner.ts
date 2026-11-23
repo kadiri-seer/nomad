@@ -4,9 +4,9 @@
  * A run follows fixed rules, like Nomad AI's own: sell a token once it is up 25%, down 20% or held 48 hours; buy only
  * a token that passed Stoa's safety check (taxes 3% or less, can be bought and sold), with real liquidity and at least
  * $1,000 traded in the last day, at no more than 2% price impact, for at most the agent's per-trade limit and within
- * its trades a day. A Trader asks Idlex for a second opinion before buying; an agent with its own instructions asks
- * Idlex what to do. Idlex's answers are data from a small open model: they can rule a token out or pick among tokens
- * that already passed every check, never widen a limit.
+ * its trades a day. A Trader asks an AI (Gemini, or Idlex when Gemini is not available) for a second opinion before
+ * buying; an agent with its own instructions asks it what to do. Answers are data: they can rule a token out or pick
+ * among tokens that already passed every check, never widen a limit.
  */
 import { encodeFunctionData, erc20Abi, formatUnits, getAddress, parseUnits, type Address, type Hex } from "viem";
 import { STOA_ROUTER, USDG } from "../accounts/chain";
@@ -39,6 +39,8 @@ export type RunnerDeps = {
   quote: Stoa["quote"];
   candidates(): Promise<Candidate[]>;
   sender(agent: AgentRecord): Promise<{ send(calls: Call[]): Promise<Hex> }>;
+  /** An AI that answers within the run (Gemini); tried before Idlex. */
+  ai: null | { name: string; ask(prompt: string, system: string): Promise<string | null> };
   idlex: null | { submit(prompt: string, system: string): Promise<{ jobId: string }>; job(id: string): Promise<IdlexJob> };
 };
 
@@ -203,6 +205,44 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
     }
   };
 
+  /**
+   * Asks for an AI answer: Gemini first (answers now), then Idlex (answers by the next run). "pending" means Idlex was
+   * asked; null means no AI answered and the run goes on without one.
+   */
+  const consult = async (kind: "check" | "decide", prompt: string, system: string, c?: Candidate): Promise<{ text: string; by: string } | "pending" | null> => {
+    if (d.ai) {
+      const text = await d.ai.ask(prompt, system).catch(() => null);
+      if (text) return { text, by: d.ai.name };
+    }
+    return (await askIdlex(kind, prompt, system, c)) ? "pending" : null;
+  };
+  const redFlag = (text: string) => /RED FLAG:\s*yes/i.test(text);
+  const flagReason = (text: string) => text.split("\n").slice(1).join(" ").slice(0, 140).trim();
+
+  const actOn = async (text: string, by: string) => {
+    const dec = parseDecision(text);
+    if (dec.action === "buy") {
+      const c = passing.find((x) => cleanSymbol(x.symbol).toUpperCase() === (dec.symbol ?? "").toUpperCase());
+      if (!c) await note(`${by} chose to buy ${dec.symbol ?? "a token"}, which did not pass every check now. Held.`);
+      else await buy(c, dec.reason ? `Reason (${by}): ${dec.reason}` : "");
+    } else if (dec.action === "sell") {
+      const p = held.find((x) => x.symbol.toUpperCase() === (dec.symbol ?? "").toUpperCase());
+      if (!p) await note(`${by} chose to sell ${dec.symbol ?? "a token"}, which it does not hold. Held.`);
+      else if (traded() >= limit) await note(`${by} chose to sell ${p.symbol}, but today's trades are used up.`);
+      else {
+        const amount = BigInt(p.amount);
+        const q = await d.quote(p.token, USDG, amount, agent.account);
+        if (q.priceImpactPct > MAX_PRICE_IMPACT_PCT) await note(`${by} chose to sell ${p.symbol}, but the price impact was ${q.priceImpactPct.toFixed(1)}%. Held.`);
+        else {
+          const tx = await send(swapCalls(q, p.token, USDG, amount, agent.account));
+          agent.tradesToday = traded() + 1;
+          await d.store.removePosition(agent.id, p.token);
+          await note(`Sold all its ${p.symbol} for ${usdgText(q.amountOut)} USDG.${dec.reason ? ` Reason (${by}): ${dec.reason}` : ""}`, tx);
+        }
+      }
+    } else await note(`Held.${dec.reason ? ` Reason (${by}): ${dec.reason}` : ""}`);
+  };
+
   if (agent.template === "trader") {
     if (pending?.kind === "check") {
       const text = await readJob();
@@ -212,7 +252,7 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
       }
       const c = passing.find((x) => lc(x.address) === lc(pending.token ?? ""));
       if (!c) await note(`${pending.symbol} no longer passes every check, so it was not bought.`);
-      else if (text && /RED FLAG:\s*yes/i.test(text)) await note(`Idlex saw a red flag in ${pending.symbol}, so it was not bought: ${text.split("\n").slice(1).join(" ").slice(0, 140).trim()}`);
+      else if (text && redFlag(text)) await note(`Idlex saw a red flag in ${pending.symbol}, so it was not bought: ${flagReason(text)}`);
       else await buy(c, text ? "Idlex saw no red flag." : "Idlex did not answer, so it decided on the checks alone.");
       return finish();
     }
@@ -225,16 +265,21 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
       await note(lines.length ? "No token passed every check for a buy this run." : "Held: no token passed every check this run.");
       return finish();
     }
-    if (await askIdlex("check", facts(best), CHECK_SYSTEM, best)) {
+    const r = await consult("check", facts(best), CHECK_SYSTEM, best);
+    if (r === "pending") {
       await note(`${cleanSymbol(best.symbol)} passed Stoa's checks. Asked Idlex for a second opinion; it buys only if Idlex sees no red flag.`);
       return finish();
     }
-    await buy(best, "");
+    if (r && redFlag(r.text)) {
+      await note(`${r.by} saw a red flag in ${cleanSymbol(best.symbol)}, so it was not bought: ${flagReason(r.text)}`);
+      return finish();
+    }
+    await buy(best, r ? `A second opinion from ${r.by} saw no red flag.` : "");
     return finish();
   }
 
   // An agent with its own instructions.
-  if (!d.idlex) {
+  if (!d.ai && !d.idlex) {
     await note("Waiting: the AI service for agents with their own instructions is not available right now.");
     return finish();
   }
@@ -244,31 +289,8 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
       await note("Waiting for Idlex's answer.");
       return finish();
     }
-    if (!text) {
-      await note("Idlex did not answer, so it held this run.");
-      return finish();
-    }
-    const dec = parseDecision(text);
-    if (dec.action === "buy") {
-      const c = passing.find((x) => cleanSymbol(x.symbol).toUpperCase() === (dec.symbol ?? "").toUpperCase());
-      if (!c) await note(`It chose to buy ${dec.symbol ?? "a token"}, which did not pass every check now. Held.`);
-      else await buy(c, dec.reason ? `Reason: ${dec.reason}` : "");
-    } else if (dec.action === "sell") {
-      const p = held.find((x) => x.symbol.toUpperCase() === (dec.symbol ?? "").toUpperCase());
-      if (!p) await note(`It chose to sell ${dec.symbol ?? "a token"}, which it does not hold. Held.`);
-      else if (traded() >= limit) await note(`It chose to sell ${p.symbol}, but today's trades are used up.`);
-      else {
-        const amount = BigInt(p.amount);
-        const q = await d.quote(p.token, USDG, amount, agent.account);
-        if (q.priceImpactPct > MAX_PRICE_IMPACT_PCT) await note(`It chose to sell ${p.symbol}, but the price impact was ${q.priceImpactPct.toFixed(1)}%. Held.`);
-        else {
-          const tx = await send(swapCalls(q, p.token, USDG, amount, agent.account));
-          agent.tradesToday = traded() + 1;
-          await d.store.removePosition(agent.id, p.token);
-          await note(`Sold all its ${p.symbol} for ${usdgText(q.amountOut)} USDG.${dec.reason ? ` Reason: ${dec.reason}` : ""}`, tx);
-        }
-      }
-    } else await note(`Held.${dec.reason ? ` Reason: ${dec.reason}` : ""}`);
+    if (!text) await note("Idlex did not answer, so it held this run.");
+    else await actOn(text, "Idlex");
     return finish();
   }
   const usdg = await d.balanceOf(USDG, agent.account);
@@ -278,8 +300,10 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
     `Holding: ${held.length ? held.map((p) => p.symbol).join(", ") : "nothing"}.`,
     `Tokens that passed every safety check:\n${passing.slice(0, 6).map((c) => facts(c).replace(/\n/g, "; ")).join("\n") || "none"}`
   ].join("\n\n");
-  if (await askIdlex("decide", prompt, DECIDE_SYSTEM)) await note("Asked Idlex what to do, following its instructions. It acts on the answer next run, within its limits.");
-  else await note("Could not reach Idlex or credits are short, so it held this run.");
+  const r = await consult("decide", prompt, DECIDE_SYSTEM);
+  if (r === "pending") await note("Asked Idlex what to do, following its instructions. It acts on the answer next run, within its limits.");
+  else if (r) await actOn(r.text, r.by);
+  else await note("Could not reach an AI service or credits are short, so it held this run.");
   return finish();
 }
 

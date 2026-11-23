@@ -7,6 +7,7 @@ import { balanceOf as creditBalance, chargeRun } from "./credits";
 import { sponsorDeps } from "./account-routes";
 import { agentStore } from "./agents-store";
 import { agentSender, expectedAgentWallet, mainAccountOf, serverClient } from "./agent-exec";
+import { gemini } from "./gemini";
 import { idlex } from "./idlex";
 import { idlexPayer, runnerSecret, sessionSigner } from "./runner-keys";
 import { buildCandidates, type RunnerDeps } from "./runner";
@@ -43,6 +44,7 @@ export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = 
     quote: s.quote,
     candidates: () => buildCandidates(s, env.store),
     sender: (agent) => agentSender(agent, env.secret, env.sponsor, env.bundlerUrl),
+    ai: process.env.GEMINI_API_KEY?.trim() ? gemini(process.env.GEMINI_API_KEY.trim(), { model: process.env.GEMINI_MODEL?.trim() }) : null,
     idlex: idlexOn ? idlex(idlexPayer(env.secret)) : null
   };
 }

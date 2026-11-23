@@ -7,5 +7,5 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const env = agentEnv();
-  return json({ ready: !!env, idlexPayer: env ? idlexPayer(env.secret).address : null });
+  return json({ ready: !!env, ai: process.env.GEMINI_API_KEY?.trim() ? "gemini" : "idlex", idlexPayer: env ? idlexPayer(env.secret).address : null });
 }
