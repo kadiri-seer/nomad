@@ -1,0 +1,16 @@
+{
+  "name": "@nomad/contracts",
+  "private": true,
+  "type": "module",
+  "description": "NomadAgents: minted Nomad agents, with $NOMAD fees and creator prices, on Robinhood Chain.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node build.mjs && node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "@openzeppelin/contracts": "^5.1.0",
+    "ganache": "^7.9.2",
+    "solc": "^0.8.28",
+    "viem": "^2.58.4"
+  }
+}
