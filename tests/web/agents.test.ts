@@ -313,6 +313,8 @@ describe("asking Gemini", () => {
     const g = gemini("k", { fetchImpl });
     expect(await g.ask("p", "s")).toBe("RED FLAG: no");
     expect(seen).toEqual(["gemini-3.1-flash-lite:generateContent", "gemini-flash-lite-latest:generateContent"]);
+    const busy = gemini("k", { fetchImpl: (async (url: string) => (String(url).includes("flash-latest") ? new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "ok" }] } }] })) : new Response("{}", { status: 503 }))) as unknown as typeof fetch });
+    expect(await busy.ask("p", "s")).toBe("ok");
     const quota = gemini("k", { fetchImpl: (async () => new Response("{}", { status: 429 })) as unknown as typeof fetch });
     expect(await quota.ask("p", "s")).toBeNull();
   });
