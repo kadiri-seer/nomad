@@ -17,6 +17,14 @@ export const AGENT_WALLETS = [
     address: "0xF965596B6b9e76Ec08c2DD2147AC88f72E9eBA4a",
     detail: "Registered on Rushr as the agent nomad_ai",
     profile: "https://rushr.trade/nomad_ai"
+  },
+  {
+    id: "idlex",
+    name: "Idlex wallet",
+    role: "Pays for second opinions on Idlex, in USDG",
+    address: "0x7138ca72a61ddeC03CB09cCeD05EAebBAE8d69Bf",
+    detail: "Holds a little USDG; Idlex charges only verified jobs",
+    profile: null
   }
 ] as const;
 
