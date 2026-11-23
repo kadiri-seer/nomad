@@ -18,6 +18,13 @@ const HOME = [
   { t: "Send back", d: "Save what an agent learned to the home as a new version, ready for its other copies." }
 ];
 
+const AGENT_STEPS = [
+  { t: "Sign in", d: "Google sign-in makes your account on Robinhood Chain. No wallet app, no seed phrase, no ETH." },
+  { t: "Create", d: "Pick what it does and set its limits. A one-time fee in $NOMAD: half is burned, half goes to Nomad's treasury." },
+  { t: "Fund", d: "Give it USDG to trade with and credits for its network fees. Take everything back whenever you like." },
+  { t: "Watch", d: "Every move it makes is listed with its transaction, on your account page and on-chain." }
+];
+
 const SAFETY = [
   "Local first. Nothing is uploaded, and there is no account.",
   "Secrets are found and removed before anything moves.",
@@ -60,6 +67,37 @@ export default function Home() {
             <Link href="/docs/adapters">and {direct.length - 9 + guided.length} more</Link>
           </div>
         </div>
+
+        <section className="section" id="agents">
+          <div className="wrap split">
+            <div>
+              <p className="label">Agents on Robinhood Chain</p>
+              <h2 style={{ marginTop: 12 }}>Create an agent that trades on its own.</h2>
+              <p className="lede" style={{ marginTop: 18 }}>
+                It runs in Nomad&apos;s cloud, checks every token for safety first, and never goes past the limits you set.
+              </p>
+              <div className="row" style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 24 }}>
+                <Link href="/account" className="btn">
+                  Create an agent
+                </Link>
+                <Link href="/docs/agents" className="btn btn-quiet">
+                  How it works
+                </Link>
+              </div>
+              <p className="muted" style={{ marginTop: 16, fontSize: "0.92rem" }}>
+                Agents trade real money and can lose it. Nothing here is financial advice.
+              </p>
+            </div>
+            <dl style={{ margin: 0 }}>
+              {AGENT_STEPS.map((c) => (
+                <div key={c.t} style={{ display: "grid", gridTemplateColumns: "110px 1fr", gap: 16, padding: "16px 0", borderBottom: "1px solid var(--line)" }}>
+                  <dt style={{ fontWeight: 600 }}>{c.t}</dt>
+                  <dd style={{ margin: 0, color: "var(--ink-2)" }}>{c.d}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </section>
 
         <section className="section" id="download">
           <div className="wrap split">

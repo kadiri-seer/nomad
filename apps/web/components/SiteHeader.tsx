@@ -78,6 +78,9 @@ export function SiteHeader() {
             Open the app
           </Link>
         </nav>
+        <Link href="/account" className="header-signin" aria-current={pathname === "/account" ? "page" : undefined}>
+          Sign in
+        </Link>
         <ThemeToggle />
         <button className="menu-button" aria-expanded={open} aria-controls="mobile-menu" onClick={() => setOpen((o) => !o)}>
           {open ? "Close" : "Menu"}
@@ -97,6 +100,9 @@ export function SiteHeader() {
             </Link>
           ))}
           <XLink className="mobile-menu-small" />
+          <Link href="/account" className="btn btn-lime">
+            Create an agent
+          </Link>
           <Link href="/app" className="btn">
             Open the app
           </Link>

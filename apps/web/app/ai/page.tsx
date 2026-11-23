@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AgentAbout } from "@/components/AgentAbout";
 import { AgentCosts } from "@/components/AgentCosts";
 import { AgentLive } from "@/components/AgentLive";
@@ -26,6 +27,15 @@ export default function NomadAIPage() {
         </div>
 
         <AgentAbout />
+
+        <div className="cta-band" style={{ marginTop: 32 }}>
+          <h2>Want an agent of your own?</h2>
+          <div className="row">
+            <Link href="/account" className="btn btn-lime">
+              Create an agent
+            </Link>
+          </div>
+        </div>
 
         <p className="muted ai-note">
           Nomad AI is a demonstration of Nomad, not a fund. It never promises returns, and nothing it does or writes is financial advice.

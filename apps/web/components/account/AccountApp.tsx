@@ -16,7 +16,7 @@ import { grantSession, newSalt } from "@/lib/agents/wallet";
 import { MyAgents } from "./MyAgents";
 import { Sheet } from "./Sheet";
 import { clearSnapshot, readSnapshot, writeSnapshot } from "./snapshot";
-import { Mark, Wordmark } from "@/components/Logo";
+import { Mark } from "@/components/Logo";
 import {
   accountClient,
   agentPackage,
@@ -137,10 +137,6 @@ function Shell({ children, right }: { children: React.ReactNode; right?: React.R
     <main id="main" className="acct-wrap">
       <Toast />
       <div className="acct-top">
-        <Link href="/" className="acct-logo" aria-label="Nomad home">
-          <Mark size={22} />
-          <Wordmark height={12} />
-        </Link>
         {right}
       </div>
       {children}
@@ -243,7 +239,7 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
           <p className="acct-small" style={{ textAlign: "center" }}>Agents on Nomad are created and paid for with $NOMAD.</p>
 
           <section className="acct-card">
-            <span className="acct-chip">NEXT STEP</span>
+            <span className="acct-chip">Next step</span>
             <h2 className="acct-h2">Create your first agent</h2>
             <p className="acct-body">Name it, pick what it does and set its limits. It runs by itself in Nomad&apos;s cloud.</p>
             <button type="button" className="acct-primary" onClick={() => setView("create")} disabled={!mintingOpen}>
@@ -622,7 +618,7 @@ function Approve({ client, confirm, onClose, onHome }: { client: Client; confirm
           <>
             <div className="acct-between">
               <div className="acct-row" style={{ alignItems: "center" }}>
-                <span className="acct-app-icon"><Mark size={14} /></span>
+                <span className="acct-app-icon"><Mark size={18} /></span>
                 <span>
                   <strong style={{ display: "block", fontSize: 14 }}>Nomad</strong>
                   <span className="acct-mono">www.thenomad.website</span>

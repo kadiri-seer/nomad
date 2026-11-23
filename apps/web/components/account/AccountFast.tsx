@@ -7,7 +7,6 @@
  */
 import Link from "next/link";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Mark, Wordmark } from "@/components/Logo";
 import { readSnapshot, type Snapshot } from "./snapshot";
 
 const Full = lazy(() => import("./AccountApp").then((m) => ({ default: m.AccountApp })));
@@ -34,10 +33,6 @@ function QuickView({ enabled, snap, waiting, onLogin }: { enabled: boolean; snap
   return (
     <main id="main" className="acct-wrap">
       <div className="acct-top">
-        <Link href="/" className="acct-logo" aria-label="Nomad home">
-          <Mark size={22} />
-          <Wordmark height={12} />
-        </Link>
       </div>
       {!enabled ? (
         <div className="acct-card">
