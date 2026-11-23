@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PrivyProvider, usePrivy, useWallets } from "@privy-io/react-auth";
 import { formatUnits, parseUnits, type Address } from "viem";
-import { PRIVY_APP_ID, NOMAD, USDG } from "@/lib/accounts/chain";
+import { PRIVY_APP_ID, PAYMASTER, NOMAD, USDG } from "@/lib/accounts/chain";
 import { AGENTS_CONTRACT } from "@/lib/economy";
 import { Mark, Wordmark } from "@/components/Logo";
 import {
@@ -44,7 +44,8 @@ type Confirm = {
 };
 
 export function AccountApp() {
-  if (!PRIVY_APP_ID) {
+  // Opens only once the paymaster is live too: without it, funds sent to an account could not be moved without ETH.
+  if (!PRIVY_APP_ID || !PAYMASTER) {
     return (
       <main id="main" className="acct-wrap">
         <div className="acct-card">
