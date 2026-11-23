@@ -27,7 +27,7 @@ nomad home borrow kestrel            the agent as text for any chat, including o
 nomad home send-back kestrel --from claude-code:~/project   save what it learned there
 ```
 
-See [docs/guides/your-nomad.md](docs/guides/your-nomad.md).
+See [docs/guides/your-nomad.md](docs/guides/your-nomad.md). To set up Nomad's MCP server, see [docs/guides/mcp-setup.md](docs/guides/mcp-setup.md).
 
 ## What it supports
 
