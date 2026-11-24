@@ -2,13 +2,14 @@
 import { getAddress, type Address } from "viem";
 import type { RedisLike } from "../vote/redis";
 import { hashToObject } from "../vote/redis";
-import type { AgentRecord, Move, Position } from "../agents/shared";
+import { NOTES_KEPT, NOTES_SHOWN, type AgentRecord, type Move, type Position } from "../agents/shared";
 
 const AGENT = (id: string) => `nomad:agent:${id}`;
 const OWNER = (a: Address) => `nomad:agents:owner:${a.toLowerCase()}`;
 const ACCOUNT = (a: Address) => `nomad:agents:account:${a.toLowerCase()}`;
 const DUE = "nomad:agents:due";
 const MOVES = (id: string) => `nomad:agent:${id}:moves`;
+const NOTES = (id: string) => `nomad:agent:${id}:notes`;
 const POSITIONS = (id: string) => `nomad:agent:${id}:positions`;
 
 export function agentStore(redis: RedisLike) {
@@ -54,6 +55,15 @@ export function agentStore(redis: RedisLike) {
     async addMove(id: string, m: Move) {
       await redis.cmd(["LPUSH", MOVES(id), JSON.stringify(m)]);
       await redis.cmd(["LTRIM", MOVES(id), 0, 199]);
+    },
+    /** What the agent chose to remember, newest first. */
+    async addNote(id: string, text: string) {
+      await redis.cmd(["LPUSH", NOTES(id), JSON.stringify({ at: Date.now(), text })]);
+      await redis.cmd(["LTRIM", NOTES(id), 0, NOTES_KEPT - 1]);
+    },
+    async notes(id: string, n = NOTES_SHOWN): Promise<{ at: number; text: string }[]> {
+      const raw = (await redis.cmd(["LRANGE", NOTES(id), 0, n - 1])) as string[] | null;
+      return (raw ?? []).map((r) => JSON.parse(r));
     },
     async moves(id: string, n = 20): Promise<Move[]> {
       const raw = ((await redis.cmd(["LRANGE", MOVES(id), 0, n - 1])) as string[] | null) ?? [];

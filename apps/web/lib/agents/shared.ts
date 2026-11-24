@@ -8,7 +8,17 @@
  */
 import { keccak256, toHex, type Address, type Hex } from "viem";
 
-export type Template = "trader" | "blank";
+/** trader: Nomad AI's rules plus research; blank: the creator's own instructions; researcher: reports, never trades. */
+export type Template = "trader" | "blank" | "researcher";
+export const TEMPLATES: readonly Template[] = ["trader", "blank", "researcher"];
+
+/** What a Researcher looks into when its creator leaves the instructions empty. */
+export const DEFAULT_RESEARCH = "Follow the projects and tokens on Robinhood Chain that people are using most. Each run, report what changed since last time: new projects, big moves in trading, and anything that looks risky.";
+
+/** How much an agent remembers: its last notes and moves, given to its AI each run. */
+export const NOTES_KEPT = 20;
+export const NOTES_SHOWN = 6;
+export const MOVES_SHOWN = 6;
 export type AgentStatus = "active" | "paused";
 
 export type AgentLimits = {
@@ -53,7 +63,7 @@ export const MIN_RUN_CREDITS_MICROS = 50_000n;
 
 export type Position = { token: Address; symbol: string; decimals: number; amount: string; costMicros: string; boughtAt: number };
 
-export type Move = { at: number; text: string; tx?: Hex };
+export type Move = { at: number; text: string; tx?: Hex; report?: boolean };
 
 export type AgentRecord = {
   id: string;

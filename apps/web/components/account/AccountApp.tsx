@@ -11,7 +11,7 @@ import { PrivyProvider, usePrivy, useWallets } from "@privy-io/react-auth";
 import { formatUnits, parseAbi, parseUnits, type Address } from "viem";
 import { MIN_TOPUP_USDG, PRIVY_APP_ID, PAYMASTER, NOMAD, USDG } from "@/lib/accounts/chain";
 import { AGENTS_CONTRACT } from "@/lib/economy";
-import { DEFAULT_RUN_EVERY_HOURS, registerMessage, RUN_EVERY_HOURS } from "@/lib/agents/shared";
+import { DEFAULT_RESEARCH, DEFAULT_RUN_EVERY_HOURS, registerMessage, RUN_EVERY_HOURS, type Template } from "@/lib/agents/shared";
 import { grantSession, newSalt } from "@/lib/agents/wallet";
 import { MyAgents } from "./MyAgents";
 import { Sheet } from "./Sheet";
@@ -398,7 +398,8 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
 
 function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal: { nomad: bigint; usdg: bigint } | null; usdOf: (n: bigint) => string; onBack: () => void; onConfirm: (c: Confirm) => void }) {
   const [name, setName] = useState("");
-  const [template, setTemplate] = useState<"trader" | "blank">("trader");
+  const [template, setTemplate] = useState<Template>("trader");
+  const researcher = template === "researcher";
   const [instructions, setInstructions] = useState("");
   const [perTrade, setPerTrade] = useState("0.30");
   const [perDay, setPerDay] = useState(3);
@@ -422,11 +423,18 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
       if (usdg > bal.usdg) throw new Error("Not enough $NOMAD or USDG to create the agent.");
       topUp = { usdg, calls: (await stoaQuote(USDG, NOMAD, usdg, client.account.address as Address)).calls };
     }
+    // Venin checks written instructions before anything is paid: pasted text can carry planted orders.
+    const own = template === "trader" ? "" : instructions.trim();
+    if (own) {
+      const vr = await fetch("/api/agents/check", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ instructions: own }) }).catch(() => null);
+      const vj = vr && vr.ok ? ((await vr.json()) as { ok?: boolean; says?: string[] }) : null;
+      if (vj && vj.ok === false) throw new Error(`Venin found what look like planted orders in these instructions${vj.says?.[0] ? ` (${vj.says[0]})` : ""}. Remove them and try again. Nothing was paid.`);
+    }
     const salt = newSalt();
     const sr = await fetch(`/api/agents/session?signer=${client.signer}&salt=${salt}`, { cache: "no-store" });
     const sj = (await sr.json()) as { account?: Address; sessionAddress?: Address; error?: string };
     if (!sr.ok || !sj.account || !sj.sessionAddress) throw new Error(sj.error ?? "Agents are not switched on yet.");
-    const pkg = agentPackage({ name: name.trim(), template, perTradeUsd: perTrade, tradesPerDay: perDay, ...(template === "blank" ? { instructions: instructions.trim() } : {}), wallet: sj.account });
+    const pkg = agentPackage({ name: name.trim(), template, perTradeUsd: perTrade, tradesPerDay: perDay, ...(own ? { instructions: own } : {}), wallet: sj.account });
     let grant: Awaited<ReturnType<typeof grantSession>> | null = null;
     const nm = name.trim();
     onConfirm({
@@ -440,7 +448,9 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
         ["Its wallet", `${sj.account.slice(0, 6)}...${sj.account.slice(-4)}, yours`],
         ["Network fee", "Included"]
       ],
-      note: "Nomad's runner gets a key that can only approve tokens and swap on Stoa from this agent's wallet, within its limits. You stay its owner: withdraw or pause any time.",
+      note: researcher
+        ? "It never trades: each run it researches and writes you a report. Like every agent it has its own wallet with Nomad's limited runner key (Stoa swaps only), which a Researcher never uses. Pause it any time."
+        : "Nomad's runner gets a key that can only approve tokens and swap on Stoa from this agent's wallet, within its limits. You stay its owner: withdraw or pause any time.",
       build: async () => {
         const agentClient = await accountClient(client.owner, salt, client.getToken);
         if (agentClient.account.address.toLowerCase() !== sj.account!.toLowerCase()) throw new Error("The agent's wallet did not match. Nothing was sent.");
@@ -457,7 +467,7 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
             template,
             perTradeUsd: perTrade,
             tradesPerDay: perDay,
-            ...(template === "blank" ? { instructions: instructions.trim() } : {}),
+            ...(own ? { instructions: own } : {}),
             runEveryHours: every,
             sessionEntityId: grant.entityId,
             sessionDeadline: grant.deadline,
@@ -471,7 +481,9 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
         const j = await r.json();
         if (r.ok || r.status === 409) storeDel(`${PENDING_PREFIX}${txHash}`);
         if (!r.ok) throw new Error(j.error ?? "The agent was minted but could not be set up yet.");
-        return `${fmtNomad(fee)} $NOMAD paid, ${fmtNomad(fee / 2n)} burned. Fund its wallet with USDG and keep some credits, and it starts within 15 minutes.`;
+        return researcher
+          ? `${fmtNomad(fee)} $NOMAD paid, ${fmtNomad(fee / 2n)} burned. Keep some credits, and its first report comes within 15 minutes, under Your agents.`
+          : `${fmtNomad(fee)} $NOMAD paid, ${fmtNomad(fee / 2n)} burned. Fund its wallet with USDG and keep some credits, and it starts within 15 minutes.`;
       },
       done: { title: `${nm} is created`, body: "" }
     });
@@ -493,8 +505,9 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
         <legend>What it does</legend>
         {(
           [
-            ["trader", "Trader, like Nomad AI", "Looks at the market, checks tokens for safety, makes small trades."],
-            ["blank", "Start from scratch", "Write its instructions yourself."]
+            ["trader", "Trader, like Nomad AI", "Researches tokens, checks them for safety, makes small trades."],
+            ["researcher", "Researcher", "Looks into projects on Robinhood Chain and writes you a short report each run. Never trades."],
+            ["blank", "Start from scratch", "Write its instructions yourself. It can research before it trades."]
           ] as const
         ).map(([id, title, body]) => (
           <button key={id} type="button" className="acct-option" aria-pressed={template === id} onClick={() => setTemplate(id)}>
@@ -506,12 +519,13 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
           </button>
         ))}
       </fieldset>
-      {template === "blank" && (
+      {template !== "trader" && (
         <label className="acct-field">
-          <span>Instructions</span>
-          <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={4} maxLength={4000} />
+          <span>{researcher ? "What should it look into? (optional)" : "Instructions"}</span>
+          <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={4} maxLength={4000} placeholder={researcher ? DEFAULT_RESEARCH : undefined} />
         </label>
       )}
+      {!researcher && (
       <div className="acct-grid2">
         <label className="acct-field">
           <span>Per trade, at most (USDG)</span>
@@ -522,6 +536,7 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
           <input value={perDay} inputMode="numeric" onChange={(e) => setPerDay(Math.max(1, Math.min(10, Number(e.target.value.replace(/\D/g, "")) || 1)))} />
         </label>
       </div>
+      )}
       <label className="acct-field">
         <span>How often it runs</span>
         <select value={every} onChange={(e) => setEvery(Number(e.target.value))}>

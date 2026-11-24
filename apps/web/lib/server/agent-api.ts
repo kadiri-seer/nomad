@@ -1,13 +1,15 @@
 /** What the agent routes share: building the runner from the deployment's settings, and checking a registration. */
 import { decodeEventLog, getAddress, isAddress, parseAbi, verifyMessage, type Address, type Hex } from "viem";
 import { AGENTS_CONTRACT } from "../economy";
-import { agentPackage, registerMessage, RUN_EVERY_HOURS, SESSION_DAYS, validLimits, type AgentRecord, type Template } from "../agents/shared";
+import { agentPackage, registerMessage, RUN_EVERY_HOURS, SESSION_DAYS, TEMPLATES, validLimits, type AgentRecord, type Template } from "../agents/shared";
 import { redisFromEnv } from "../vote/redis";
 import { balanceOf as creditBalance, chargeRun } from "./credits";
 import { sponsorDeps } from "./account-routes";
 import { agentStore } from "./agents-store";
 import { agentSender, expectedAgentWallet, mainAccountOf, serverClient } from "./agent-exec";
 import { gemini } from "./gemini";
+import { toolKit } from "./agent-tools";
+import { veninCheck } from "./venin-check";
 import { idlex } from "./idlex";
 import { idlexPayer, runnerSecret, sessionSigner } from "./runner-keys";
 import { buildCandidates, type RunnerDeps } from "./runner";
@@ -33,6 +35,9 @@ export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = 
   const client = serverClient();
   const erc20 = parseAbi(["function balanceOf(address) view returns (uint256)"]);
   const idlexOn = process.env.AGENT_IDLEX !== "off";
+  const key = process.env.GEMINI_API_KEY?.trim();
+  const g = key ? gemini(key, { model: process.env.GEMINI_MODEL?.trim() }) : null;
+  const toolsOn = process.env.AGENT_TOOLS !== "off";
   return {
     store: env.store,
     now,
@@ -44,7 +49,9 @@ export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = 
     quote: s.quote,
     candidates: () => buildCandidates(s, env.store),
     sender: (agent) => agentSender(agent, env.secret, env.sponsor, env.bundlerUrl),
-    ai: process.env.GEMINI_API_KEY?.trim() ? gemini(process.env.GEMINI_API_KEY.trim(), { model: process.env.GEMINI_MODEL?.trim() }) : null,
+    // Each research question gets its own tool kit, so its sources are only the services that answered it.
+    ai: g ? { name: g.name, ask: g.ask, ...(toolsOn ? { withTools: (prompt: string, system: string) => g.withTools(prompt, system, toolKit({ cache: env.store })) } : {}) } : null,
+    venin: (path, text) => veninCheck(path, text),
     idlex: idlexOn ? idlex(idlexPayer(env.secret)) : null
   };
 }
@@ -83,9 +90,11 @@ export async function checkRegistration(env: NonNullable<ReturnType<typeof agent
   const name = String(b.name ?? "").trim();
   if (!name || name.length > 64) throw new AgentApiError(400, "The name must be 1 to 64 characters.");
   const template = b.template as Template;
-  if (template !== "trader" && template !== "blank") throw new AgentApiError(400, "Unknown template.");
-  const instructions = template === "blank" ? String(b.instructions ?? "").trim() : undefined;
-  if (template === "blank" && (!instructions || instructions.length > 4000)) throw new AgentApiError(400, "Instructions must be 1 to 4,000 characters.");
+  if (!TEMPLATES.includes(template)) throw new AgentApiError(400, "Unknown template.");
+  // Its own instructions: required for a custom agent, optional for a Researcher (which then follows DEFAULT_RESEARCH).
+  const instructions = template === "trader" ? undefined : String(b.instructions ?? "").trim() || undefined;
+  if (template === "blank" && !instructions) throw new AgentApiError(400, "Instructions must be 1 to 4,000 characters.");
+  if (instructions && instructions.length > 4000) throw new AgentApiError(400, "Instructions must be 1 to 4,000 characters.");
   let limits;
   try {
     limits = validLimits({ perTradeUsd: String(b.perTradeUsd), tradesPerDay: Number(b.tradesPerDay) });

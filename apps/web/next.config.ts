@@ -7,7 +7,7 @@ const exporting = process.env.NOMAD_EXPORT === "1";
 
 const config: NextConfig = {
   transpilePackages: ["@nomad/adapters", "@nomad/archive", "@nomad/compatibility", "@nomad/core", "@nomad/migration", "@nomad/schema", "@nomad/security", "@nomad/storage"],
-  serverExternalPackages: ["better-sqlite3"],
+  serverExternalPackages: ["better-sqlite3", "@veninlab/venin"],
   poweredByHeader: false,
   ...(exporting ? { output: "export" as const, pageExtensions: ["tsx"], distDir: ".next-export" } : {}),
   reactStrictMode: true,

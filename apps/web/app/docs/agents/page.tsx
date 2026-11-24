@@ -45,21 +45,34 @@ export default function CreateAgentDocs() {
           <strong>Creating an agent:</strong> a one-time fee in $NOMAD (shown before you approve). Half is burned, half goes to Nomad&apos;s treasury.
         </li>
         <li>
-          <strong>Network fees:</strong> paid by Nomad and charged to your credits at cost plus 25%. A trade costs a few cents. Creating your account, buying $NOMAD, adding credits, funding an agent and withdrawing are free for your first 6 operations each day.
+          <strong>Network fees:</strong> paid by Nomad and charged to your credits at cost plus 25%. A trade costs a few cents. Creating your account, buying $NOMAD, adding credits, funding an agent, withdrawing, sending and selling tokens for USDG are free for your first 6 operations each day.
         </li>
         <li>
-          <strong>AI:</strong> its second opinions come from Gemini at no charge; when Gemini is busy, from Idlex at $0.005 a question, charged to credits.
+          <strong>AI and research:</strong> its thinking and research come from Gemini at no charge; when Gemini is busy, its second opinions come from Idlex at $0.005 a question, charged to credits.
         </li>
       </ul>
       <p>Credits are prepaid and cannot be withdrawn. When they run low, your agents skip their runs until you add more.</p>
 
       <h2>What an agent does</h2>
       <p>
-        <strong>Trader</strong> works like <Link href="/ai">Nomad AI</Link>. Each run it sells a token it holds once it is up {TAKE_PROFIT_PCT}%, down {STOP_LOSS_PCT}% or held {MAX_HOLD_HOURS} hours. Then it may buy one token, only if it passes every check below, after an AI second opinion finds no red flag.
+        <strong>Trader</strong> works like <Link href="/ai">Nomad AI</Link>. Each run it sells a token it holds once it is up {TAKE_PROFIT_PCT}%, down {STOP_LOSS_PCT}% or held {MAX_HOLD_HOURS} hours. Then it may buy one token, only if it passes every check below, after its AI looks the token and its project up and finds no red flag.
       </p>
       <p>
-        <strong>Its own instructions:</strong> you write what it should look for, and an AI picks among the tokens that already passed every check, within your limits. The AI can rule a token out or choose between checked tokens; it can never change a limit.
+        <strong>Researcher</strong> never trades. Each run it looks into projects and tokens on Robinhood Chain, following what you ask it to watch, and writes you a short report with where each fact came from.
       </p>
+      <p>
+        <strong>Its own instructions:</strong> you write what it should look for. Its AI can research first, then picks among the tokens that already passed every check, within your limits. The AI can rule a token out or choose between checked tokens; it can never change a limit.
+      </p>
+
+      <h2>How it researches</h2>
+      <p>
+        During a run, an agent&apos;s AI can use read-only tools from projects Nomad works with: HEY Research (projects on Robinhood Chain, their changes and their tokens), Zolva (what other trading agents are doing), QHooks (tokens and launches) and Stoa (market data and safety checks). None of these tools can sign, send, post or spend. A run makes at most 6 tool calls.
+      </p>
+      <ul>
+        <li>Every answer is checked by <a href="https://venin.io" {...ext}>Venin</a> before the AI reads it. An answer with planted instructions is withheld.</li>
+        <li>Instructions you write are checked by Venin before you pay to create the agent.</li>
+        <li>Each agent remembers its last few notes and moves, so it can say what changed since its last run.</li>
+      </ul>
 
       <h2>The limits it keeps</h2>
       <ul>
@@ -72,7 +85,7 @@ export default function CreateAgentDocs() {
 
       <h2>Your money stays yours</h2>
       <ul>
-        <li>Each agent has its own wallet. Your Google account owns it, and you can withdraw everything back to your account at any time, or pause the agent.</li>
+        <li>Each agent has its own wallet. Your Google account owns it, and you can withdraw everything back to your account at any time, or pause the agent. From your account you can send USDG, $NOMAD or any other token to any Robinhood Chain address.</li>
         <li>
           Nomad&apos;s runner holds a key for the agent&apos;s wallet that can do two things only: approve a token and swap on Stoa&apos;s router. It cannot send tokens or ETH anywhere, call any other contract, or change the wallet. You give it with one signature when you create the agent, and it expires after a year.
         </li>

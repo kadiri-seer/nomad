@@ -16,7 +16,7 @@ import type { Client, Confirm } from "./types";
 type AgentView = {
   id: string;
   name: string;
-  template: "trader" | "blank";
+  template: "trader" | "blank" | "researcher";
   status: "active" | "paused";
   account: Address;
   salt: string;
@@ -191,9 +191,13 @@ function AgentSheet({ client, agent, onClose, onConfirm, onChanged }: { client: 
   return (
     <Sheet title={agent.name} onClose={onClose}>
       <p className="acct-small">
-        {agent.template === "trader" ? "Trader" : "Its own instructions"} · up to {agent.limits.perTradeUsd} USDG a trade, {agent.limits.tradesPerDay} a day ·{" "}
-        {agent.status === "active" ? "Running" : "Paused"}
+        {agent.template === "researcher"
+          ? "Researcher · writes you a report each run, never trades"
+          : `${agent.template === "trader" ? "Trader" : "Its own instructions"} · up to ${agent.limits.perTradeUsd} USDG a trade, ${agent.limits.tradesPerDay} a day`}{" "}
+        · {agent.status === "active" ? "Running" : "Paused"}
       </p>
+      {agent.template !== "researcher" && (
+      <>
       <div className="acct-between">
         <span>Its wallet</span>
         <strong>{usdg === null ? "..." : `${fmtUsdg(usdg)} USDG`}</strong>
@@ -206,6 +210,8 @@ function AgentSheet({ client, agent, onClose, onConfirm, onChanged }: { client: 
           Fund
         </button>
       </div>
+      </>
+      )}
       <div className="acct-grid2">
         <button type="button" className="acct-secondary" onClick={doWithdraw} disabled={busy}>
           Withdraw all
@@ -224,13 +230,13 @@ function AgentSheet({ client, agent, onClose, onConfirm, onChanged }: { client: 
           ))}
         </select>
       </label>
-      <h3 className="acct-h3">Moves</h3>
+      <h3 className="acct-h3">{agent.template === "researcher" ? "Reports" : "Moves"}</h3>
       <ol className="acct-moves">
         {moves.length === 0 && <li className="acct-small">No moves yet.</li>}
         {moves.map((m, i) => (
           <li key={i}>
             <span className="acct-small">{ago(m.at)}</span>
-            <span>{m.text}</span>
+            <span style={m.report ? { whiteSpace: "pre-line" } : undefined}>{m.text}</span>
             {m.tx && (
               <a href={`https://robinhoodchain.blockscout.com/tx/${m.tx as Hex}`} target="_blank" rel="noopener noreferrer" className="acct-small">
                 Transaction

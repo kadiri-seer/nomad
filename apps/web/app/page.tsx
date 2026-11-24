@@ -20,7 +20,7 @@ const HOME = [
 
 const AGENT_STEPS = [
   { t: "Sign in", d: "Google sign-in makes your account on Robinhood Chain. No wallet app, no seed phrase, no ETH." },
-  { t: "Create", d: "Pick what it does and set its limits. A one-time fee in $NOMAD: half is burned, half goes to Nomad's treasury." },
+  { t: "Create", d: "A Trader, a Researcher, or your own instructions. A one-time fee in $NOMAD: half is burned, half goes to Nomad's treasury." },
   { t: "Fund", d: "Give it USDG to trade with and credits for its network fees. Take everything back whenever you like." },
   { t: "Watch", d: "Every move it makes is listed with its transaction, on your account page and on-chain." }
 ];
