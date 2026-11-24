@@ -58,6 +58,8 @@ export const SESSION_DAYS = 365;
 
 /** Charged to the creator's credits for each paid AI job an agent's run uses, in micro-USD ($0.005). */
 export const AI_JOB_CHARGE_MICROS = 5_000n;
+/** Charged to the creator's credits for each OddsEngine check before a buy, in micro-USD ($0.005). */
+export const ODDSENGINE_CHECK_CHARGE_MICROS = 5_000n;
 /** A run is skipped (and the creator told) when credits are below this, in micro-USD ($0.05). */
 export const MIN_RUN_CREDITS_MICROS = 50_000n;
 

@@ -97,7 +97,7 @@ function agent(over: Partial<AgentRecord> = {}): AgentRecord {
   };
 }
 
-function harness(opts: { venin?: RunnerDeps["venin"]; ai?: RunnerDeps["ai"]; usdg?: bigint; credits?: bigint; candidates?: Candidate[]; idlex?: RunnerDeps["idlex"]; now?: number; tokenBalances?: Record<string, bigint>; quotes?: (sell: Address, buy: Address, amount: bigint) => Quote }) {
+function harness(opts: { oddsEngine?: RunnerDeps["oddsEngine"]; venin?: RunnerDeps["venin"]; ai?: RunnerDeps["ai"]; usdg?: bigint; credits?: bigint; candidates?: Candidate[]; idlex?: RunnerDeps["idlex"]; now?: number; tokenBalances?: Record<string, bigint>; quotes?: (sell: Address, buy: Address, amount: bigint) => Quote }) {
   const redis = new MemoryRedis();
   const store = agentStore(redis);
   const sent: { to: Address; data: Hex }[][] = [];
@@ -130,7 +130,8 @@ function harness(opts: { venin?: RunnerDeps["venin"]; ai?: RunnerDeps["ai"]; usd
     }),
     ai: opts.ai ?? null,
     idlex: opts.idlex ?? null,
-    ...(opts.venin ? { venin: opts.venin } : {})
+    ...(opts.venin ? { venin: opts.venin } : {}),
+    ...(opts.oddsEngine ? { oddsEngine: opts.oddsEngine } : {})
   };
   return { d, store, sent, charges, balances, redis };
 }
@@ -506,5 +507,48 @@ describe("research, reports and memory", () => {
     expect(reportOf("Some preamble\nREPORT: line one\nline two\nNOTE: x")).toBe("line one\nline two");
     expect(reportOf("no tag here")).toBe("no tag here");
     expect(reportOf(`REPORT: ${"a".repeat(3000)}`).length).toBe(1500);
+  });
+});
+
+describe("second safety checks: Rushr and OddsEngine", () => {
+  it("a token Rushr rates high risk or blocks never passes; no verdict, or a low one, changes nothing", () => {
+    const base = candidate(TOKEN, "HOOKR");
+    const { passes: _p, ...c } = base;
+    expect(passesChecks({ ...c, rushr: { riskLevel: "high", blocked: false, flags: [] } })).toBe(false);
+    expect(passesChecks({ ...c, rushr: { riskLevel: "low", blocked: true, flags: [] } })).toBe(false);
+    expect(passesChecks({ ...c, rushr: { riskLevel: "medium", blocked: false, flags: [] } })).toBe(true);
+    expect(passesChecks({ ...c, rushr: null })).toBe(true);
+  });
+
+  it("buildCandidates asks Rushr once an hour per token", async () => {
+    const store = agentStore(new MemoryRedis());
+    const stoa = {
+      listTokens: async () => [{ address: TOKEN, symbol: "HOOKR", name: "Hookr", decimals: 18 }],
+      marketContext: async () => ({ market: { fearAndGreed: null, ethUsd: null }, tokens: [{ address: TOKEN, symbol: "HOOKR", priceUsd: 1, liquidityUsd: 2_000_000, volume24hUsd: 400_000, change24hPct: 1, riskLabel: "safe" }] }),
+      safetyCheck: async () => ({ verdict: "ok" as const, buyTaxPct: 0, sellTaxPct: 0, buyOk: true, sellOk: true, notes: [] })
+    };
+    let asked = 0;
+    const out = await buildCandidates(stoa, store, async () => (asked++, { riskLevel: "high", blocked: false, flags: ["dev_selling"] }));
+    expect(out[0].passes).toBe(false);
+    expect(out[0].rushr?.flags).toEqual(["dev_selling"]);
+    await store.cacheSet("agent-candidates", null, 1);
+    await buildCandidates(stoa, store, async () => (asked++, null));
+    expect(asked).toBe(1);
+  });
+
+  it("OddsEngine's warning stops a buy; its all-clear is credited and charged; no answer is noted", async () => {
+    const warn = harness({ oddsEngine: { name: "OddsEngine", scanToken: async () => ({ warn: true, summary: "owner can pause transfers" }) } });
+    expect((await runAgent(warn.d, agent()))[0]).toBe("Skipped HOOKR: OddsEngine warned about it (owner can pause transfers). Checked by OddsEngine.");
+    expect(warn.sent).toHaveLength(0);
+    let scans = 0;
+    const ok = harness({ oddsEngine: { name: "OddsEngine", scanToken: async () => (scans++, { warn: false, summary: "no warning" }) } });
+    expect((await runAgent(ok.d, agent()))[0]).toMatch(/^Bought HOOKR.*Checked by OddsEngine\./);
+    expect(ok.charges).toEqual([5_000n]);
+    // The verdict is shared for an hour: a second agent buying the same token does not scan again.
+    await runAgent(ok.d, agent({ id: "8", account: "0xdddddddddddddddddddddddddddddddddddddddd" }));
+    expect(scans).toBe(1);
+    const down = harness({ oddsEngine: { name: "OddsEngine", scanToken: async () => null } });
+    expect((await runAgent(down.d, agent()))[0]).toMatch(/^Bought HOOKR.*OddsEngine did not answer/);
+    expect(down.charges).toEqual([]);
   });
 });

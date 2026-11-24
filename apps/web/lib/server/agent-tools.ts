@@ -5,9 +5,11 @@
  * planted instructions is withheld. Answers stay data: the runner's own checks decide every trade.
  */
 import { mcpClient, type McpTool } from "./mcp";
+import { RUSHR_API, RUSHR_TOOLS, runRushrTool } from "./rushr";
 import { veninCheck, type VeninVerdict } from "./venin-check";
 
-export type ToolServer = { id: string; name: string; url: string; headers?: Record<string, string>; tools: string[] };
+/** An MCP server, or Rushr's public REST API (`rest: "rushr"`), whose tools are defined in rushr.ts. */
+export type ToolServer = { id: string; name: string; url: string; headers?: Record<string, string>; tools: string[]; rest?: "rushr" };
 
 /** The servers and their allowed tools. Addresses are exact; nothing else is ever called. */
 export const TOOL_SERVERS: ToolServer[] = [
@@ -20,7 +22,12 @@ export const TOOL_SERVERS: ToolServer[] = [
   },
   { id: "zolva", name: "Zolva", url: "https://zolvaagent.app/mcp", tools: ["list_agents", "get_agent", "verify_agent", "list_markets", "get_market", "recent_activity", "get_consensus"] },
   { id: "qhooks", name: "QHooks", url: "https://qhooks.com/mcp?ref=nomad", tools: ["token_info", "list_launches", "agent_stats", "hooks_catalog", "list_callers", "caller_record", "compete_standings"] },
-  { id: "stoa", name: "Stoa", url: "https://stoadex.com/mcp", tools: ["market_context", "safety_check", "spotlight", "stock_tokens"] }
+  { id: "stoa", name: "Stoa", url: "https://stoadex.com/mcp", tools: ["market_context", "safety_check", "spotlight", "stock_tokens"] },
+  { id: "rushr", name: "Rushr", url: RUSHR_API, rest: "rushr", tools: Object.values(RUSHR_TOOLS).map((t) => t.declaration.name) },
+  // Read only: markets, marks, quotes and records. Nothing tied to one account, and agents never trade options.
+  { id: "hedgehood", name: "Hedgehood", url: "https://mcp.hedgehood.io/mcp", tools: ["list_markets", "list_instruments", "get_mark", "get_quote", "get_leaderboard", "get_agent_record", "list_vaults", "vault_status"] },
+  // Read only: agents' credit records and pools. No borrowing quotes or credit lines: agents never borrow.
+  { id: "priors", name: "Priors", url: "https://mcp.priors.trade/mcp", tools: ["agent_record", "score_of", "credit_history", "pool_stats", "stock_assets", "recent_activity", "desk_record", "find_agents", "agent_page"] }
 ];
 
 /** One tool answer, as much as an agent's AI reads of it. */
@@ -90,7 +97,13 @@ export function toolKit(deps: { cache: Cache; fetchImpl?: typeof fetch; servers?
   return {
     async declarations() {
       const out: FunctionDeclaration[] = [];
-      const lists = await Promise.all(servers.map((s) => toolsOf(s).then((t) => ({ s, t })).catch(() => ({ s, t: [] as McpTool[] }))));
+      const lists = await Promise.all(servers.filter((s) => !s.rest).map((s) => toolsOf(s).then((t) => ({ s, t })).catch(() => ({ s, t: [] as McpTool[] }))));
+      for (const s of servers.filter((x) => x.rest === "rushr")) {
+        for (const t of Object.values(RUSHR_TOOLS)) {
+          byName.set(t.declaration.name, { server: s, tool: t.declaration.name });
+          out.push(t.declaration);
+        }
+      }
       for (const { s, t } of lists) {
         for (const tool of t) {
           const name = `${s.id}_${tool.name}`.slice(0, 64);
@@ -109,7 +122,7 @@ export function toolKit(deps: { cache: Cache; fetchImpl?: typeof fetch; servers?
       if (JSON.stringify(a).length > MAX_ARGS_CHARS) return "Not run: the request was too long.";
       let text: string;
       try {
-        text = await client(t.server).call(t.tool, a);
+        text = t.server.rest === "rushr" ? await runRushrTool(t.tool, a, deps.fetchImpl) : await client(t.server).call(t.tool, a);
       } catch (e) {
         return `${t.server.name} did not answer: ${plain((e as Error).message, 120)}`;
       }

@@ -16,6 +16,7 @@ import { encodeFunctionData, erc20Abi, formatUnits, getAddress, parseUnits, type
 import { STOA_ROUTER, USDG } from "../accounts/chain";
 import {
   AI_JOB_CHARGE_MICROS,
+  ODDSENGINE_CHECK_CHARGE_MICROS,
   DEFAULT_RESEARCH,
   MOVES_SHOWN,
   NOTES_SHOWN,
@@ -34,8 +35,11 @@ import type { AgentStore } from "./agents-store";
 import type { IdlexJob } from "./idlex";
 import { stoaSwap } from "./sponsor";
 import type { Quote, Safety, Stoa, TokenMarket } from "./stoa";
+import type { OddsVerdict } from "./oddsengine";
+import type { RushrSafety } from "./rushr";
 
-export type Candidate = TokenMarket & { decimals: number; safety: Safety; passes: boolean };
+/** A token an agent may consider: Stoa's market data and safety check, and Rushr's verdict when Rushr has one. */
+export type Candidate = TokenMarket & { decimals: number; safety: Safety; rushr?: RushrSafety | null; passes: boolean };
 type Call = { to: Address; data: Hex; value?: bigint };
 
 export type RunnerDeps = {
@@ -55,6 +59,8 @@ export type RunnerDeps = {
     ask(prompt: string, system: string): Promise<string | null>;
     withTools?(prompt: string, system: string): Promise<{ text: string; used: string[] } | null>;
   };
+  /** OddsEngine's token scan, run just before each buy when Nomad's OddsEngine key is set. */
+  oddsEngine?: { name: string; scanToken(token: Address): Promise<OddsVerdict | null> };
   /** Venin's check on text an agent would remember or show; planted orders keep it out. */
   venin?: (path: string, text: string) => Promise<{ planted: number }>;
   idlex: null | { submit(prompt: string, system: string): Promise<{ jobId: string }>; job(id: string): Promise<IdlexJob> };
@@ -79,7 +85,9 @@ export function passesChecks(c: Omit<Candidate, "passes">): boolean {
     (s.sellTaxPct ?? 100) <= MAX_TAX_PCT &&
     (c.volume24hUsd ?? 0) >= MIN_VOLUME_24H_USD &&
     (c.liquidityUsd ?? 0) >= MIN_LIQUIDITY_USD &&
-    c.riskLabel !== "highRisk"
+    c.riskLabel !== "highRisk" &&
+    // A second opinion: Rushr rating a token high risk, or blocking it, rules it out (no verdict is not a warning).
+    !(c.rushr && (c.rushr.blocked || c.rushr.riskLevel === "high"))
   );
 }
 
@@ -131,7 +139,8 @@ const facts = (c: Candidate) =>
     `liquidity: ${money(c.liquidityUsd)}`,
     `24h volume: ${money(c.volume24hUsd)}`,
     `24h price change: ${c.change24hPct === null ? "?" : c.change24hPct.toFixed(1)}%`,
-    `risk label: ${c.riskLabel ?? "none"}`
+    `risk label: ${c.riskLabel ?? "none"}`,
+    `Rushr's safety check: ${c.rushr ? `${c.rushr.riskLevel} risk${c.rushr.blocked ? ", blocked" : ""}${c.rushr.flags.length ? ` (${c.rushr.flags.join(", ")})` : ""}` : "no verdict"}`
   ].join("\n");
 
 export function parseDecision(text: string): { action: "buy" | "sell" | "hold"; symbol: string | null; reason: string } {
@@ -251,13 +260,27 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
     if (!canBuy) return note(`Would buy ${cleanSymbol(c.symbol)}, but today's trades are used up.`);
     const usdg = await d.balanceOf(USDG, agent.account);
     if (usdg < per) return note(`Would buy ${cleanSymbol(c.symbol)}, but the wallet has ${usdgText(usdg)} USDG, less than one trade (${usdgText(per)}). Fund it from your account.`);
+    // OddsEngine's scan, just before buying: a warning rules the token out; no answer is noted and the other checks stand.
+    let checked = "";
+    if (d.oddsEngine) {
+      const key = `odds:${lc(c.address)}`;
+      let v = await d.store.cacheGet<OddsVerdict>(key);
+      if (!v) {
+        v = await d.oddsEngine.scanToken(c.address).catch(() => null);
+        if (v) await d.store.cacheSet(key, v, 3600);
+      }
+      if (v) await d.credits.charge(agent.owner, ODDSENGINE_CHECK_CHARGE_MICROS);
+      if (v?.warn) return note(`Skipped ${cleanSymbol(c.symbol)}: OddsEngine warned about it (${v.summary}). Checked by OddsEngine.`);
+      checked = v ? " Checked by OddsEngine." : " OddsEngine did not answer, so it went on the other checks.";
+    }
     const q = await d.quote(USDG, c.address, per, agent.account);
     if (q.priceImpactPct > MAX_PRICE_IMPACT_PCT) return note(`Skipped ${cleanSymbol(c.symbol)}: the price impact would be ${q.priceImpactPct.toFixed(1)}%.`);
     const tx = await send(swapCalls(q, USDG, c.address, per, agent.account));
     agent.tradesToday = traded() + 1;
     const got = await d.balanceOf(c.address, agent.account);
     await d.store.setPosition(agent.id, { token: getAddress(c.address), symbol: cleanSymbol(c.symbol), decimals: c.decimals, amount: (got || q.amountOut).toString(), costMicros: per.toString(), boughtAt: now });
-    await note(`Bought ${cleanSymbol(c.symbol)} with ${usdgText(per)} USDG: Stoa's check ok, taxes ${c.safety.buyTaxPct ?? 0}%/${c.safety.sellTaxPct ?? 0}%, ${money(c.volume24hUsd)} traded in 24h. ${why}`.trim(), tx);
+    const rushrNote = c.rushr ? ` Rushr: ${c.rushr.riskLevel} risk.` : "";
+    await note(`Bought ${cleanSymbol(c.symbol)} with ${usdgText(per)} USDG: Stoa's check ok, taxes ${c.safety.buyTaxPct ?? 0}%/${c.safety.sellTaxPct ?? 0}%, ${money(c.volume24hUsd)} traded in 24h.${rushrNote}${checked} ${why}`.trim(), tx);
   };
 
   const pending = agent.pendingJob;
@@ -417,7 +440,11 @@ export async function tick(d: RunnerDeps, budgetMs: number, maxAgents = 25) {
 }
 
 /** The tokens agents may consider this run: Stoa's list, its market data, and safety checks of the most traded. */
-export async function buildCandidates(stoa: Pick<Stoa, "listTokens" | "marketContext" | "safetyCheck">, store: Pick<AgentStore, "cacheGet" | "cacheSet">): Promise<Candidate[]> {
+export async function buildCandidates(
+  stoa: Pick<Stoa, "listTokens" | "marketContext" | "safetyCheck">,
+  store: Pick<AgentStore, "cacheGet" | "cacheSet">,
+  rushr?: (address: Address) => Promise<RushrSafety | null>
+): Promise<Candidate[]> {
   const cached = await store.cacheGet<Candidate[]>("agent-candidates");
   if (cached) return cached;
   const tokens = (await stoa.listTokens()).filter((t) => lc(t.address) !== lc(USDG));
@@ -445,7 +472,16 @@ export async function buildCandidates(stoa: Pick<Stoa, "listTokens" | "marketCon
         continue;
       }
     }
-    const c = { ...m, decimals: decimals.get(lc(m.address)) ?? 18, safety };
+    let r: RushrSafety | null = null;
+    if (rushr) {
+      const hit = await store.cacheGet<{ v: RushrSafety | null }>(`rushr:${lc(m.address)}`);
+      if (hit) r = hit.v;
+      else {
+        r = await rushr(m.address).catch(() => null);
+        await store.cacheSet(`rushr:${lc(m.address)}`, { v: r }, 3600);
+      }
+    }
+    const c = { ...m, decimals: decimals.get(lc(m.address)) ?? 18, safety, rushr: r };
     out.push({ ...c, passes: passesChecks(c) });
   }
   await store.cacheSet("agent-candidates", out, 900);

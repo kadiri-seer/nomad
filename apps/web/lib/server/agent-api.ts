@@ -10,6 +10,8 @@ import { agentSender, expectedAgentWallet, mainAccountOf, serverClient } from ".
 import { gemini } from "./gemini";
 import { toolKit } from "./agent-tools";
 import { veninCheck } from "./venin-check";
+import { oddsEngine } from "./oddsengine";
+import { rushrSafety } from "./rushr";
 import { idlex } from "./idlex";
 import { idlexPayer, runnerSecret, sessionSigner } from "./runner-keys";
 import { buildCandidates, type RunnerDeps } from "./runner";
@@ -47,11 +49,12 @@ export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = 
     },
     balanceOf: (token, holder) => client.readContract({ address: token, abi: erc20, functionName: "balanceOf", args: [holder] }),
     quote: s.quote,
-    candidates: () => buildCandidates(s, env.store),
+    candidates: () => buildCandidates(s, env.store, (a) => rushrSafety(a)),
     sender: (agent) => agentSender(agent, env.secret, env.sponsor, env.bundlerUrl),
     // Each research question gets its own tool kit, so its sources are only the services that answered it.
     ai: g ? { name: g.name, ask: g.ask, ...(toolsOn ? { withTools: (prompt: string, system: string) => g.withTools(prompt, system, toolKit({ cache: env.store })) } : {}) } : null,
     venin: (path, text) => veninCheck(path, text),
+    ...(process.env.ODDSENGINE_API_KEY?.trim() ? { oddsEngine: oddsEngine(process.env.ODDSENGINE_API_KEY.trim()) } : {}),
     idlex: idlexOn ? idlex(idlexPayer(env.secret)) : null
   };
 }

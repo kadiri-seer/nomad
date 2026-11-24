@@ -3,6 +3,8 @@ import { geminiSchema, MAX_TOOL_ANSWER_CHARS, TOOL_SERVERS, toolKit, type ToolSe
 import { gemini } from "../../apps/web/lib/server/gemini";
 import { mcpClient, parseMcpAnswer } from "../../apps/web/lib/server/mcp";
 import { veninCheck } from "../../apps/web/lib/server/venin-check";
+import { readVerdict, scanArgs } from "../../apps/web/lib/server/oddsengine";
+import { RUSHR_API, rushrSafety, runRushrTool } from "../../apps/web/lib/server/rushr";
 
 /**
  * Agents' research tools: only the reviewed read-only tools of keyless hosted servers, each answer capped and checked
@@ -152,5 +154,68 @@ describe("Gemini with tools", () => {
     expect(bodies.at(-1)!.toolConfig?.functionCallingConfig.mode).toBe("NONE");
     const quota = gemini("k", { fetchImpl: (async () => new Response("{}", { status: 429 })) as unknown as typeof fetch });
     expect(await quota.withTools("p", "s", kit([]))).toBeNull();
+  });
+});
+
+describe("Rushr's public reads", () => {
+  const fake = (routes: Record<string, unknown>) => {
+    const seen: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      const path = String(url).replace(RUSHR_API, "");
+      seen.push(path);
+      return path in routes ? new Response(JSON.stringify(routes[path])) : new Response("{}", { status: 404 });
+    }) as unknown as typeof fetch;
+    return { fetchImpl, seen };
+  };
+  const T = "0x18E674231A58c239Dc7DaeDcffE15Ec3A24cff5c";
+
+  it("reads Rushr's safety verdict, and has none for a token it does not know", async () => {
+    const f = fake({ [`/v1/tokens/${T}/safety`]: { safety: { riskLevel: "high", blocked: true, flags: [{ code: "mint_authority" }, "lp_unlocked<script>"] } } });
+    expect(await rushrSafety(T, f.fetchImpl)).toEqual({ riskLevel: "high", blocked: true, flags: ["mint_authority", "lp_unlockedscript"] });
+    expect(await rushrSafety("0x0000000000000000000000000000000000000001", f.fetchImpl)).toBeNull();
+    expect(await rushrSafety("../admin", f.fetchImpl)).toBeNull();
+    expect(f.seen.some((p) => p.includes(".."))).toBe(false);
+  });
+
+  it("runs only its fixed read paths, with checked arguments", async () => {
+    const f = fake({ "/v1/leaderboard?window=24h&kind=agent&limit=50": { rows: [] }, "/tokens?column=migrated": [] });
+    expect(await runRushrTool("rushr_leaderboard", { window: "24h", kind: "agent", limit: 999 }, f.fetchImpl)).toBe('{"rows":[]}');
+    expect(await runRushrTool("rushr_tokens", { column: "'; drop" }, f.fetchImpl)).toBe("[]");
+    expect(await runRushrTool("rushr_token", { address: "0x12/../../v1/agents" }, f.fetchImpl)).toMatch(/^Not run/);
+    expect(await runRushrTool("rushr_buy", {}, f.fetchImpl)).toMatch(/^Not run/);
+    const kit = toolKit({ cache: memCache(), fetchImpl: f.fetchImpl, servers: [TOOL_SERVERS.find((s) => s.id === "rushr")!], venin: clean });
+    const names = (await kit.declarations()).map((d) => d.name);
+    expect(names).toContain("rushr_leaderboard");
+    expect(names.every((n) => n.startsWith("rushr_"))).toBe(true);
+    expect(await kit.call("rushr_tokens", {})).toBe("[]");
+    expect(kit.used()).toEqual(["Rushr"]);
+  });
+
+  it("has Hedgehood and Priors as read-only hosted servers, with no trading, borrowing or account tools", () => {
+    const h = TOOL_SERVERS.find((s) => s.id === "hedgehood")!;
+    const p = TOOL_SERVERS.find((s) => s.id === "priors")!;
+    expect(h.url).toBe("https://mcp.hedgehood.io/mcp");
+    expect(p.url).toBe("https://mcp.priors.trade/mcp");
+    expect(h.tools).not.toContain("get_positions");
+    expect(p.tools.some((t) => /line|quote|borrow|hire|job/.test(t))).toBe(false);
+  });
+});
+
+describe("OddsEngine's scan", () => {
+  it("reads a warning from its fields or its words, but not from words that say a danger is absent", () => {
+    expect(readVerdict(JSON.stringify({ riskLevel: "high", summary: "Owner can mint" })).warn).toBe(true);
+    expect(readVerdict(JSON.stringify({ safe: false })).warn).toBe(true);
+    expect(readVerdict(JSON.stringify({ riskScore: 85 })).warn).toBe(true);
+    expect(readVerdict(JSON.stringify({ riskLevel: "low", summary: "Not a honeypot. No scam signals." })).warn).toBe(false);
+    expect(readVerdict("This token is a honeypot: sells fail.").warn).toBe(true);
+    expect(readVerdict("Looks fine. No honeypot detected.").warn).toBe(false);
+  });
+
+  it("fills its scan from its own schema: the token's address and Robinhood Chain", () => {
+    const t = (props: Record<string, unknown>) => ({ name: "scan_token", inputSchema: { type: "object", properties: props } });
+    expect(scanArgs(t({ token_address: { type: "string" }, chain: { type: "string", enum: ["ethereum", "robinhood", "base"] } }), "0xabc")).toEqual({ token_address: "0xabc", chain: "robinhood" });
+    expect(scanArgs(t({ address: { type: "string" }, chainId: { type: "integer" } }), "0xabc")).toEqual({ address: "0xabc", chainId: 4663 });
+    expect(scanArgs(t({ query: { type: "string" } }), "0xabc")).toBeNull();
+    expect(scanArgs(undefined, "0xabc")).toBeNull();
   });
 });

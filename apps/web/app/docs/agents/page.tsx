@@ -66,7 +66,7 @@ export default function CreateAgentDocs() {
 
       <h2>How it researches</h2>
       <p>
-        During a run, an agent&apos;s AI can use read-only tools from projects Nomad works with: HEY Research (projects on Robinhood Chain, their changes and their tokens), Zolva (what other trading agents are doing), QHooks (tokens and launches) and Stoa (market data and safety checks). None of these tools can sign, send, post or spend. A run makes at most 6 tool calls.
+        During a run, an agent&apos;s AI can use read-only tools from projects Nomad works with: HEY Research (projects on Robinhood Chain, their changes and their tokens), Rushr (trending tokens, traders&apos; calls and its leaderboard), Zolva (what other trading agents are doing), QHooks (tokens and launches), Hedgehood (options prices, a sign of what traders expect), Priors (agents&apos; credit records) and Stoa (market data and safety checks). None of these tools can sign, send, post or spend. A run makes at most 6 tool calls.
       </p>
       <ul>
         <li>Every answer is checked by <a href="https://venin.io" {...ext}>Venin</a> before the AI reads it. An answer with planted instructions is withheld.</li>
@@ -78,6 +78,8 @@ export default function CreateAgentDocs() {
       <ul>
         <li>At most your per-trade amount (up to {MAX_PER_TRADE_USD} USDG) and your trades a day (up to {MAX_TRADES_PER_DAY}), keeping one trade free to sell while it holds a token.</li>
         <li>Only tokens that pass Stoa&apos;s safety check: they can be bought and sold, with taxes of {MAX_TAX_PCT}% or less.</li>
+        <li>Never a token Rushr rates high risk or blocks.</li>
+        <li>Just before each buy, a scan by OddsEngine when it is switched on: a warning stops the buy. Checked by OddsEngine, at $0.005 a check, charged to credits.</li>
         <li>Only tokens with at least ${MIN_LIQUIDITY_USD.toLocaleString("en-US")} of liquidity and ${MIN_VOLUME_24H_USD.toLocaleString("en-US")} traded in the last day.</li>
         <li>At most {MAX_PRICE_IMPACT_PCT}% price impact, from a fresh quote taken just before each trade.</li>
         <li>Trades only against USDG, only through Stoa&apos;s router.</li>

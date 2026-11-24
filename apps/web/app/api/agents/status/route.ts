@@ -23,5 +23,5 @@ export async function GET() {
       await env.store.cacheSet("gemini-probe", probe, probe.ok ? 3600 : 120);
     }
   }
-  return json({ ready: !!env, ai: key ? "gemini" : "idlex", aiAnswering: probe?.ok ?? null, aiModel: probe?.model ?? null, aiDetail: probe?.detail ?? null, idlexPayer: env ? idlexPayer(env.secret).address : null, signInCheck: await privyKeysReady().catch(() => false) });
+  return json({ ready: !!env, ai: key ? "gemini" : "idlex", aiAnswering: probe?.ok ?? null, aiModel: probe?.model ?? null, aiDetail: probe?.detail ?? null, idlexPayer: env ? idlexPayer(env.secret).address : null, signInCheck: await privyKeysReady().catch(() => false), oddsEngine: !!process.env.ODDSENGINE_API_KEY?.trim() });
 }
