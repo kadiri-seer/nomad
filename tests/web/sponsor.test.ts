@@ -4,7 +4,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { encodeCallsMAv2 } from "@alchemy/smart-accounts";
 import { AGENTS_ABI } from "../../apps/web/lib/agents-contract";
 import { ENTRY_POINT, NOMAD, STOA_ROUTER, TREASURY, USDG } from "../../apps/web/lib/accounts/chain";
-import { classify, maxCostWei, paymasterHash, sponsor, SponsorError, stubData, userOpHash, type RpcUserOp } from "../../apps/web/lib/server/sponsor";
+import { classify, freeGasOk, FREE_OP_MAX_WEI, maxCostWei, paymasterHash, sponsor, SponsorError, stubData, userOpHash, type RpcUserOp } from "../../apps/web/lib/server/sponsor";
 
 /**
  * Nomad's paymaster service: who pays for an operation, and a signature NomadPaymaster accepts. The reference hashes
@@ -57,6 +57,19 @@ describe("who pays", () => {
     expect(classify(ops([{ to: NOMAD, data: erc("approve", AGENTS, 1n) }, { to: AGENTS, data: mint }]), SENDER, AGENTS)).toBe("mint");
     expect(classify(ops([{ to: USDG, data: erc("approve", STOA_ROUTER, 1n) }, { to: STOA_ROUTER, data: swap(USDG, NOMAD, SENDER) }, { to: NOMAD, data: erc("approve", AGENTS, 1n) }, { to: AGENTS, data: mint }]), SENDER, AGENTS)).toBe("mint");
   });
+  it("taking money out is free too: one send of any token or ETH, or selling a token for USDG to the account", () => {
+    const OUT = "0x4444444444444444444444444444444444444444" as Address;
+    const OTHER_TOKEN = "0x5555555555555555555555555555555555555555" as Address;
+    expect(classify(ops([{ to: USDG, data: erc("transfer", OUT, 1n) }]), SENDER, AGENTS)).toBe("send");
+    expect(classify(ops([{ to: NOMAD, data: erc("transfer", OUT, 10n ** 18n) }]), SENDER, AGENTS)).toBe("send");
+    expect(classify(ops([{ to: OTHER_TOKEN, data: erc("transfer", OUT, 5n) }]), SENDER, AGENTS)).toBe("send");
+    expect(classify(ops([{ to: OUT, data: "0x", value: 10n ** 15n }]), SENDER, AGENTS)).toBe("send");
+    expect(classify(ops([{ to: OTHER_TOKEN, data: erc("approve", STOA_ROUTER, 5n) }, { to: STOA_ROUTER, data: swap(OTHER_TOKEN, USDG, SENDER) }]), SENDER, AGENTS)).toBe("sell");
+    expect(classify(ops([{ to: STOA_ROUTER, data: swap(OTHER_TOKEN, USDG, OUT) }]), SENDER, AGENTS)).toBe("paid"); // sold for someone else
+    expect(classify(ops([{ to: STOA_ROUTER, data: swap(USDG, OTHER_TOKEN, SENDER) }]), SENDER, AGENTS)).toBe("paid"); // buying other tokens is a trade
+    expect(classify(ops([{ to: OTHER_TOKEN, data: erc("approve", OUT, 5n) }]), SENDER, AGENTS)).toBe("paid"); // approving anyone else
+  });
+
   it("everything else, or anything close but not exact, is paid from credits", () => {
     expect(classify(ops([{ to: USDG, data: erc("transfer", TREASURY, 999_999n) }]), SENDER, AGENTS)).toBe("paid"); // under 1 USDG
     expect(classify(ops([{ to: USDG, data: erc("transfer", SENDER, 5_000_000n) }]), SENDER, AGENTS)).toBe("paid"); // not to the treasury
@@ -64,6 +77,10 @@ describe("who pays", () => {
     expect(classify(ops([{ to: STOA_ROUTER, data: swap(USDG, NOMAD, AGENTS) }]), SENDER, AGENTS)).toBe("paid"); // bought for someone else
     expect(classify(ops([{ to: USDG, data: erc("approve", STOA_ROUTER, 1n) }]), SENDER, AGENTS)).toBe("paid"); // an approval alone
     expect(classify(ops([{ to: AGENTS, data: mint }, { to: USDG, data: erc("transfer", SENDER, 1n) }]), SENDER, AGENTS)).toBe("paid"); // mixed in
+    expect(classify(ops([{ to: USDG, data: erc("transfer", AGENTS, 1n) }, { to: NOMAD, data: erc("transfer", AGENTS, 1n) }]), SENDER, AGENTS)).toBe("paid"); // two sends in one
+    expect(classify(ops([{ to: USDG, data: erc("transfer", AGENTS, 0n) }]), SENDER, AGENTS)).toBe("paid"); // sends nothing
+    expect(classify(ops([{ to: AGENTS, data: "0x", value: 1n }, { to: AGENTS, data: "0x", value: 1n }]), SENDER, AGENTS)).toBe("paid"); // ETH twice
+    expect(classify(ops([{ to: AGENTS, data: "0x12", value: 1n }]), SENDER, AGENTS)).toBe("paid"); // ETH with a call
     expect(classify(ops([{ to: AGENTS, data: mint, value: 1n }]), SENDER, AGENTS)).toBe("paid"); // sends ETH
     expect(classify(ops([{ to: AGENTS, data: mint }]), SENDER, "")).toBe("paid"); // minting not open
     expect(classify("0xdeadbeef", SENDER, AGENTS)).toBe("paid");
@@ -74,7 +91,8 @@ describe("who pays", () => {
   });
 });
 
-const rpcOp = (callData: Hex): RpcUserOp => ({ ...vectorOp, factory: null, factoryData: null, callData });
+// A normal fee on Robinhood Chain: 0.02 gwei, at most 0.00001 gwei of tip.
+const rpcOp = (callData: Hex): RpcUserOp => ({ ...vectorOp, factory: null, factoryData: null, callData, maxFeePerGas: toHex(20_000_000n), maxPriorityFeePerGas: toHex(10_000n) });
 const NOW = new Date("2026-11-23T15:00:00Z");
 
 describe("signing", () => {
@@ -106,5 +124,23 @@ describe("signing", () => {
     await expect(sponsor({ ...base, paymaster: "" }, [free, ENTRY_POINT, 4663])).rejects.toBeInstanceOf(SponsorError);
     expect(() => stubData({ paymaster: "" }, [free, ENTRY_POINT, 4663])).toThrow(SponsorError);
     expect(stubData({ paymaster: PAYMASTER }, [free, ENTRY_POINT, 4663])).toMatchObject({ paymaster: PAYMASTER, isFinal: false });
+  });
+});
+
+describe("the fee a free operation may name", () => {
+  const op = rpcOp(ops([{ to: USDG, data: erc("transfer", TREASURY, 5_000_000n) }]));
+  it("is close to the chain's price and small in all", () => {
+    expect(freeGasOk(op, 10_000_000n)).toBe(true);
+    expect(freeGasOk({ ...op, maxFeePerGas: toHex(500_000_000n), maxPriorityFeePerGas: toHex(400_000_000n) }, 10_000_000n)).toBe(false); // 0.5 gwei when the chain asks 0.01
+    expect(freeGasOk({ ...op, maxPriorityFeePerGas: toHex(30_000_000n) }, 10_000_000n)).toBe(false); // tip above the fee
+    expect(freeGasOk({ ...op, callGasLimit: toHex(30_000_000n) }, 10_000_000n)).toBe(false); // over FREE_OP_MAX_WEI in all
+    expect(maxCostWei(op) <= FREE_OP_MAX_WEI).toBe(true);
+  });
+  it("past that, the operation is paid from credits, and the free operation is not used up", async () => {
+    let used = 0;
+    const greedy = { ...op, maxFeePerGas: toHex(500_000_000n), maxPriorityFeePerGas: toHex(400_000_000n) };
+    const r = await sponsor({ paymaster: PAYMASTER, agents: AGENTS, signer, useFreeOp: async () => (used++, true), hold: async () => true, gasPrice: async () => 10_000_000n, now: () => NOW }, [greedy, ENTRY_POINT, 4663]);
+    expect(r.paidBy).toBe("credits");
+    expect(used).toBe(0);
   });
 });

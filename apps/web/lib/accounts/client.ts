@@ -84,7 +84,7 @@ export async function accountClient(owner: ReturnType<typeof ownerFromProvider>,
 export async function send(client: Awaited<ReturnType<typeof accountClient>>, calls: Call[]): Promise<{ userOpHash: Hex; txHash: Hex }> {
   const userOpHash = await client.bundler.sendUserOperation({ calls: calls.map((c) => ({ to: c.to, data: c.data, value: c.value ?? 0n })) });
   const receipt = await client.bundler.waitForUserOperationReceipt({ hash: userOpHash, timeout: 120_000 });
-  if (!receipt.success) throw new Error("The transaction did not go through. Nothing was charged.");
+  if (!receipt.success) throw new Error("The transaction did not go through. Your funds did not move.");
   return { userOpHash, txHash: receipt.receipt.transactionHash };
 }
 
@@ -139,4 +139,76 @@ export function mintCalls(agents: Address, fee: bigint, name: string, packageHas
 
 export async function mintFee(agents: Address): Promise<bigint> {
   return (await publicClient.readContract({ address: agents, abi: AGENTS_ABI, functionName: "mintFee" })) as bigint;
+}
+
+/** Sending money out of the account: a token transfer, or plain ETH when `token` is "eth". */
+export function sendCalls(token: Address | "eth", to: Address, amount: bigint): Call[] {
+  if (token === "eth") return [{ to, data: "0x", value: amount }];
+  return [{ to: token, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [to, amount] }) }];
+}
+
+/** Selling a token for USDG through Stoa, paid out to the account itself. */
+export const sellCalls = async (token: Address, amount: bigint, account: Address) => stoaQuote(token, USDG, amount, account);
+
+export type Holding = { token: Address | "eth"; symbol: string; decimals: number; amount: bigint };
+
+const KNOWN = (a: Address) => `nomad:tokens:${a.toLowerCase()}`;
+/** Remembers tokens that came into the account (from an agent's wallet), so they show even if the explorer is slow. */
+export function rememberTokens(account: Address, tokens: Address[]) {
+  try {
+    const list = new Set<string>(JSON.parse(localStorage.getItem(KNOWN(account)) ?? "[]"));
+    tokens.forEach((t) => list.add(t.toLowerCase()));
+    localStorage.setItem(KNOWN(account), JSON.stringify([...list].slice(0, 50)));
+  } catch {
+    /* storage is optional */
+  }
+}
+
+const cleanSymbol = (s: unknown) => String(s ?? "?").replace(/[^\p{L}\p{N}$._-]/gu, "").slice(0, 12) || "?";
+
+/**
+ * Everything in the account besides $NOMAD and USDG: ETH, tokens the explorer lists, and tokens remembered here.
+ * Balances are read from the chain itself; the explorer is only used to find which tokens to look at.
+ */
+export async function otherHoldings(account: Address): Promise<Holding[]> {
+  const found = new Set<string>();
+  try {
+    const raw = JSON.parse(localStorage.getItem(KNOWN(account)) ?? "[]") as string[];
+    raw.forEach((t) => /^0x[0-9a-fA-F]{40}$/.test(t) && found.add(t.toLowerCase()));
+  } catch {
+    /* none remembered */
+  }
+  try {
+    const r = await fetch(`https://robinhoodchain.blockscout.com/api/v2/addresses/${account}/token-balances`, { signal: AbortSignal.timeout(8_000) });
+    if (r.ok) {
+      const list = (await r.json()) as { token?: { address?: string; address_hash?: string; type?: string } }[];
+      for (const x of list.slice(0, 50)) {
+        const a = x.token?.address_hash ?? x.token?.address;
+        if (a && /^0x[0-9a-fA-F]{40}$/.test(a) && (x.token?.type ?? "ERC-20") === "ERC-20") found.add(a.toLowerCase());
+      }
+    }
+  } catch {
+    /* the remembered list still shows */
+  }
+  found.delete(NOMAD.toLowerCase());
+  found.delete(USDG.toLowerCase());
+  const out: Holding[] = [];
+  const eth = await publicClient.getBalance({ address: account }).catch(() => 0n);
+  if (eth > 0n) out.push({ token: "eth", symbol: "ETH", decimals: 18, amount: eth });
+  await Promise.all(
+    [...found].map(async (t) => {
+      const token = t as Address;
+      try {
+        const [amount, symbol, decimals] = await Promise.all([
+          publicClient.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [account] }),
+          publicClient.readContract({ address: token, abi: erc20Abi, functionName: "symbol" }).catch(() => "?"),
+          publicClient.readContract({ address: token, abi: erc20Abi, functionName: "decimals" })
+        ]);
+        if (amount > 0n) out.push({ token, symbol: cleanSymbol(symbol), decimals: Number(decimals), amount });
+      } catch {
+        /* not a readable token */
+      }
+    })
+  );
+  return out;
 }

@@ -34,8 +34,10 @@ import {
   stoaQuote,
   topUpNomadCalls,
   topUpUsdgCalls,
-  type Call
+  type Call,
+  type Holding
 } from "@/lib/accounts/client";
+import { OtherTokens, otherHoldings, SendSheet } from "./Wallet";
 
 import type { Client, Confirm } from "./types";
 
@@ -150,7 +152,11 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
   const [credits, setCredits] = useState<string | null>(null);
   const [price, setPrice] = useState<number | null>(null); // dollars per 1 $NOMAD
   const [view, setView] = useState<"home" | "create">("home");
-  const [sheet, setSheet] = useState<"funds" | "credits" | "buy" | null>(null);
+  const [sheet, setSheet] = useState<"funds" | "credits" | "buy" | "send" | "key" | null>(null);
+  const [others, setOthers] = useState<Holding[]>([]);
+  const [sendStart, setSendStart] = useState<Holding["token"] | undefined>(undefined);
+  const [agentWallets, setAgentWallets] = useState<Address[]>([]);
+  const { exportWallet } = usePrivy();
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [mintingOpen, setMintingOpen] = useState(false);
   const [version, setVersion] = useState(0);
@@ -179,7 +185,10 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
           setCredits(r.ok ? j.availableUsd : null);
           if (r.ok) writeSnapshot({ credits: j.availableUsd });
         })
-        .catch(() => setCredits(null))
+        .catch(() => setCredits(null)),
+      otherHoldings(address)
+        .then(setOthers)
+        .catch(() => undefined)
     ]);
   }, [address]);
 
@@ -235,6 +244,18 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
               <button type="button" className="acct-lime" onClick={() => setSheet("buy")}>Get $NOMAD</button>
               <button type="button" className="acct-outline-dark" onClick={() => setSheet("funds")}>Add funds</button>
             </div>
+            <div className="acct-row">
+              <button
+                type="button"
+                className="acct-outline-dark"
+                onClick={() => {
+                  setSendStart(undefined);
+                  setSheet("send");
+                }}
+              >
+                Send
+              </button>
+            </div>
           </section>
           <p className="acct-small" style={{ textAlign: "center" }}>Agents on Nomad are created and paid for with $NOMAD.</p>
 
@@ -247,7 +268,17 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
             </button>
           </section>
 
-          <MyAgents client={client} onConfirm={setConfirm} version={version} />
+          <MyAgents client={client} onConfirm={setConfirm} version={version} onAgents={setAgentWallets} />
+
+          <OtherTokens
+            holdings={others}
+            account={address}
+            onConfirm={setConfirm}
+            onSend={(h) => {
+              setSendStart(h.token);
+              setSheet("send");
+            }}
+          />
 
           <section className="acct-card">
             <div className="acct-between">
@@ -257,6 +288,12 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
             <p className="acct-body">Credits pay for your agents&apos; thinking and their network fees.</p>
             <button type="button" className="acct-secondary" onClick={() => setSheet("credits")}>Add credits</button>
           </section>
+
+          <section className="acct-card">
+            <h2 className="acct-h3">Your account</h2>
+            <p className="acct-body">Only you control it, through the key Privy keeps for your Google sign-in. Nomad cannot take your funds: its runner can only trade inside your agents&apos; wallets, within their limits.</p>
+            <button type="button" className="acct-secondary" onClick={() => setSheet("key")}>Back up your key</button>
+          </section>
         </div>
       )}
 
@@ -265,7 +302,46 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
           <p className="acct-body">Send $NOMAD or USDG on Robinhood Chain to your account:</p>
           <code className="acct-address">{address}</code>
           <button type="button" className="acct-secondary" onClick={() => navigator.clipboard?.writeText(address)}>Copy address</button>
-          <p className="acct-small">Only Robinhood Chain. Other networks or tokens sent here may be lost.</p>
+          <p className="acct-small">Send on Robinhood Chain only. Funds sent from another network may be lost.</p>
+        </Sheet>
+      )}
+
+      {sheet === "send" && (
+        <SendSheet
+          account={address}
+          holdings={[
+            { token: USDG, symbol: "USDG", decimals: 6, amount: bal?.usdg ?? 0n },
+            { token: NOMAD, symbol: "$NOMAD", decimals: 18, amount: bal?.nomad ?? 0n },
+            ...others
+          ]}
+          start={sendStart}
+          agentWallets={agentWallets}
+          onClose={() => setSheet(null)}
+          onConfirm={(c) => {
+            setSheet(null);
+            setConfirm(c);
+          }}
+        />
+      )}
+
+      {sheet === "key" && (
+        <Sheet title="Back up your key" onClose={() => setSheet(null)}>
+          <p className="acct-body">
+            Your Nomad account ({address.slice(0, 6)}...{address.slice(-4)}) is a smart account on Robinhood Chain, owned by one key. Privy keeps that key for your Google sign-in, so you
+            normally never need it.
+          </p>
+          <p className="acct-body">A copy lets you control the account without this site. Anyone who sees it can take everything in the account and its agents.</p>
+          <p className="acct-warn">Never paste it into a website or send it to anyone. Nomad will never ask for it.</p>
+          <button
+            type="button"
+            className="acct-primary"
+            onClick={() => {
+              setSheet(null);
+              exportWallet({ address: client.signer }).catch((e: unknown) => alertSoft(e));
+            }}
+          >
+            Show my key (in Privy)
+          </button>
         </Sheet>
       )}
 
@@ -524,6 +600,7 @@ function AddCredits({ bal, address, onClose, onConfirm }: { bal: { nomad: bigint
     setBusy(true);
     try {
       const nomad = await nomadForUsd(dollars);
+      if (!bal || bal.nomad < nomad) throw new Error(`That needs about ${fmtNomad(nomad)} $NOMAD; you have ${fmtNomad(bal?.nomad ?? 0n)}. Get $NOMAD first, or pay with USDG.`);
       onConfirm({
         title: "Add credits with $NOMAD",
         amount: `-${fmtNomad(nomad)} $NOMAD`,
@@ -591,7 +668,7 @@ function Approve({ client, confirm, onClose, onHome }: { client: Client; confirm
       setMessage(extra || confirm.done.body);
       setState("done");
     } catch (e) {
-      setMessage((e as Error).message?.slice(0, 200) || "It did not go through. Nothing was charged.");
+      setMessage((e as Error).message?.slice(0, 200) || "It did not go through. Your funds did not move.");
       setState("error");
     }
   };

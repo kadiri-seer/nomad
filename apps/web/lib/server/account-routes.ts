@@ -22,6 +22,19 @@ export const json = (body: unknown, status = 200) => NextResponse.json(body, { s
 const chain = { id: CHAIN_ID, name: "Robinhood Chain", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [PUBLIC_RPC] } } } as const;
 const publicClient = () => createPublicClient({ chain, transport: http(PUBLIC_RPC, { timeout: 15_000 }) });
 
+let gasCache: { at: number; wei: bigint } | null = null;
+/** The chain's gas price, read at most every 30 seconds. */
+async function gasPrice(): Promise<bigint | null> {
+  if (gasCache && Date.now() - gasCache.at < 30_000) return gasCache.wei;
+  try {
+    const wei = await publicClient().getGasPrice();
+    gasCache = { at: Date.now(), wei };
+    return wei;
+  } catch {
+    return gasCache?.wei ?? null;
+  }
+}
+
 let priceCache: { at: number; usd: number } | null = null;
 /** ETH's price in dollars: Robinhood Chain's explorer, then Coinbase; cached for five minutes. */
 export async function ethUsd(): Promise<number> {
@@ -100,6 +113,7 @@ export function sponsorDeps(user: string | null = null): { sponsor: SponsorDeps;
       agents: (AGENTS_CONTRACT ?? "") as Address | "",
       signer: privateKeyToAccount(key as Hex),
       useFreeOp: (account, day) => useFreeOpFor(redis, { account, user }, day),
+      gasPrice,
       hold: (account, wei, hash, until) => hold(credits, account, wei, hash, until),
       agentByAccount: (account) => agentStore(redis).byAccount(account)
     }

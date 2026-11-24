@@ -98,7 +98,21 @@ export function maxCostWei(op: RpcUserOp): bigint {
   return gas * hexToBigInt(op.maxFeePerGas);
 }
 
-export type Kind = "topup" | "buy-nomad" | "mint" | "withdraw" | "fund-agent" | "paid";
+export type Kind = "topup" | "buy-nomad" | "mint" | "send" | "sell" | "withdraw" | "fund-agent" | "paid";
+
+/**
+ * Free operations are paid from the paymaster's deposit at whatever fee the operation names, so the treasury pays
+ * only for a sensible one: at most FREE_OP_MAX_WEI in all, and a fee per gas close to the chain's current price
+ * (otherwise someone could name a huge fee, send the operation themselves and keep the difference).
+ */
+export const FREE_OP_MAX_WEI = 300_000_000_000_000n; // 0.0003 ETH
+export function freeGasOk(op: RpcUserOp, gasPriceWei: bigint | null): boolean {
+  const maxFee = hexToBigInt(op.maxFeePerGas);
+  const tip = hexToBigInt(op.maxPriorityFeePerGas);
+  if (tip > maxFee || maxCostWei(op) > FREE_OP_MAX_WEI) return false;
+  if (gasPriceWei === null) return true;
+  return maxFee <= gasPriceWei * 3n + 10_000_000n; // three times the price, plus 0.01 gwei
+}
 
 /** A $NOMAD top-up swap must pay the treasury at least this (90% of the 1 USDG minimum, for the price moving). */
 const MIN_TOPUP_SWAP_OUT = (MIN_TOPUP_USDG * 9n) / 10n;
@@ -107,9 +121,14 @@ const MIN_TOPUP_SWAP_OUT = (MIN_TOPUP_USDG * 9n) / 10n;
  * What an operation does, from its calls. The treasury pays only when every call is part of one of these, exactly:
  *   topup:     USDG sent to the treasury (at least MIN_TOPUP_USDG), or a Stoa swap paying out to the treasury;
  *   buy-nomad: a Stoa swap of at least 1 USDG to $NOMAD (with its USDG approval), or any amount alongside a mint;
- *   mint:      minting a Nomad agent (with its $NOMAD approval to the agents contract).
+ *   mint:      minting a Nomad agent (with its $NOMAD approval to the agents contract);
+ *   send:      one token transfer, or one plain ETH transfer, to any address (taking money out of Nomad);
+ *   sell:      a Stoa swap of any token to USDG, paid out to the account itself (with its approval).
  * Anything else, or any mix with anything else, is paid from credits.
  */
+/** A free send goes somewhere else: not back to the account itself, and not to the treasury (that is Add credits). */
+const sendable = (to: Address, amount: bigint, sender: Address) => amount > 0n && lc(to) !== lc(sender) && lc(to) !== lc(TREASURY);
+
 export function classify(callData: Hex, sender: Address, agents: Address | ""): Kind {
   let calls: readonly { to: Address; data?: Hex; value?: bigint }[];
   try {
@@ -120,6 +139,8 @@ export function classify(callData: Hex, sender: Address, agents: Address | ""): 
   if (!calls.length) return "paid";
   // "small-buy" is a USDG to $NOMAD swap under 1 USDG: free only as the top-up inside a mint.
   const kinds = new Set<Kind | "small-buy">();
+  // A plain ETH transfer: one call, no data.
+  if (calls.length === 1 && (!calls[0].data || calls[0].data === "0x")) return sendable(calls[0].to, calls[0].value ?? 0n, sender) ? "send" : "paid";
   for (const c of calls) {
     if ((c.value ?? 0n) !== 0n) return "paid";
     const to = lc(c.to);
@@ -132,6 +153,7 @@ export function classify(callData: Hex, sender: Address, agents: Address | ""): 
         return "paid";
       }
       if (d.functionName === "transfer" && to === lc(USDG) && lc(d.args[0] as string) === lc(TREASURY) && (d.args[1] as bigint) >= MIN_TOPUP_USDG) kinds.add("topup");
+      else if (d.functionName === "transfer" && sendable(d.args[0] as Address, d.args[1] as bigint, sender) && calls.length === 1) kinds.add("send");
       else if (d.functionName === "approve" && lc(d.args[0] as string) === lc(STOA_ROUTER)) continue;
       else if (d.functionName === "approve" && to === lc(NOMAD) && agents && lc(d.args[0] as string) === lc(agents)) continue;
       else return "paid";
@@ -140,6 +162,7 @@ export function classify(callData: Hex, sender: Address, agents: Address | ""): 
       if (!swap) return "paid";
       if (lc(swap.to) === lc(TREASURY) && lc(swap.tokenOut) === lc(USDG) && swap.minOut >= MIN_TOPUP_SWAP_OUT) kinds.add("topup");
       else if (lc(swap.to) === lc(sender) && lc(swap.tokenIn) === lc(USDG) && lc(swap.tokenOut) === lc(NOMAD)) kinds.add(swap.amountIn >= MIN_TOPUP_USDG ? "buy-nomad" : "small-buy");
+      else if (lc(swap.to) === lc(sender) && lc(swap.tokenOut) === lc(USDG) && lc(swap.tokenIn) !== lc(USDG) && swap.amountIn > 0n) kinds.add("sell");
       else return "paid";
     } else if (agents && to === lc(agents)) {
       try {
@@ -149,7 +172,16 @@ export function classify(callData: Hex, sender: Address, agents: Address | ""): 
       }
       kinds.add("mint");
     } else {
-      return "paid";
+      // Any other token: only its approval to Stoa (for a sale) or a single transfer out.
+      let d;
+      try {
+        d = decodeFunctionData({ abi: erc20Abi, data });
+      } catch {
+        return "paid";
+      }
+      if (d.functionName === "approve" && lc(d.args[0] as string) === lc(STOA_ROUTER)) continue;
+      if (d.functionName === "transfer" && sendable(d.args[0] as Address, d.args[1] as bigint, sender) && calls.length === 1) kinds.add("send");
+      else return "paid";
     }
   }
   // Approvals alone, or more than one purpose in one operation, are not free.
@@ -245,6 +277,8 @@ export type SponsorDeps = {
    * (to settle at the real cost once it lands, or release once it expires); false when the credits do not cover it.
    */
   hold: (account: Address, maxCostWei: bigint, userOpHash: Hex, validUntil: number) => Promise<boolean>;
+  /** The chain's gas price now, in wei, to check the fee a free operation names; null when it cannot be read. */
+  gasPrice?: () => Promise<bigint | null>;
   /** Agent wallets and whose account pays for them (agent operations are charged to the creator's credits). */
   agentByAccount?: (account: Address) => Promise<{ owner: Address } | null>;
   now?: () => Date;
@@ -306,7 +340,7 @@ export async function sponsor(deps: SponsorDeps, params: unknown[]) {
   let kind = classify(op.callData, op.sender, deps.agents);
   if (kind === "paid" && deps.agentByAccount) kind = await classifyAgentMove(op.callData, op.sender, agent, deps.agentByAccount);
   let paidBy: "treasury" | "credits" = "credits";
-  if (kind !== "paid" && (await deps.useFreeOp(payer, now.toISOString().slice(0, 10)))) paidBy = "treasury";
+  if (kind !== "paid" && freeGasOk(op, deps.gasPrice ? await deps.gasPrice().catch(() => null) : null) && (await deps.useFreeOp(payer, now.toISOString().slice(0, 10)))) paidBy = "treasury";
   const hash = paymasterHash(op, deps.paymaster, validUntil, 0);
   const signature = await deps.signer.signMessage({ message: { raw: hash } });
   const window = encodeAbiParameters([{ type: "uint48" }, { type: "uint48" }], [validUntil, 0]);

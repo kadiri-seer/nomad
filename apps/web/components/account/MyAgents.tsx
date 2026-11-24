@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { encodeFunctionData, erc20Abi, parseUnits, type Address, type Hex } from "viem";
 import { USDG } from "@/lib/accounts/chain";
-import { accountClient, fmtUsdg, publicClient, type Call } from "@/lib/accounts/client";
+import { accountClient, fmtUsdg, publicClient, rememberTokens, type Call } from "@/lib/accounts/client";
 import { ownerActionMessage, RUN_EVERY_HOURS, type Move, type Position } from "@/lib/agents/shared";
 import { Sheet } from "./Sheet";
 import { writeSnapshot } from "./snapshot";
@@ -34,7 +34,7 @@ const ago = (t: number) => {
 const erc20Balance = (token: Address, holder: Address) => publicClient.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [holder] });
 const transfer = (token: Address, to: Address, amount: bigint): Call => ({ to: token, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [to, amount] }) });
 
-export function MyAgents({ client, onConfirm, version }: { client: Client; onConfirm: (c: Confirm) => void; version: number }) {
+export function MyAgents({ client, onConfirm, version, onAgents }: { client: Client; onConfirm: (c: Confirm) => void; version: number; onAgents?: (wallets: Address[]) => void }) {
   const owner = client.account.address as Address;
   const [agents, setAgents] = useState<AgentView[] | null>(null);
   const [open, setOpen] = useState<AgentView | null>(null);
@@ -43,10 +43,12 @@ export function MyAgents({ client, onConfirm, version }: { client: Client; onCon
       const r = await fetch(`/api/agents/mine?owner=${owner}`, { cache: "no-store" });
       const j = await r.json();
       setAgents(r.ok ? j.agents : []);
+      if (r.ok) onAgents?.((j.agents as AgentView[]).map((a) => a.account));
       if (r.ok) writeSnapshot({ agents: (j.agents as AgentView[]).map((a) => ({ name: a.name, status: a.status })) });
     } catch {
       setAgents([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [owner]);
   useEffect(() => {
     load();
@@ -127,7 +129,7 @@ function AgentSheet({ client, agent, onClose, onConfirm, onChanged }: { client: 
     }
   };
 
-  const doFund = () => {
+  const doFund = async () => {
     let amount: bigint;
     try {
       amount = parseUnits(fund || "0", 6);
@@ -136,6 +138,8 @@ function AgentSheet({ client, agent, onClose, onConfirm, onChanged }: { client: 
     }
     if (amount <= 0n) return fail(new Error("Enter an amount in USDG."));
     if (amount < 100_000n) return fail(new Error("Fund at least 0.10 USDG."));
+    const have = await erc20Balance(USDG, main).catch(() => null);
+    if (have !== null && have < amount) return fail(new Error(`Your account has ${fmtUsdg(have)} USDG. Add funds first, or fund a smaller amount.`));
     onConfirm({
       title: `Fund ${agent.name}`,
       amount: `-${fmtUsdg(amount)} USDG`,
@@ -170,8 +174,12 @@ function AgentSheet({ client, agent, onClose, onConfirm, onChanged }: { client: 
         amountNote: "back to your account",
         rows: [...tokens.filter((t) => t.token !== USDG).map((t) => ["Also", t.symbol] as [string, string]), ["To", "Your account"], ["Network fee", "Included"]],
         note: agent.status === "active" ? "Pause the agent too if you do not want it to trade when it is funded again." : undefined,
-        build: async () => tokens.map((t) => transfer(t.token, main, t.amount)),
-        done: { title: "Withdrawn", body: "Everything in the agent's wallet is back in your account." }
+        build: async () => {
+          // The tokens show in the account's Other tokens, where they can be sold for USDG or sent.
+          rememberTokens(main, tokens.filter((t) => t.token !== USDG).map((t) => t.token));
+          return tokens.map((t) => transfer(t.token, main, t.amount));
+        },
+        done: { title: "Withdrawn", body: "Everything in the agent's wallet is back in your account. Tokens other than USDG are under Other tokens, where you can sell or send them." }
       });
     } catch (e) {
       fail(e);
