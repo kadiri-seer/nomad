@@ -10,7 +10,7 @@ import { agentSender, expectedAgentWallet, mainAccountOf, serverClient } from ".
 import { gemini } from "./gemini";
 import { toolKit } from "./agent-tools";
 import { veninCheck } from "./venin-check";
-import { oddsEngine } from "./oddsengine";
+import { ODDSENGINE_DAILY_CAP, oddsEngine, type OddsVerdict } from "./oddsengine";
 import { rushrSafety } from "./rushr";
 import { idlex } from "./idlex";
 import { idlexPayer, runnerSecret, sessionSigner } from "./runner-keys";
@@ -30,6 +30,18 @@ export function agentEnv() {
   const bundlerUrl = process.env.ALCHEMY_RPC_URL?.trim() ?? "";
   if (!redis || !secret || typeof sp === "string" || !bundlerUrl) return null;
   return { redis, secret, sponsor: sp.sponsor, credits: sp.credits, bundlerUrl, store: agentStore(redis) };
+}
+
+/** OddsEngine for agents, within a daily number of scans for all agents together, so Nomad's balance is never run down. */
+export function cappedOddsEngine(store: { count(key: string, ttlSeconds: number): Promise<number> }, oe: { name: string; scanToken(t: Address): Promise<OddsVerdict | null> }, cap = Number(process.env.ODDSENGINE_DAILY_CAP) || ODDSENGINE_DAILY_CAP) {
+  return {
+    name: oe.name,
+    async scanToken(token: Address): Promise<OddsVerdict | null> {
+      const n = await store.count(`odds-scans:${new Date().toISOString().slice(0, 10)}`, 2 * 86400);
+      if (n > cap) return { warn: false, summary: "daily limit reached", skipped: true };
+      return oe.scanToken(token);
+    }
+  };
 }
 
 export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = () => Date.now()): RunnerDeps {
@@ -54,7 +66,7 @@ export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = 
     // Each research question gets its own tool kit, so its sources are only the services that answered it.
     ai: g ? { name: g.name, ask: g.ask, ...(toolsOn ? { withTools: (prompt: string, system: string) => g.withTools(prompt, system, toolKit({ cache: env.store })) } : {}) } : null,
     venin: (path, text) => veninCheck(path, text),
-    ...(process.env.ODDSENGINE_API_KEY?.trim() ? { oddsEngine: oddsEngine(process.env.ODDSENGINE_API_KEY.trim()) } : {}),
+    ...(process.env.ODDSENGINE_API_KEY?.trim() ? { oddsEngine: cappedOddsEngine(env.store, oddsEngine(process.env.ODDSENGINE_API_KEY.trim())) } : {}),
     idlex: idlexOn ? idlex(idlexPayer(env.secret)) : null
   };
 }

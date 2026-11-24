@@ -7,7 +7,10 @@ import { agentEnv } from "@/lib/server/agent-api";
 import { gemini } from "@/lib/server/gemini";
 import { idlexPayer } from "@/lib/server/runner-keys";
 import { privyKeysReady } from "@/lib/server/privy-auth";
-import { agentHealth, researchCheck } from "@/lib/server/agent-health";
+import { agentHealth, oddsCheck, researchCheck } from "@/lib/server/agent-health";
+import { buildCandidates } from "@/lib/server/runner";
+import { stoa } from "@/lib/server/stoa";
+import { rushrSafety } from "@/lib/server/rushr";
 import { toolKit } from "@/lib/server/agent-tools";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +19,14 @@ export const maxDuration = 120;
 export async function GET(req: Request) {
   // ?check=1: the live check of everything agents depend on (cached for ten minutes).
   const check = new URL(req.url).searchParams.get("check");
+  if (check === "odds") {
+    const env = agentEnv();
+    if (!env) return json({ ready: false });
+    // The same candidates the runner uses (with Rushr's verdicts), so this never caches a list without them.
+    const candidates = await buildCandidates(stoa(), env.store, (a) => rushrSafety(a)).catch(() => []);
+    const token = (candidates.find((c) => c.passes) ?? candidates[0])?.address ?? null;
+    return json(await oddsCheck(env.store, token));
+  }
   if (check === "research") {
     const env = agentEnv();
     if (!env) return json({ ready: false });

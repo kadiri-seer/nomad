@@ -7,7 +7,11 @@
 import { mcpClient, type McpTool } from "./mcp";
 
 export const ODDSENGINE_MCP = "https://api.oddsengine.live/mcp";
-export type OddsVerdict = { warn: boolean; summary: string };
+/** `skipped`: not scanned because the agents' daily OddsEngine limit was reached (not a warning, not charged). */
+export type OddsVerdict = { warn: boolean; summary: string; skipped?: boolean };
+
+/** At most this many OddsEngine scans a UTC day for all of Nomad's agents together (ODDSENGINE_DAILY_CAP). */
+export const ODDSENGINE_DAILY_CAP = 150;
 
 /** OddsEngine's words for a token it would warn about. */
 const WARN = /\b(honeypot|scam|rug|malicious|drainer|blacklist|danger(ous)?|critical|high[ _-]?risk|do not (buy|trade)|avoid|blocked|unsafe)\b/i;
@@ -61,17 +65,22 @@ export function oddsEngine(apiKey: string, opts: { fetchImpl?: typeof fetch } = 
   let tool: Promise<McpTool | undefined> | null = null;
   return {
     name: "OddsEngine",
-    /** OddsEngine's verdict on a token, or null when it did not answer. */
-    async scanToken(token: string): Promise<OddsVerdict | null> {
+    /** The scan with what was sent and OddsEngine's answer as it came, for the live check. */
+    async scanRaw(token: string): Promise<{ args: Record<string, unknown> | null; raw: string | null; verdict: OddsVerdict | null; error?: string }> {
       try {
         tool ??= c.listTools().then((t) => t.find((x) => x.name === "scan_token"));
         const args = scanArgs(await tool, token);
-        if (!args) return null;
-        return readVerdict(await c.call("scan_token", args));
-      } catch {
+        if (!args) return { args: null, raw: null, verdict: null, error: "scan_token's inputs were not recognised" };
+        const raw = await c.call("scan_token", args);
+        return { args, raw, verdict: readVerdict(raw) };
+      } catch (e) {
         tool = null;
-        return null;
+        return { args: null, raw: null, verdict: null, error: String((e as Error).message ?? e).slice(0, 200) };
       }
+    },
+    /** OddsEngine's verdict on a token, or null when it did not answer. */
+    async scanToken(token: string): Promise<OddsVerdict | null> {
+      return (await this.scanRaw(token)).verdict;
     }
   };
 }

@@ -48,6 +48,24 @@ export async function researchCheck(cache: Cache, kit: () => import("./agent-too
   return out;
 }
 
+/**
+ * One real OddsEngine scan of a token agents are looking at, showing what was sent, the start of OddsEngine's answer,
+ * and how Nomad read it. At most once an hour; counted in the agents' daily OddsEngine limit. Never shows the key.
+ */
+export async function oddsCheck(cache: Cache & { count(k: string, ttl: number): Promise<number> }, token: string | null) {
+  const hit = await cache.cacheGet<Record<string, unknown>>("agents-odds-check");
+  if (hit) return hit;
+  const key = process.env.ODDSENGINE_API_KEY?.trim();
+  if (!key) return { keySet: false };
+  if (!token) return { keySet: true, ok: false, detail: "no token to scan yet" };
+  await cache.count(`odds-scans:${new Date().toISOString().slice(0, 10)}`, 2 * 86400);
+  const { oddsEngine } = await import("./oddsengine");
+  const r = await oddsEngine(key).scanRaw(token);
+  const out = { keySet: true, ok: !!r.verdict, checkedAt: new Date().toISOString(), token, sent: r.args, answer: r.raw?.slice(0, 900) ?? null, readAs: r.verdict, error: r.error ?? null };
+  await cache.cacheSet("agents-odds-check", out, 3600);
+  return out;
+}
+
 /** Notes that the schedule ran, for the check above. */
 export async function noteRun(cache: Cache, by: "vercel" | "github") {
   await cache.cacheSet("agents-last-run", { at: new Date().toISOString(), by }, 7 * 86400).catch(() => undefined);

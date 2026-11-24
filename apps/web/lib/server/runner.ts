@@ -267,11 +267,14 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
       let v = await d.store.cacheGet<OddsVerdict>(key);
       if (!v) {
         v = await d.oddsEngine.scanToken(c.address).catch(() => null);
-        if (v) await d.store.cacheSet(key, v, 3600);
+        if (v && !v.skipped) await d.store.cacheSet(key, v, 3600);
       }
-      if (v) await d.credits.charge(agent.owner, ODDSENGINE_CHECK_CHARGE_MICROS);
-      if (v?.warn) return note(`Skipped ${cleanSymbol(c.symbol)}: OddsEngine warned about it (${v.summary}). Checked by OddsEngine.`);
-      checked = v ? " Checked by OddsEngine." : " OddsEngine did not answer, so it went on the other checks.";
+      if (v?.skipped) checked = " OddsEngine's daily limit for Nomad's agents was reached, so it went on the other checks.";
+      else {
+        if (v) await d.credits.charge(agent.owner, ODDSENGINE_CHECK_CHARGE_MICROS);
+        if (v?.warn) return note(`Skipped ${cleanSymbol(c.symbol)}: OddsEngine warned about it (${v.summary}). Checked by OddsEngine.`);
+        checked = v ? " Checked by OddsEngine." : " OddsEngine did not answer, so it went on the other checks.";
+      }
     }
     const q = await d.quote(USDG, c.address, per, agent.account);
     if (q.priceImpactPct > MAX_PRICE_IMPACT_PCT) return note(`Skipped ${cleanSymbol(c.symbol)}: the price impact would be ${q.priceImpactPct.toFixed(1)}%.`);

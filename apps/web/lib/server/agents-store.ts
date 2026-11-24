@@ -86,6 +86,12 @@ export function agentStore(redis: RedisLike) {
     async unlock(name: string) {
       await redis.cmd(["DEL", `nomad:lock:${name}`]);
     },
+    /** Adds one to a counter that expires, and returns its new value. */
+    async count(key: string, ttlSeconds: number): Promise<number> {
+      const n = Number(await redis.cmd(["INCR", `nomad:count:${key}`]));
+      if (n === 1) await redis.cmd(["EXPIRE", `nomad:count:${key}`, ttlSeconds]);
+      return n;
+    },
     async cacheGet<T>(key: string): Promise<T | null> {
       const raw = await redis.cmd(["GET", `nomad:cache:${key}`]);
       return typeof raw === "string" ? (JSON.parse(raw) as T) : null;

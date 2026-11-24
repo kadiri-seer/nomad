@@ -7,6 +7,7 @@ import { agentPackage, ownerActionMessage, validLimits, type AgentRecord } from 
 import { SESSION_FUNCTIONS } from "../../apps/web/lib/agents/wallet";
 import { agentStore } from "../../apps/web/lib/server/agents-store";
 import { gemini } from "../../apps/web/lib/server/gemini";
+import { cappedOddsEngine } from "../../apps/web/lib/server/agent-api";
 import { verifyGithubToken } from "../../apps/web/lib/server/github-oidc";
 import { idlexPayer, runnerSecret, sessionKey, sessionSigner } from "../../apps/web/lib/server/runner-keys";
 import { buildCandidates, cleanSymbol, parseDecision, passesChecks, reportOf, runAgent, splitNote, swapCalls, tick, type Candidate, type RunnerDeps } from "../../apps/web/lib/server/runner";
@@ -550,5 +551,20 @@ describe("second safety checks: Rushr and OddsEngine", () => {
     const down = harness({ oddsEngine: { name: "OddsEngine", scanToken: async () => null } });
     expect((await runAgent(down.d, agent()))[0]).toMatch(/^Bought HOOKR.*OddsEngine did not answer/);
     expect(down.charges).toEqual([]);
+  });
+});
+
+describe("OddsEngine's daily limit", () => {
+  it("stops scanning past the limit for all agents together, without charging or warning", async () => {
+    const store = agentStore(new MemoryRedis());
+    let scans = 0;
+    const capped = cappedOddsEngine(store, { name: "OddsEngine", scanToken: async () => (scans++, { warn: false, summary: "ok" }) }, 2);
+    expect((await capped.scanToken(TOKEN))?.skipped).toBeUndefined();
+    await capped.scanToken(TOKEN);
+    expect(await capped.scanToken(TOKEN)).toEqual({ warn: false, summary: "daily limit reached", skipped: true });
+    expect(scans).toBe(2);
+    const h = harness({ oddsEngine: { name: "OddsEngine", scanToken: async () => ({ warn: false, summary: "daily limit reached", skipped: true }) } });
+    expect((await runAgent(h.d, agent()))[0]).toMatch(/^Bought HOOKR.*OddsEngine's daily limit for Nomad's agents was reached/);
+    expect(h.charges).toEqual([]);
   });
 });
