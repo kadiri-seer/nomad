@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { InstallNomad } from "@/components/InstallNomad";
 
-export const metadata = { title: "Getting started", description: "Install Nomad, find your agents and run your first previewed migration." };
+export const metadata = { title: "Getting started", description: "Install Nomad with one line, find your agents and run your first previewed move." };
 
 export default function Docs() {
   return (
@@ -8,19 +9,24 @@ export default function Docs() {
       <p className="label">Documentation</p>
       <h1>Getting started</h1>
       <p>
-        Nomad runs on your own machine. It needs Node.js 22 or newer and reads agents from the folders their platforms already use, such as <code>~/.openclaw</code>, <code>~/.claude</code>, <code>~/.codex</code> and <code>~/.hermes</code>.
+        Nomad runs on your own computer and reads agents from the folders their platforms already use, such as <code>~/.openclaw</code>, <code>~/.claude</code>, <code>~/.codex</code> and <code>~/.hermes</code>.
       </p>
 
-      <h2>Start</h2>
-      <pre className="code">npx thenomad</pre>
+      <h2>Install in one line</h2>
+      <p>No Node.js, no admin rights and nothing else to set up first. Pick your system, paste the line, and Nomad installs like any other app.</p>
+      <InstallNomad />
       <p>
-        Nothing to install first. If you use Nomad often, install it once with <code>npm install -g thenomad</code> and type <code>nomad</code> instead. Nomad keeps its library, backups and receipts in <code>~/.nomad</code>. Set <code>NOMAD_HOME</code> to use another folder.
+        The installer checks the download against its published fingerprint, adds the <code>nomad</code> command and a Nomad app to your Start menu, Applications or apps menu, and leaves your agents untouched. Remove it any time with <code>nomad uninstall</code>. Nomad keeps its library, backups and receipts in <code>~/.nomad</code>; set <code>NOMAD_HOME</code> to use another folder.
       </p>
 
-      <h2>Open the dashboard</h2>
-      <pre className="code">npx thenomad ui</pre>
+      <h2>Open Nomad</h2>
       <p>
-        This opens the dashboard in your browser, served from <code>127.0.0.1</code> with a one time session token. Only your machine can reach it. Everything the command line does is available there, including the migration wizard.
+        Open Nomad from your apps, or type <code>nomad ui</code>. The dashboard runs in your browser from <code>127.0.0.1</code> with a one-time session token, so only your computer can reach it. Everything the command line does is there too, including the move wizard.
+      </p>
+
+      <h2>For developers</h2>
+      <p>
+        With Node.js 22 or newer you can skip the installer: <code>npx thenomad</code> runs it once, and <code>npm install -g thenomad</code> keeps the <code>nomad</code> command.
       </p>
 
       <h2>Your first move</h2>
