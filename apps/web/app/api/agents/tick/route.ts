@@ -7,6 +7,7 @@ import { agentEnv, runnerDeps } from "@/lib/server/agent-api";
 import { verifyGithubToken } from "@/lib/server/github-oidc";
 import { tick } from "@/lib/server/runner";
 import { noteRun } from "@/lib/server/agent-health";
+import { runFeeKeeper } from "@/lib/server/fee-keeper";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -27,5 +28,7 @@ export async function POST(req: Request) {
     return json({ ran: ran.length, agents: ran.map((r) => ({ id: r.id, moves: r.lines.length })) });
   } finally {
     await env.store.unlock("agent-tick");
+    // Keeps the agent fee at $5 (at most every 10 minutes); its own errors never stop the runner.
+    await runFeeKeeper(env.store, env.secret).catch(() => null);
   }
 }

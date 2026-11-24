@@ -16,3 +16,6 @@ export const sessionSigner = (secret: Hex, agentAccount: Address) => privateKeyT
 
 /** The wallet that pays Idlex; fund it with a few USDG. */
 export const idlexPayer = (secret: Hex) => privateKeyToAccount(keccak256(concat([secret, toHex("nomad-idlex-payer")])));
+
+/** The fee keeper's wallet: it deploys NomadFeeKeeper (its first and only deployment) and keeps the agent fee at $5. */
+export const feeKeeperSigner = (secret: Hex) => privateKeyToAccount(keccak256(concat([secret, toHex("nomad-fee-keeper")])));
