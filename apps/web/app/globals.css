@@ -2102,3 +2102,14 @@ html[data-theme="dark"] .acct-balance { background: #2a2925; color: #f3f2ee; }
 .yn-reply p { margin: 0 0 6px; }
 .yn-reply ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; color: var(--ink-2); }
 .yn-note { margin: 0; font-size: 0.85rem; color: var(--muted); }
+
+/* Selected text on the dark code blocks: the browser's default highlight is pale in light mode, which hid the
+   light text being copied. A lime highlight with dark text reads in both themes. */
+.install-cmd code::selection,
+.code::selection,
+.code *::selection,
+.diff-pre::selection,
+.diff-pre *::selection {
+  background: var(--lime);
+  color: #0e1013;
+}
