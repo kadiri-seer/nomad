@@ -53,7 +53,7 @@ export async function researchCheck(cache: Cache, kit: () => import("./agent-too
  * and how Nomad read it. At most once an hour; counted in the agents' daily OddsEngine limit. Never shows the key.
  */
 export async function oddsCheck(cache: Cache & { count(k: string, ttl: number): Promise<number> }, token: string | null) {
-  const hit = await cache.cacheGet<Record<string, unknown>>("agents-odds-check");
+  const hit = await cache.cacheGet<Record<string, unknown>>("agents-odds-check-2");
   if (hit) return hit;
   const key = process.env.ODDSENGINE_API_KEY?.trim();
   if (!key) return { keySet: false };
@@ -61,8 +61,26 @@ export async function oddsCheck(cache: Cache & { count(k: string, ttl: number): 
   await cache.count(`odds-scans:${new Date().toISOString().slice(0, 10)}`, 2 * 86400);
   const { oddsEngine } = await import("./oddsengine");
   const r = await oddsEngine(key).scanRaw(token);
-  const out = { keySet: true, ok: !!r.verdict, checkedAt: new Date().toISOString(), token, sent: r.args, answer: r.raw?.slice(0, 900) ?? null, readAs: r.verdict, error: r.error ?? null };
-  await cache.cacheSet("agents-odds-check", out, 3600);
+  // The answer's shape: its top-level fields, and every field whose name is about warnings or risk, in full.
+  let fields: string[] = [];
+  const warningFields: Record<string, unknown> = {};
+  try {
+    const walk = (o: unknown, path: string, depth: number) => {
+      if (!o || typeof o !== "object" || depth > 3) return;
+      for (const [k, v] of Object.entries(o as Record<string, unknown>)) {
+        const p = path ? `${path}.${k}` : k;
+        if (/warn|flag|alert|risk|danger|scam|honeypot|verdict|rating|score|safe|red/i.test(k)) warningFields[p] = typeof v === "string" ? v.slice(0, 200) : v;
+        else walk(v, p, depth + 1);
+      }
+    };
+    const parsed = JSON.parse(r.raw ?? "null");
+    fields = Object.keys(parsed ?? {});
+    walk(parsed, "", 0);
+  } catch {
+    /* not JSON */
+  }
+  const out = { keySet: true, ok: !!r.verdict, checkedAt: new Date().toISOString(), token, sent: r.args, fields, warningFields, answerChars: r.raw?.length ?? 0, answerEnd: r.raw?.slice(-700) ?? null, readAs: r.verdict, error: r.error ?? null };
+  await cache.cacheSet("agents-odds-check-2", out, 3600);
   return out;
 }
 
