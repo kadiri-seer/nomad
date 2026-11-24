@@ -61,7 +61,13 @@ async function main() {
   console.log(`New:  ${nomad(fee)} $NOMAD per agent ($${usd} at Stoa's price now)`);
   console.log(`      ${nomad(burned)} burned (about $${burnUsd}), ${nomad(fee - burned)} to the treasury (about $${usd - burnUsd})`);
   console.log(`Contract owner: ${owner}`);
-  if (dry) return console.log("\nDry run: nothing was sent.");
+  if (dry) {
+    console.log("\nTo set it from the owner's wallet instead, on Blockscout's Write tab, setMintFee:");
+    console.log(`  fee:     ${fee.toString()}`);
+    console.log(`  burnBps: ${burnBps.toString()}`);
+    console.log(`  https://robinhoodchain.blockscout.com/address/${AGENTS}?tab=write_contract`);
+    return console.log("\nDry run: nothing was sent.");
+  }
 
   const key = await ask("\nPaste the owner wallet's private key (hidden), then press Enter: ", true);
   let account;
