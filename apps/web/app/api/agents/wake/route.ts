@@ -9,6 +9,7 @@
 import { json } from "@/lib/server/account-routes";
 import { agentEnv, runnerDeps } from "@/lib/server/agent-api";
 import { tick } from "@/lib/server/runner";
+import { noteRun } from "@/lib/server/agent-health";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -22,6 +23,7 @@ async function wake(req: Request) {
   if (!(await env.store.lock("agent-wake", 600))) return json({ ran: 0, note: "Ran recently." });
   if (!(await env.store.lock("agent-tick", 290))) return json({ ran: 0, note: "Another run is in progress." });
   try {
+    await noteRun(env.store, "vercel");
     const ran = await tick(runnerDeps(env), 240_000);
     return json({ ran: ran.length });
   } finally {

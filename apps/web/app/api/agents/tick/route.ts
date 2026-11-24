@@ -6,6 +6,7 @@ import { json } from "@/lib/server/account-routes";
 import { agentEnv, runnerDeps } from "@/lib/server/agent-api";
 import { verifyGithubToken } from "@/lib/server/github-oidc";
 import { tick } from "@/lib/server/runner";
+import { noteRun } from "@/lib/server/agent-health";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -21,6 +22,7 @@ export async function POST(req: Request) {
   if (!env) return json({ ran: 0, note: "Agents are not switched on on this site yet." });
   if (!(await env.store.lock("agent-tick", 290))) return json({ ran: 0, note: "Another run is in progress." });
   try {
+    await noteRun(env.store, "github");
     const ran = await tick(runnerDeps(env), 240_000);
     return json({ ran: ran.length, agents: ran.map((r) => ({ id: r.id, moves: r.lines.length })) });
   } finally {

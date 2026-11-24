@@ -7,10 +7,17 @@ import { agentEnv } from "@/lib/server/agent-api";
 import { gemini } from "@/lib/server/gemini";
 import { idlexPayer } from "@/lib/server/runner-keys";
 import { privyKeysReady } from "@/lib/server/privy-auth";
+import { agentHealth } from "@/lib/server/agent-health";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
+  // ?check=1: the live check of everything agents depend on (cached for ten minutes).
+  if (new URL(req.url).searchParams.get("check") === "1") {
+    const env = agentEnv();
+    if (!env) return json({ ready: false });
+    return json(await agentHealth(env.store));
+  }
   const env = agentEnv();
   const key = process.env.GEMINI_API_KEY?.trim();
   let probe: { ok: boolean; model?: string; detail: string } | null = null;
