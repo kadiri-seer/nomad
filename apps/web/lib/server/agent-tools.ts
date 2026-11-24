@@ -9,7 +9,7 @@ import { RUSHR_API, RUSHR_TOOLS, runRushrTool } from "./rushr";
 import { veninCheck, type VeninVerdict } from "./venin-check";
 
 /** An MCP server, or Rushr's public REST API (`rest: "rushr"`), whose tools are defined in rushr.ts. */
-export type ToolServer = { id: string; name: string; url: string; headers?: Record<string, string>; tools: string[]; rest?: "rushr" };
+export type ToolServer = { id: string; name: string; url: string; headers?: Record<string, string>; tools: string[]; rest?: "rushr"; fallbackUrl?: string };
 
 /** The servers and their allowed tools. Addresses are exact; nothing else is ever called. */
 export const TOOL_SERVERS: ToolServer[] = [
@@ -21,7 +21,8 @@ export const TOOL_SERVERS: ToolServer[] = [
     tools: ["research_answer", "find_projects", "get_project_snapshot", "get_changes", "get_project_timeline", "explain_fact", "get_evidence", "get_token_market", "get_contract", "project_diff", "chain_overview", "market_integrity"]
   },
   { id: "zolva", name: "Zolva", url: "https://zolvaagent.app/mcp", tools: ["list_agents", "get_agent", "verify_agent", "list_markets", "get_market", "recent_activity", "get_consensus"] },
-  { id: "qhooks", name: "QHooks", url: "https://qhooks.com/mcp?ref=nomad", tools: ["token_info", "list_launches", "agent_stats", "hooks_catalog", "list_callers", "caller_record", "compete_standings"] },
+  // Reads earn no referral; when QHooks' referral lookup is down, its plain address still answers.
+  { id: "qhooks", name: "QHooks", url: "https://qhooks.com/mcp?ref=nomad", fallbackUrl: "https://qhooks.com/mcp", tools: ["token_info", "list_launches", "agent_stats", "hooks_catalog", "list_callers", "caller_record", "compete_standings"] },
   { id: "stoa", name: "Stoa", url: "https://stoadex.com/mcp", tools: ["market_context", "safety_check", "spotlight", "stock_tokens"] },
   { id: "rushr", name: "Rushr", url: RUSHR_API, rest: "rushr", tools: Object.values(RUSHR_TOOLS).map((t) => t.declaration.name) },
   // Read only: markets, marks, quotes and records. Nothing tied to one account, and agents never trade options.
@@ -73,12 +74,30 @@ export function geminiSchema(s: unknown, depth = 0): Record<string, unknown> {
 type Cache = { cacheGet<T>(k: string): Promise<T | null>; cacheSet(k: string, v: unknown, s: number): Promise<void> };
 type Client = ReturnType<typeof mcpClient>;
 
+/** A server's client that switches to its plain address (for good, this run) when the main one fails. */
+export function withFallback(s: ToolServer, fetchImpl?: typeof fetch): Client {
+  const main = mcpClient(s.url, { headers: s.headers, fetchImpl, timeoutMs: 15_000 });
+  if (!s.fallbackUrl) return main;
+  const plain = mcpClient(s.fallbackUrl, { headers: s.headers, fetchImpl, timeoutMs: 15_000 });
+  let use: Client = main;
+  const run = async <T>(f: (c: Client) => Promise<T>) => {
+    try {
+      return await f(use);
+    } catch (e) {
+      if (use === plain) throw e;
+      use = plain;
+      return f(use);
+    }
+  };
+  return { listTools: () => run((c) => c.listTools()), call: (n, a) => run((c) => c.call(n, a)) };
+}
+
 export function toolKit(deps: { cache: Cache; fetchImpl?: typeof fetch; servers?: ToolServer[]; venin?: (path: string, text: string) => Promise<VeninVerdict> }): ToolKit {
   const servers = deps.servers ?? TOOL_SERVERS;
   const clients = new Map<string, Client>();
   const client = (s: ToolServer) => {
     let c = clients.get(s.id);
-    if (!c) clients.set(s.id, (c = mcpClient(s.url, { headers: s.headers, fetchImpl: deps.fetchImpl, timeoutMs: 15_000 })));
+    if (!c) clients.set(s.id, (c = withFallback(s, deps.fetchImpl)));
     return c;
   };
   const used = new Set<string>();

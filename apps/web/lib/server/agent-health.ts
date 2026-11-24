@@ -4,7 +4,7 @@
  * argument names only, never the key), and when the schedule last ran. Cached for ten minutes, so it costs nothing
  * to look at and cannot be used to hammer anyone.
  */
-import { TOOL_SERVERS } from "./agent-tools";
+import { TOOL_SERVERS, withFallback } from "./agent-tools";
 import { mcpClient } from "./mcp";
 import { ODDSENGINE_MCP, scanArgs } from "./oddsengine";
 import { RUSHR_API } from "./rushr";
@@ -60,7 +60,7 @@ export async function agentHealth(cache: Cache, fetchImpl: typeof fetch = fetch)
   await Promise.all(
     TOOL_SERVERS.filter((s) => !s.rest).map(async (s) => {
       try {
-        const listed = (await mcpClient(s.url, { headers: s.headers, fetchImpl, timeoutMs: 15_000 }).listTools()).map((t) => t.name);
+        const listed = (await withFallback(s, fetchImpl).listTools()).map((t) => t.name);
         const missing = s.tools.filter((t) => !listed.includes(t));
         servers[s.id] = { ok: missing.length < s.tools.length, listed: listed.length, allowed: s.tools.length - missing.length, missing };
       } catch (e) {

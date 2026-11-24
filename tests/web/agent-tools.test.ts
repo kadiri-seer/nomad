@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { geminiSchema, MAX_TOOL_ANSWER_CHARS, TOOL_SERVERS, toolKit, type ToolServer } from "../../apps/web/lib/server/agent-tools";
+import { geminiSchema, MAX_TOOL_ANSWER_CHARS, TOOL_SERVERS, toolKit, withFallback, type ToolServer } from "../../apps/web/lib/server/agent-tools";
 import { gemini } from "../../apps/web/lib/server/gemini";
 import { mcpClient, parseMcpAnswer } from "../../apps/web/lib/server/mcp";
 import { veninCheck } from "../../apps/web/lib/server/venin-check";
@@ -230,5 +230,22 @@ describe("OddsEngine's scan", () => {
     expect(scanArgs(t({ address: { type: "string" }, chainId: { type: "integer" } }), "0xabc")).toEqual({ address: "0xabc", chainId: 4663 });
     expect(scanArgs(t({ query: { type: "string" } }), "0xabc")).toBeNull();
     expect(scanArgs(undefined, "0xabc")).toBeNull();
+  });
+});
+
+describe("a server's plain address as a fallback", () => {
+  it("uses QHooks' address without the referral when the referral lookup fails", async () => {
+    const urls: string[] = [];
+    const f = fakeServer({ list_launches: "launches" });
+    const fetchImpl = (async (url: string, init: RequestInit) => {
+      urls.push(String(url));
+      if (String(url).includes("ref=nomad")) return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, error: { message: "Partner referral registry is refreshing." } }));
+      return f.fetchImpl(url, init);
+    }) as unknown as typeof fetch;
+    const c = withFallback(TOOL_SERVERS.find((s) => s.id === "qhooks")!, fetchImpl);
+    expect((await c.listTools()).length).toBeGreaterThan(0);
+    expect(await c.call("list_launches", {})).toBe("launches");
+    expect(urls[0]).toContain("ref=nomad");
+    expect(urls.at(-1)).toBe("https://qhooks.com/mcp");
   });
 });
