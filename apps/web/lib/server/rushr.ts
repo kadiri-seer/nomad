@@ -12,7 +12,8 @@ const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 export type RushrSafety = { riskLevel: "low" | "medium" | "high" | "unknown"; blocked: boolean; flags: string[] };
 
 async function getJson(fetchImpl: FetchLike, path: string): Promise<unknown> {
-  const r = await fetchImpl(`${RUSHR_API}${path}`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(12_000), cache: "no-store", redirect: "error" });
+  // The leaderboard is built on request and can take about 20 seconds.
+  const r = await fetchImpl(`${RUSHR_API}${path}`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(28_000), cache: "no-store", redirect: "error" });
   const text = await r.text();
   if (text.length > 400_000) throw new Error("answer too large");
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -79,11 +80,48 @@ export const RUSHR_TOOLS: Record<string, LocalTool> = {
   }
 };
 
+type Obj = Record<string, unknown>;
+const pickKeys = (o: Obj, keys: string[]) => Object.fromEntries(keys.filter((k) => o[k] !== undefined && o[k] !== null).map((k) => [k, typeof o[k] === "string" ? (o[k] as string).slice(0, 160) : o[k]]));
+const byVolume = (a: Obj, b: Obj) => Number(b.volume_24h_usd ?? 0) - Number(a.volume_24h_usd ?? 0);
+const TOKEN_KEYS = ["address", "symbol", "name", "status", "launchpad", "created_at", "price_usd", "market_cap_usd", "volume_24h_usd", "liquidity_usd", "holders", "trades_24h", "risk", "verdict", "top10_pct", "dev_pct", "bundled_pct", "snipers_pct", "insiders_pct", "buy_tax_bps", "sell_tax_bps", "no_sells", "copycat", "serial_launcher"];
+const call = (c: Obj) => {
+  const a = (c.author ?? {}) as Obj;
+  const t = (c.token ?? {}) as Obj;
+  const r = (c.result ?? {}) as Obj;
+  return { at: c.createdAt, by: `${a.handle ?? "?"} (${a.kind ?? "?"})`, token: `${t.symbol ?? "?"} ${t.address ?? ""}`.trim(), stance: c.stance, says: String(c.body ?? "").slice(0, 200), sincePostPct: typeof r.sincePostPct === "number" ? Math.round(r.sincePostPct * 10) / 10 : undefined };
+};
+
+/** Rushr's answers cut down to what an agent's AI needs, so lists fit within what it reads of an answer. */
+export function shapeRushr(name: string, j: unknown): unknown {
+  const o = (j && typeof j === "object" ? j : {}) as Obj;
+  switch (name) {
+    case "rushr_tokens":
+      return { column: o.column, tokens: ((o.tokens as Obj[]) ?? []).slice().sort(byVolume).slice(0, 12).map((t) => pickKeys(t, TOKEN_KEYS)) };
+    case "rushr_stocks":
+      return { stocks: ((o.stocks as Obj[]) ?? []).slice().sort(byVolume).slice(0, 20).map((t) => pickKeys(t, ["address", "symbol", "company", "price_usd", "change_24h_pct", "volume_24h_usd", "liquidity_usd"])) };
+    case "rushr_feed":
+    case "rushr_token_callouts":
+      return { calls: (((o.items ?? o.callouts) as Obj[]) ?? []).slice(0, 20).map(call) };
+    case "rushr_leaderboard":
+      return {
+        window: o.window,
+        rows: ((o.rows as Obj[]) ?? []).slice(0, 25).map((r) => {
+          const m = (r.member ?? {}) as Obj;
+          return { rank: r.rank, trader: `${m.handle ?? "?"} (${m.kind ?? "?"})`, pnlUsd: r.pnl, roi: r.roi, winRate: r.winRate, volumeUsd: r.volumeUsd, trades: r.trades };
+        })
+      };
+    case "rushr_token":
+      return pickKeys(o, TOKEN_KEYS);
+    default:
+      return j;
+  }
+}
+
 /** Runs one of Rushr's read tools: the answer as text, or why it was not run. */
 export async function runRushrTool(name: string, args: Record<string, unknown>, fetchImpl: FetchLike = fetch): Promise<string> {
   const t = Object.values(RUSHR_TOOLS).find((x) => x.declaration.name === name);
   if (!t) return "Not run: there is no tool by that name.";
   const path = t.path(args);
   if (!path) return "Not run: give a token address (0x and 40 hex digits), or a search of at most 64 characters.";
-  return JSON.stringify(await getJson(fetchImpl, path));
+  return JSON.stringify(shapeRushr(name, await getJson(fetchImpl, path)));
 }

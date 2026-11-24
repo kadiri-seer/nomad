@@ -45,7 +45,7 @@ export async function agentHealth(cache: Cache, fetchImpl: typeof fetch = fetch)
   );
   let rushr: Health["rushr"];
   try {
-    const r = await fetchImpl(`${RUSHR_API}/v1/leaderboard?window=24h&limit=1`, { signal: AbortSignal.timeout(12_000), cache: "no-store" });
+    const r = await fetchImpl(`${RUSHR_API}/v1/feed?limit=1`, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
     rushr = r.ok ? { ok: true } : { ok: false, detail: `HTTP ${r.status}` };
   } catch (e) {
     rushr = { ok: false, detail: short(e) };

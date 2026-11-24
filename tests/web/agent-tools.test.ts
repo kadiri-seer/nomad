@@ -4,7 +4,7 @@ import { gemini } from "../../apps/web/lib/server/gemini";
 import { mcpClient, parseMcpAnswer } from "../../apps/web/lib/server/mcp";
 import { veninCheck } from "../../apps/web/lib/server/venin-check";
 import { readVerdict, scanArgs } from "../../apps/web/lib/server/oddsengine";
-import { RUSHR_API, rushrSafety, runRushrTool } from "../../apps/web/lib/server/rushr";
+import { RUSHR_API, rushrSafety, runRushrTool, shapeRushr } from "../../apps/web/lib/server/rushr";
 
 /**
  * Agents' research tools: only the reviewed read-only tools of keyless hosted servers, each answer capped and checked
@@ -180,15 +180,28 @@ describe("Rushr's public reads", () => {
   it("runs only its fixed read paths, with checked arguments", async () => {
     const f = fake({ "/v1/leaderboard?window=24h&kind=agent&limit=50": { rows: [] }, "/tokens?column=migrated": [] });
     expect(await runRushrTool("rushr_leaderboard", { window: "24h", kind: "agent", limit: 999 }, f.fetchImpl)).toBe('{"rows":[]}');
-    expect(await runRushrTool("rushr_tokens", { column: "'; drop" }, f.fetchImpl)).toBe("[]");
+    expect(await runRushrTool("rushr_tokens", { column: "'; drop" }, f.fetchImpl)).toBe('{"tokens":[]}');
     expect(await runRushrTool("rushr_token", { address: "0x12/../../v1/agents" }, f.fetchImpl)).toMatch(/^Not run/);
     expect(await runRushrTool("rushr_buy", {}, f.fetchImpl)).toMatch(/^Not run/);
     const kit = toolKit({ cache: memCache(), fetchImpl: f.fetchImpl, servers: [TOOL_SERVERS.find((s) => s.id === "rushr")!], venin: clean });
     const names = (await kit.declarations()).map((d) => d.name);
     expect(names).toContain("rushr_leaderboard");
     expect(names.every((n) => n.startsWith("rushr_"))).toBe(true);
-    expect(await kit.call("rushr_tokens", {})).toBe("[]");
+    expect(await kit.call("rushr_tokens", {})).toBe('{"tokens":[]}');
     expect(kit.used()).toEqual(["Rushr"]);
+  });
+
+  it("cuts Rushr's long lists down to the fields an agent needs, so they fit what its AI reads", () => {
+    const token = (i: number) => ({ address: `0x${String(i).padStart(40, "0")}`, symbol: `T${i}`, image_url: "ipfs://x", website: "https://x", volume_24h_usd: i * 100, risk: "low", verdict: "Low risk", dev_pct: 2, buy_tax_bps: 0 });
+    const shaped = shapeRushr("rushr_tokens", { column: "migrated", tokens: Array.from({ length: 28 }, (_, i) => token(i)) }) as { tokens: Record<string, unknown>[] };
+    expect(shaped.tokens).toHaveLength(12);
+    expect(shaped.tokens[0].symbol).toBe("T27");
+    expect(shaped.tokens[0]).not.toHaveProperty("image_url");
+    expect(JSON.stringify(shaped).length).toBeLessThan(MAX_TOOL_ANSWER_CHARS);
+    const feed = shapeRushr("rushr_feed", { items: [{ createdAt: "2026-11-24T06:20:25Z", author: { handle: "vladhood", kind: "agent" }, token: { symbol: "HYL", address: "0xaecf" }, stance: "bullish", body: "Long $HYL", result: { sincePostPct: 22.135 } }] });
+    expect(feed).toEqual({ calls: [{ at: "2026-11-24T06:20:25Z", by: "vladhood (agent)", token: "HYL 0xaecf", stance: "bullish", says: "Long $HYL", sincePostPct: 22.1 }] });
+    const board = shapeRushr("rushr_leaderboard", { window: "24h", rows: [{ rank: 1, member: { handle: "nothingx", kind: "human", wallet: "0xf34e" }, pnl: 0.28, roi: 0.008, winRate: 0.5, volumeUsd: 105, trades: 6 }] });
+    expect(board).toEqual({ window: "24h", rows: [{ rank: 1, trader: "nothingx (human)", pnlUsd: 0.28, roi: 0.008, winRate: 0.5, volumeUsd: 105, trades: 6 }] });
   });
 
   it("has Hedgehood and Priors as read-only hosted servers, with no trading, borrowing or account tools", () => {
