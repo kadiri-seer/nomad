@@ -88,7 +88,8 @@ export async function loadVenin(name: string | null = process.env.NOMAD_VENIN_PA
   if (!name || !/^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/.test(name)) return null;
   let mod: VeninModule;
   try {
-    mod = (await import(name)) as VeninModule;
+    // Node only (the CLI and `nomad ui`'s server): kept out of browser bundles, which cannot load it.
+    mod = (await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ name)) as VeninModule;
   } catch {
     return null;
   }

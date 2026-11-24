@@ -18,9 +18,11 @@ const EP = parseAbi([
   "event BeforeExecution()"
 ]);
 const T = parseAbi(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
-const transfer = (token: Address, from: Address, to: Address, value: bigint) => ({ address: token, topics: encodeEventTopics({ abi: T, eventName: "Transfer", args: { from, to } }) as Hex[], data: encodeAbiParameters([{ type: "uint256" }], [value]) });
-const opEvent = (sender: Address, success = true) => ({ address: ENTRY_POINT, topics: encodeEventTopics({ abi: EP, eventName: "UserOperationEvent", args: { userOpHash: OP, sender, paymaster: TREASURY } }) as Hex[], data: encodeAbiParameters([{ type: "uint256" }, { type: "bool" }, { type: "uint256" }, { type: "uint256" }], [0n, success, 1n, 1n]) });
-const before = { address: ENTRY_POINT, topics: encodeEventTopics({ abi: EP, eventName: "BeforeExecution" }) as Hex[], data: "0x" as Hex };
+type LogLine = Receipt["logs"][number];
+const log = (address: Address, topics: Hex[], data: Hex) => ({ address, topics, data }) as LogLine;
+const transfer = (token: Address, from: Address, to: Address, value: bigint) => log(token, encodeEventTopics({ abi: T, eventName: "Transfer", args: { from, to } }) as Hex[], encodeAbiParameters([{ type: "uint256" }], [value]));
+const opEvent = (sender: Address, success = true) => log(ENTRY_POINT, encodeEventTopics({ abi: EP, eventName: "UserOperationEvent", args: { userOpHash: OP, sender, paymaster: TREASURY } }) as Hex[], encodeAbiParameters([{ type: "uint256" }, { type: "bool" }, { type: "uint256" }, { type: "uint256" }], [0n, success, 1n, 1n]));
+const before = log(ENTRY_POINT, encodeEventTopics({ abi: EP, eventName: "BeforeExecution" }) as Hex[], "0x");
 
 function deps(receipt: Receipt | null, opCosts: Record<string, bigint> = {}, now = new Date("2026-11-23T15:00:00Z")): CreditsDeps {
   // $NOMAD at 10^-5 USDG each in these tests: 10^23 wei (100,000 $NOMAD) is worth 1 USDG.
