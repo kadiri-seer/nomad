@@ -24,6 +24,7 @@ import {
   buyNomadCalls,
   fmtNomad,
   fmtUsdg,
+  mintBurnBps,
   mintCalls,
   mintFee,
   nomadForUsd,
@@ -404,10 +405,13 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
   const [perTrade, setPerTrade] = useState("0.30");
   const [perDay, setPerDay] = useState(3);
   const [every, setEvery] = useState<number>(DEFAULT_RUN_EVERY_HOURS);
+  const [burnBps, setBurnBps] = useState<bigint | null>(null);
+  const burnedOf = (f: bigint) => (f * (burnBps ?? 0n)) / 10_000n;
   const [fee, setFee] = useState<bigint | null>(null);
   const agents = AGENTS_CONTRACT as Address;
   useEffect(() => {
     mintFee(agents).then(setFee).catch(() => setFee(null));
+    mintBurnBps(agents).then(setBurnBps).catch(() => setBurnBps(null));
   }, [agents]);
   const short = fee !== null && bal ? (bal.nomad >= fee ? 0n : fee - bal.nomad) : 0n;
   const ok = name.trim().length > 0 && name.trim().length <= 64 && fee !== null && (template === "trader" || instructions.trim().length > 0);
@@ -443,8 +447,8 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
       amountNote: usdOf(fee),
       rows: [
         ...(topUp ? ([["First, swap", `${fmtUsdg(topUp.usdg)} USDG for the missing $NOMAD`]] as [string, string][]) : []),
-        ["Burned", `${fmtNomad(fee / 2n)} $NOMAD`],
-        ["To Nomad's treasury", `${fmtNomad(fee - fee / 2n)} $NOMAD`],
+        ["Burned", `${fmtNomad(burnedOf(fee))} $NOMAD`],
+        ["To Nomad's treasury", `${fmtNomad(fee - burnedOf(fee))} $NOMAD`],
         ["Its wallet", `${sj.account.slice(0, 6)}...${sj.account.slice(-4)}, yours`],
         ["Network fee", "Included"]
       ],
@@ -482,8 +486,8 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
         if (r.ok || r.status === 409) storeDel(`${PENDING_PREFIX}${txHash}`);
         if (!r.ok) throw new Error(j.error ?? "The agent was minted but could not be set up yet.");
         return researcher
-          ? `${fmtNomad(fee)} $NOMAD paid, ${fmtNomad(fee / 2n)} burned. Keep some credits, and its first report comes within 15 minutes, under Your agents.`
-          : `${fmtNomad(fee)} $NOMAD paid, ${fmtNomad(fee / 2n)} burned. Fund its wallet with USDG and keep some credits, and it starts within 15 minutes.`;
+          ? `${fmtNomad(fee)} $NOMAD paid, ${fmtNomad(burnedOf(fee))} burned. Keep some credits, and its first report comes within 15 minutes, under Your agents.`
+          : `${fmtNomad(fee)} $NOMAD paid, ${fmtNomad(burnedOf(fee))} burned. Fund its wallet with USDG and keep some credits, and it starts within 15 minutes.`;
       },
       done: { title: `${nm} is created`, body: "" }
     });
@@ -552,7 +556,7 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
           <span>Creating an agent</span>
           <strong>{fee === null ? "..." : `${fmtNomad(fee)} $NOMAD`}</strong>
         </div>
-        <p className="acct-small">{fee !== null && usdOf(fee) ? `${usdOf(fee)}, once. ` : ""}Network fee included. Half is burned, half goes to Nomad&apos;s treasury.</p>
+        <p className="acct-small">{fee !== null && usdOf(fee) ? `${usdOf(fee)}, once. ` : ""}Network fee included. {fee !== null && burnBps !== null ? `${fmtNomad(burnedOf(fee))} $NOMAD is burned, the rest goes to Nomad's treasury.` : "Part is burned, the rest goes to Nomad's treasury."}</p>
         {fee !== null && bal && short > 0n && <p className="acct-warn">You have {fmtNomad(bal.nomad)} $NOMAD. The missing {fmtNomad(short)} will be bought with USDG in this step.</p>}
         {fee !== null && bal && short === 0n && <p className="acct-ok">You have {fmtNomad(bal.nomad)} $NOMAD. Enough to create it.</p>}
       </section>

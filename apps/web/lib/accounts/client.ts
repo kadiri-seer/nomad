@@ -137,6 +137,11 @@ export function mintCalls(agents: Address, fee: bigint, name: string, packageHas
   ];
 }
 
+/** The share of the mint fee the contract burns, in basis points (the rest goes to the treasury). */
+export async function mintBurnBps(agents: Address): Promise<bigint> {
+  return (await publicClient.readContract({ address: agents, abi: [{ type: "function", name: "mintBurnBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] }] as const, functionName: "mintBurnBps" })) as bigint;
+}
+
 export async function mintFee(agents: Address): Promise<bigint> {
   return (await publicClient.readContract({ address: agents, abi: AGENTS_ABI, functionName: "mintFee" })) as bigint;
 }
