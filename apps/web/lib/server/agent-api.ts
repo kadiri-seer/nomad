@@ -38,7 +38,7 @@ export function cappedOddsEngine(store: { count(key: string, ttlSeconds: number)
     name: oe.name,
     async scanToken(token: Address): Promise<OddsVerdict | null> {
       const n = await store.count(`odds-scans:${new Date().toISOString().slice(0, 10)}`, 2 * 86400);
-      if (n > cap) return { warn: false, summary: "daily limit reached", skipped: true };
+      if (n > cap) return { facts: [], context: "", skipped: true };
       return oe.scanToken(token);
     }
   };

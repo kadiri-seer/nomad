@@ -537,17 +537,27 @@ describe("second safety checks: Rushr and OddsEngine", () => {
     expect(asked).toBe(1);
   });
 
-  it("OddsEngine's warning stops a buy; its all-clear is credited and charged; no answer is noted", async () => {
-    const warn = harness({ oddsEngine: { name: "OddsEngine", scanToken: async () => ({ warn: true, summary: "owner can pause transfers" }) } });
-    expect((await runAgent(warn.d, agent()))[0]).toBe("Skipped HOOKR: OddsEngine warned about it (owner can pause transfers). Checked by OddsEngine.");
-    expect(warn.sent).toHaveLength(0);
+  it("OddsEngine's facts are weighed by the agent's AI: a red flag stops the buy; no facts, or no answer, is noted", async () => {
+    const facts = { facts: ["Owner can pause transfers"], context: "{}" };
+    const asked: string[] = [];
+    // The Trader's own second opinion passes; only the question about OddsEngine's facts gets `answer`.
+    const ai = (answer: string): RunnerDeps["ai"] => ({ name: "Gemini", ask: async (p) => (asked.push(p), p.includes("On-chain facts") ? answer : "RED FLAG: no\nordinary") });
+    const flagged = harness({ ai: ai("RED FLAG: yes\nThe owner can stop sales."), oddsEngine: { name: "OddsEngine", scanToken: async () => facts } });
+    const lines = await runAgent(flagged.d, agent());
+    expect(lines.at(-1)).toBe("Skipped HOOKR: Gemini read OddsEngine's on-chain facts as a red flag (The owner can stop sales.). Checked by OddsEngine.");
+    expect(flagged.sent).toHaveLength(0);
+    expect(asked.some((p) => p.includes("- Owner can pause transfers"))).toBe(true);
     let scans = 0;
-    const ok = harness({ oddsEngine: { name: "OddsEngine", scanToken: async () => (scans++, { warn: false, summary: "no warning" }) } });
-    expect((await runAgent(ok.d, agent()))[0]).toMatch(/^Bought HOOKR.*Checked by OddsEngine\./);
-    expect(ok.charges).toEqual([5_000n]);
-    // The verdict is shared for an hour: a second agent buying the same token does not scan again.
-    await runAgent(ok.d, agent({ id: "8", account: "0xdddddddddddddddddddddddddddddddddddddddd" }));
+    const clear = harness({ ai: ai("RED FLAG: no\nNothing that stops a sale."), oddsEngine: { name: "OddsEngine", scanToken: async () => (scans++, facts) } });
+    expect((await runAgent(clear.d, agent())).at(-1)).toMatch(/^Bought HOOKR.*Checked by OddsEngine: 1 on-chain fact, weighed by Gemini, no red flag\./);
+    expect(clear.charges).toEqual([5_000n]);
+    // Shared for an hour: a second agent buying the same token does not scan again.
+    await runAgent(clear.d, agent({ id: "8", account: "0xdddddddddddddddddddddddddddddddddddddddd" }));
     expect(scans).toBe(1);
+    const none = harness({ oddsEngine: { name: "OddsEngine", scanToken: async () => ({ facts: [], context: "", deepRunning: true }) } });
+    expect((await runAgent(none.d, agent()))[0]).toMatch(/^Bought HOOKR.*Checked by OddsEngine: no on-chain findings yet \(its deeper scan was still running\)\./);
+    const noAi = harness({ oddsEngine: { name: "OddsEngine", scanToken: async () => facts } });
+    expect((await runAgent(noAi.d, agent()))[0]).toMatch(/^Skipped HOOKR: OddsEngine reported on-chain facts about it, and no AI was available/);
     const down = harness({ oddsEngine: { name: "OddsEngine", scanToken: async () => null } });
     expect((await runAgent(down.d, agent()))[0]).toMatch(/^Bought HOOKR.*OddsEngine did not answer/);
     expect(down.charges).toEqual([]);
@@ -558,12 +568,12 @@ describe("OddsEngine's daily limit", () => {
   it("stops scanning past the limit for all agents together, without charging or warning", async () => {
     const store = agentStore(new MemoryRedis());
     let scans = 0;
-    const capped = cappedOddsEngine(store, { name: "OddsEngine", scanToken: async () => (scans++, { warn: false, summary: "ok" }) }, 2);
+    const capped = cappedOddsEngine(store, { name: "OddsEngine", scanToken: async () => (scans++, { facts: [], context: "" }) }, 2);
     expect((await capped.scanToken(TOKEN))?.skipped).toBeUndefined();
     await capped.scanToken(TOKEN);
-    expect(await capped.scanToken(TOKEN)).toEqual({ warn: false, summary: "daily limit reached", skipped: true });
+    expect(await capped.scanToken(TOKEN)).toEqual({ facts: [], context: "", skipped: true });
     expect(scans).toBe(2);
-    const h = harness({ oddsEngine: { name: "OddsEngine", scanToken: async () => ({ warn: false, summary: "daily limit reached", skipped: true }) } });
+    const h = harness({ oddsEngine: { name: "OddsEngine", scanToken: async () => ({ facts: [], context: "", skipped: true }) } });
     expect((await runAgent(h.d, agent()))[0]).toMatch(/^Bought HOOKR.*OddsEngine's daily limit for Nomad's agents was reached/);
     expect(h.charges).toEqual([]);
   });

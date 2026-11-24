@@ -7,19 +7,29 @@
 import { mcpClient, type McpTool } from "./mcp";
 
 export const ODDSENGINE_MCP = "https://api.oddsengine.live/mcp";
-/** `skipped`: not scanned because the agents' daily OddsEngine limit was reached (not a warning, not charged). */
-export type OddsVerdict = { warn: boolean; summary: string; skipped?: boolean };
+/**
+ * What OddsEngine's scan found. OddsEngine gives facts, never a verdict ("never call a coin safe, risky ... let the
+ * user decide"), so `facts` are its on-chain findings and `context` a short summary of the rest; the agent's own AI
+ * weighs them. `deepRunning`: its deeper scan (bundles, clusters, early buyers) was still running. `skipped`: not
+ * scanned, because the agents' daily OddsEngine limit was reached (not charged).
+ */
+export type OddsVerdict = { facts: string[]; context: string; deepRunning?: boolean; skipped?: boolean };
 
 /** At most this many OddsEngine scans a UTC day for all of Nomad's agents together (ODDSENGINE_DAILY_CAP). */
 export const ODDSENGINE_DAILY_CAP = 150;
 
-/** OddsEngine's words for a token it would warn about. */
-const WARN = /\b(honeypot|scam|rug|malicious|drainer|blacklist|danger(ous)?|critical|high[ _-]?risk|do not (buy|trade)|avoid|blocked|unsafe)\b/i;
+const clean = (s: string, max: number) => s.replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+const factText = (f: unknown): string => {
+  if (typeof f === "string") return clean(f, 200);
+  if (f && typeof f === "object") {
+    const o = f as Record<string, unknown>;
+    const t = o.text ?? o.fact ?? o.description ?? o.label ?? o.title ?? o.message;
+    return clean(typeof t === "string" ? t : JSON.stringify(o), 200);
+  }
+  return "";
+};
 
-/** Words that say a danger is absent ("not a honeypot", "no scam signals") are not a warning. */
-const NEGATED = /\b(no|not|isn't|is not|without|zero|none)\s+(an?\s+|known\s+|obvious\s+)?(honeypot|scam|rug|malicious|drainer|blacklist|danger(ous)?|critical|high[ _-]?risk|blocked|unsafe)\w*/gi;
-
-/** OddsEngine's answer read as a warning or not: its own fields first (safe, risk, verdict), then its words. */
+/** OddsEngine's scan answer read into its facts and a short context (safety and market numbers). */
 export function readVerdict(text: string): OddsVerdict {
   let j: Record<string, unknown> | null = null;
   try {
@@ -28,19 +38,12 @@ export function readVerdict(text: string): OddsVerdict {
   } catch {
     /* plain text */
   }
-  const field = (k: string) => (j ? j[k] ?? (j.result as Record<string, unknown> | undefined)?.[k] : undefined);
-  const risk = String(field("riskLevel") ?? field("risk_level") ?? field("risk") ?? field("verdict") ?? field("rating") ?? "");
-  const score = Number(field("riskScore") ?? field("risk_score") ?? NaN);
-  const summaryRaw = String(field("summary") ?? field("message") ?? field("verdict") ?? (j ? "" : text)).replace(/\s+/g, " ").trim();
-  const warn =
-    field("safe") === false ||
-    field("isHoneypot") === true ||
-    field("honeypot") === true ||
-    /^(high|critical|danger|dangerous|unsafe|scam|block|avoid)/i.test(risk) ||
-    (Number.isFinite(score) && score >= 70) ||
-    WARN.test((j ? `${risk} ${summaryRaw}` : text).replace(NEGATED, ""));
-  const summary = (summaryRaw || risk || (warn ? "it flagged the token" : "no warning")).replace(/[^\w $%.,:;()'/-]/g, "").slice(0, 140);
-  return { warn, summary };
+  if (!j) return { facts: text.trim() ? [clean(text, 300)] : [], context: "" };
+  const findings = (j.findings ?? {}) as Record<string, unknown>;
+  const facts = (Array.isArray(findings.on_chain_facts) ? findings.on_chain_facts : []).map(factText).filter(Boolean).slice(0, 8);
+  const market = (j.market ?? {}) as Record<string, unknown>;
+  const context = clean(JSON.stringify({ venue: j.venue, age: j.age, safety: j.safety, burned_supply: j.burned_supply, price_change: market.price_change ?? market.change, liquidity: market.liquidity ?? market.liquidity_usd }), 600);
+  return { facts, context, ...(findings.deep_check_running === true ? { deepRunning: true } : {}) };
 }
 
 /** Arguments for OddsEngine's scan_token from its own published schema: the token's address, and the chain. */

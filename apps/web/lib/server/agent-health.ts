@@ -53,7 +53,7 @@ export async function researchCheck(cache: Cache, kit: () => import("./agent-too
  * and how Nomad read it. At most once an hour; counted in the agents' daily OddsEngine limit. Never shows the key.
  */
 export async function oddsCheck(cache: Cache & { count(k: string, ttl: number): Promise<number> }, token: string | null) {
-  const hit = await cache.cacheGet<Record<string, unknown>>("agents-odds-check-2");
+  const hit = await cache.cacheGet<Record<string, unknown>>("agents-odds-check-3");
   if (hit) return hit;
   const key = process.env.ODDSENGINE_API_KEY?.trim();
   if (!key) return { keySet: false };
@@ -80,7 +80,7 @@ export async function oddsCheck(cache: Cache & { count(k: string, ttl: number): 
     /* not JSON */
   }
   const out = { keySet: true, ok: !!r.verdict, checkedAt: new Date().toISOString(), token, sent: r.args, fields, warningFields, answerChars: r.raw?.length ?? 0, answerEnd: r.raw?.slice(-700) ?? null, readAs: r.verdict, error: r.error ?? null };
-  await cache.cacheSet("agents-odds-check-2", out, 3600);
+  await cache.cacheSet("agents-odds-check-3", out, 3600);
   return out;
 }
 

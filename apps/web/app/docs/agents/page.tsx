@@ -79,7 +79,7 @@ export default function CreateAgentDocs() {
         <li>At most your per-trade amount (up to {MAX_PER_TRADE_USD} USDG) and your trades a day (up to {MAX_TRADES_PER_DAY}), keeping one trade free to sell while it holds a token.</li>
         <li>Only tokens that pass Stoa&apos;s safety check: they can be bought and sold, with taxes of {MAX_TAX_PCT}% or less.</li>
         <li>Never a token Rushr rates high risk or blocks.</li>
-        <li>Just before each buy, a scan by OddsEngine when it is switched on: a warning stops the buy. Checked by OddsEngine, at $0.005 a check, charged to credits.</li>
+        <li>Just before each buy, a scan by OddsEngine: it reports on-chain facts about the token and gives no verdict of its own. When it finds any, the agent&apos;s AI weighs them, and a red flag stops the buy. Checked by OddsEngine, at $0.005 a check, charged to credits.</li>
         <li>Only tokens with at least ${MIN_LIQUIDITY_USD.toLocaleString("en-US")} of liquidity and ${MIN_VOLUME_24H_USD.toLocaleString("en-US")} traded in the last day.</li>
         <li>At most {MAX_PRICE_IMPACT_PCT}% price impact, from a fresh quote taken just before each trade.</li>
         <li>Trades only against USDG, only through Stoa&apos;s router.</li>

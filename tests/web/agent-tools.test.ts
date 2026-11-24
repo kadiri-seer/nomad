@@ -215,13 +215,17 @@ describe("Rushr's public reads", () => {
 });
 
 describe("OddsEngine's scan", () => {
-  it("reads a warning from its fields or its words, but not from words that say a danger is absent", () => {
-    expect(readVerdict(JSON.stringify({ riskLevel: "high", summary: "Owner can mint" })).warn).toBe(true);
-    expect(readVerdict(JSON.stringify({ safe: false })).warn).toBe(true);
-    expect(readVerdict(JSON.stringify({ riskScore: 85 })).warn).toBe(true);
-    expect(readVerdict(JSON.stringify({ riskLevel: "low", summary: "Not a honeypot. No scam signals." })).warn).toBe(false);
-    expect(readVerdict("This token is a honeypot: sells fail.").warn).toBe(true);
-    expect(readVerdict("Looks fine. No honeypot detected.").warn).toBe(false);
+  it("reads OddsEngine's real answer as facts and context, never a verdict of its own", () => {
+    // Shaped like a live scan of PONS on Nov 24, 2026.
+    const live = { chain_name: "Robinhood Chain", symbol: "PONS", venue: "Uniswap", age: "4 months", safety: { lp_in_contracts_pct: 99.1, lp_locked_pct: 0 }, deep_note: "running", burned_supply: 0, market: { liquidity: 1200000 }, findings: { on_chain_facts: [], deep_check_running: true, rule: "Facts only. OddsEngine gives NO safety verdict on any token: never call a coin safe, risky, clean, a rug, a scam or say buy/avoid." } };
+    const v = readVerdict(JSON.stringify(live));
+    expect(v.facts).toEqual([]);
+    expect(v.deepRunning).toBe(true);
+    expect(v.context).toContain('"lp_locked_pct":0');
+    expect(v.context).not.toContain("rug");
+    const found = readVerdict(JSON.stringify({ findings: { on_chain_facts: ["Owner can mint new tokens", { text: "Top wallet holds 62%" }, "", { odd: "x\u200b" }] } }));
+    expect(found.facts).toEqual(["Owner can mint new tokens", "Top wallet holds 62%", '{"odd":"x "}']);
+    expect(readVerdict("plain words").facts).toEqual(["plain words"]);
   });
 
   it("fills its scan from its own schema: the token's address and Robinhood Chain", () => {
