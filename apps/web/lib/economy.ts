@@ -282,7 +282,8 @@ export function safeUri(v: unknown): string {
   return "";
 }
 export const isEncryptedUri = (uri: string) => uri.startsWith("ipfs://");
-export type AgentsSummary = { agents: MintedAgent[]; burned: number; toTreasury: number; toCreators: number };
+/** `dollarMints`: agents minted with no fee in the contract, whose $5 fee was paid in the same transaction. */
+export type AgentsSummary = { agents: MintedAgent[]; burned: number; toTreasury: number; toCreators: number; dollarMints?: { hash: string; creator: string }[] };
 
 /** Minted, PriceSet, UriSet and Copied events from the explorer's logs for the contract, newest agent first. */
 export function agentsFromLogs(json: unknown): AgentsSummary {
@@ -293,6 +294,7 @@ export function agentsFromLogs(json: unknown): AgentsSummary {
   let burned = 0;
   let toTreasury = 0;
   let toCreators = 0;
+  const dollarMints: { hash: string; creator: string }[] = [];
   for (const x of items) {
     const topics = (Array.isArray(x.topics) ? x.topics : []).filter((t): t is `0x${string}` => typeof t === "string" && /^0x[0-9a-fA-F]{64}$/.test(t));
     const data = str(x.data);
@@ -310,6 +312,7 @@ export function agentsFromLogs(json: unknown): AgentsSummary {
       const b = units(String(a.burned), NOMAD_DECIMALS);
       burned += b;
       toTreasury += fee - b;
+      if (fee === 0) dollarMints.push({ hash: str(x.transaction_hash), creator: str(a.creator) });
       agents.set(id, { id, name: plain(a.name, 64) || `Agent ${id}`, creator: str(a.creator), packageHash: str(a.packageHash), uri: safeUri(a.uri), price: units(String(a.price), NOMAD_DECIMALS), copies: 0, mintedAt: str(x.timestamp), hash: str(x.transaction_hash) });
     } else if (ev.eventName === "PriceSet" && agents.has(id)) {
       agents.get(id)!.price = units(String(a.price), NOMAD_DECIMALS);
@@ -322,7 +325,35 @@ export function agentsFromLogs(json: unknown): AgentsSummary {
       toCreators += units(String(a.toOwner), NOMAD_DECIMALS);
     }
   }
-  return { agents: [...agents.values()].sort((a, b) => b.id - a.id), burned, toTreasury, toCreators };
+  return { agents: [...agents.values()].sort((a, b) => b.id - a.id), burned, toTreasury, toCreators, dollarMints };
+}
+
+/** The $5 fees paid alongside mints: $NOMAD from each creator to the burn address and the treasury, in that transaction. */
+export async function addDollarFees(s: AgentsSummary, signal?: AbortSignal): Promise<AgentsSummary> {
+  const mints = (s.dollarMints ?? []).filter((m) => /^0x[0-9a-fA-F]{64}$/.test(m.hash)).slice(0, 100);
+  let burned = 0;
+  let toTreasury = 0;
+  for (let i = 0; i < mints.length; i += 5) {
+    await Promise.all(
+      mints.slice(i, i + 5).map(async (m) => {
+        try {
+          const j = obj(await getJson(`${API}/transactions/${m.hash}/token-transfers`, signal));
+          for (const t of (Array.isArray(j.items) ? j.items : []).map((v) => obj(v))) {
+            const token = obj(t.token);
+            if (str(token.address_hash ?? token.address).toLowerCase() !== TOKEN_CA.toLowerCase()) continue;
+            if (str(obj(t.from).hash).toLowerCase() !== m.creator.toLowerCase()) continue;
+            const amount = units(String(obj(t.total).value ?? "0"), NOMAD_DECIMALS);
+            const to = str(obj(t.to).hash).toLowerCase();
+            if (to === BURN_ADDRESS.toLowerCase()) burned += amount;
+            else if (to === REWARD_SAFE.toLowerCase()) toTreasury += amount;
+          }
+        } catch {
+          /* that mint's fee is left out */
+        }
+      })
+    );
+  }
+  return { ...s, burned: s.burned + burned, toTreasury: s.toTreasury + toTreasury };
 }
 
 /** Every log of the contract, from the explorer (a few pages at most). */
@@ -337,7 +368,7 @@ export async function readAgents(signal?: AbortSignal, contract = AGENTS_CONTRAC
     const next = obj(j.next_page_params);
     params = Object.keys(next).length ? next : null;
   }
-  return agentsFromLogs({ items });
+  return addDollarFees(agentsFromLogs({ items }), signal);
 }
 
 // ---------------------------------------------------------------- everything at once

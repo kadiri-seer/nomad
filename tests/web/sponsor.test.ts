@@ -4,7 +4,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { encodeCallsMAv2 } from "@alchemy/smart-accounts";
 import { AGENTS_ABI } from "../../apps/web/lib/agents-contract";
 import { ENTRY_POINT, NOMAD, STOA_ROUTER, TREASURY, USDG } from "../../apps/web/lib/accounts/chain";
-import { classify, freeGasOk, FREE_OP_MAX_WEI, maxCostWei, paymasterHash, sponsor, SponsorError, stubData, userOpHash, type RpcUserOp } from "../../apps/web/lib/server/sponsor";
+import { classify, freeGasOk, FREE_OP_MAX_WEI, maxCostWei, mintFeeOf, paymasterHash, sponsor, SponsorError, stubData, userOpHash, type RpcUserOp } from "../../apps/web/lib/server/sponsor";
 
 /**
  * Nomad's paymaster service: who pays for an operation, and a signature NomadPaymaster accepts. The reference hashes
@@ -153,5 +153,28 @@ describe("the $5 creation fee paid alongside a mint", () => {
     expect(classify(ops([{ to: STOA_ROUTER, data: swap(USDG, NOMAD, SENDER, 2_000_000n) }, { to: AGENTS, data: mint0 }, { to: NOMAD, data: erc("transfer", DEAD, 1n) }, { to: NOMAD, data: erc("transfer", TREASURY, 1n) }]), SENDER, AGENTS)).toBe("mint");
     expect(classify(ops([{ to: NOMAD, data: erc("transfer", DEAD, 16_000n) }, { to: NOMAD, data: erc("transfer", TREASURY, 64_000n) }]), SENDER, AGENTS)).toBe("paid"); // no mint
     expect(classify(ops([{ to: AGENTS, data: mint0 }, { to: NOMAD, data: erc("transfer", AGENTS, 5n) }]), SENDER, AGENTS)).toBe("paid"); // elsewhere
+  });
+});
+
+describe("free gas for a mint needs its $5 fee", () => {
+  const DEAD = "0x000000000000000000000000000000000000dEaD" as Address;
+  const mintN = (n: string) => encodeFunctionData({ abi: AGENTS_ABI, functionName: "mint", args: [n, keccak256(toHex(n)), "", 0n, 0n] });
+  const op = (calls: { to: Address; data: Hex }[]) => ({ ...rpcOp(ops(calls)), maxFeePerGas: toHex(20_000_000n), maxPriorityFeePerGas: toHex(10_000n) });
+  const N = (v: number) => BigInt(v) * 10n ** 18n;
+  const base = { paymaster: PAYMASTER, agents: AGENTS, signer, useFreeOp: async () => true, hold: async () => true, now: () => NOW, nomadFor5: async () => N(80_000) };
+
+  it("is free when the mint pays about $5, with $1 of it burned", async () => {
+    const paid = op([{ to: AGENTS, data: mintN("a") }, { to: NOMAD, data: erc("transfer", DEAD, N(16_000)) }, { to: NOMAD, data: erc("transfer", TREASURY, N(64_000)) }]);
+    expect((await sponsor(base, [paid, ENTRY_POINT, 4663])).paidBy).toBe("treasury");
+  });
+  it("is paid from credits when the mint pays nothing, too little, too little burned, or one fee for two agents", async () => {
+    const cases = [
+      [{ to: AGENTS, data: mintN("a") }],
+      [{ to: AGENTS, data: mintN("a") }, { to: NOMAD, data: erc("transfer", DEAD, 1n) }, { to: NOMAD, data: erc("transfer", TREASURY, 1n) }],
+      [{ to: AGENTS, data: mintN("a") }, { to: NOMAD, data: erc("transfer", DEAD, N(1_000)) }, { to: NOMAD, data: erc("transfer", TREASURY, N(79_000)) }],
+      [{ to: AGENTS, data: mintN("a") }, { to: AGENTS, data: mintN("b") }, { to: NOMAD, data: erc("transfer", DEAD, N(16_000)) }, { to: NOMAD, data: erc("transfer", TREASURY, N(64_000)) }]
+    ] as { to: Address; data: Hex }[][];
+    for (const calls of cases) expect((await sponsor(base, [op(calls), ENTRY_POINT, 4663])).paidBy).toBe("credits");
+    expect(mintFeeOf(ops(cases[3]), SENDER, AGENTS)).toEqual({ mints: 2, paid: N(80_000), burned: N(16_000) });
   });
 });

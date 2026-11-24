@@ -1,9 +1,10 @@
+import { REWARD_SAFE, TOKEN_CA } from "../../apps/web/lib/token";
 import { describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { decodeFunctionData, encodeAbiParameters, encodeEventTopics, parseAbi, type Abi } from "viem";
-import { agentsFromLogs, parseBalances, parseBounties, parseBuybacks, parseCosts, parseTransfers, sumBySymbol, ECONOMY_WALLETS, BURN_ADDRESS } from "../../apps/web/lib/economy";
+import { addDollarFees, agentsFromLogs, parseBalances, parseBounties, parseBuybacks, parseCosts, parseTransfers, sumBySymbol, ECONOMY_WALLETS, BURN_ADDRESS } from "../../apps/web/lib/economy";
 import { AGENTS_ABI } from "../../apps/web/lib/agents-contract";
 import { AGENTS_BYTECODE } from "../../apps/web/lib/agents-bytecode";
 import { PAYMASTER_ABI, PAYMASTER_BYTECODE } from "../../apps/web/lib/paymaster-contract";
@@ -189,3 +190,21 @@ describe("treasury batches for the Safe", () => {
 });
 
 const E = (n: number) => BigInt(n) * 10n ** 18n;
+
+describe("the $5 fees in the agents totals", () => {
+  it("adds what each zero-fee mint's creator sent to the burn address and the treasury in that transaction", async () => {
+    const CREATOR = "0x1111111111111111111111111111111111111111";
+    const hash = `0x${"ab".repeat(32)}`;
+    const t = (from: string, to: string, value: string, token = TOKEN_CA) => ({ token: { address_hash: token }, from: { hash: from }, to: { hash: to }, total: { value } });
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ items: [t(CREATOR, "0x000000000000000000000000000000000000dEaD", "17000000000000000000000"), t(CREATOR, REWARD_SAFE, "68000000000000000000000"), t("0x2222222222222222222222222222222222222222", REWARD_SAFE, "1000000000000000000000000"), t(CREATOR, REWARD_SAFE, "5", "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168")] }))) as unknown as typeof fetch;
+    try {
+      const s = await addDollarFees({ agents: [], burned: 10, toTreasury: 20, toCreators: 0, dollarMints: [{ hash, creator: CREATOR }] });
+      expect(s.burned).toBe(17_010);
+      expect(s.toTreasury).toBe(68_020);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+});

@@ -610,6 +610,11 @@ describe("the $5 creation fee", () => {
     await expect(checkDollarFee([], OWNER, async () => Promise.reject(new Error("down")))).rejects.toMatchObject({ status: 503 });
   });
 
+  it("needs $5 for every agent the transaction minted", async () => {
+    await expect(checkDollarFee([log(OWNER, DEAD, N(16_000)), log(OWNER, TREASURY, N(64_000))], OWNER, price, 2)).rejects.toMatchObject({ status: 402 });
+    await checkDollarFee([log(OWNER, DEAD, N(32_000)), log(OWNER, TREASURY, N(128_000))], OWNER, price, 2);
+  });
+
   it("the account page's fee calls send $1 of $5 to the burn address and the rest to the treasury", () => {
     const [burn, rest] = feeCalls(N(80_000), 2000n);
     expect(decodeFunctionData({ abi: erc20Abi, data: burn.data }).args).toEqual([DEAD, N(16_000)]);

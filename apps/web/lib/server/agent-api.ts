@@ -73,9 +73,10 @@ export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = 
 }
 
 /** The public view of an agent (no signed grant). */
+/** What anyone may see of an agent: never its signed grant, and never its instructions (the creator's own words). */
 export function publicAgent(a: AgentRecord) {
-  const { deferredAction: _d, pendingJob, ...rest } = a;
-  return { ...rest, waitingFor: pendingJob ? (pendingJob.kind === "check" ? `a second opinion on ${pendingJob.symbol}` : "an answer from Idlex") : null };
+  const { deferredAction: _d, instructions, pendingJob, ...rest } = a;
+  return { ...rest, hasInstructions: !!instructions, waitingFor: pendingJob ? (pendingJob.kind === "check" ? `a second opinion on ${pendingJob.symbol}` : "an answer from Idlex") : null };
 }
 
 const TRANSFER_EVENT = parseAbi(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
@@ -102,7 +103,7 @@ export type Registration = {
  * account to the burn address and the treasury, worth at least 90% of $5 at Stoa's price now (it moves), with at
  * least 15% of it burned. `nomadFor5` is the price check, for tests.
  */
-export async function checkDollarFee(logs: readonly { address: string; data: Hex; topics: readonly Hex[] }[], from: Address, nomadFor5?: () => Promise<bigint>) {
+export async function checkDollarFee(logs: readonly { address: string; data: Hex; topics: readonly Hex[] }[], from: Address, nomadFor5?: () => Promise<bigint>, agents = 1) {
   let burned = 0n;
   let toTreasury = 0n;
   for (const l of logs) {
@@ -123,7 +124,8 @@ export async function checkDollarFee(logs: readonly { address: string; data: Hex
   } catch {
     throw new AgentApiError(503, "The price check is not answering. Your agent is minted and will be set up on your next visit.");
   }
-  if (total * 10n < want * 9n || burned * 100n < total * 15n) throw new AgentApiError(402, "That mint did not pay the $5 creation fee, so the agent will not run.");
+  // $5 for every agent the transaction minted (80% of it at today's price, for the price moving since).
+  if (total * 10n < want * 8n * BigInt(Math.max(1, agents)) || burned * 100n < total * 15n) throw new AgentApiError(402, "That mint did not pay the $5 creation fee, so the agent will not run.");
 }
 
 /** Checks a new agent against the chain (its mint, its owner, its wallet) and returns the record to store. */
@@ -164,10 +166,12 @@ export async function checkRegistration(env: NonNullable<ReturnType<typeof agent
   if (!receipt || receipt.status !== "success") throw new AgentApiError(409, "The mint is not on-chain yet. Try again in a moment.");
   let id: string | null = null;
   let contractFee = 0n;
+  let mintsInTx = 0;
   for (const log of receipt.logs) {
     if (log.address.toLowerCase() !== AGENTS_CONTRACT.toLowerCase()) continue;
     try {
       const ev = decodeEventLog({ abi: MINTED, data: log.data, topics: log.topics });
+      if (ev.args.creator.toLowerCase() === owner.toLowerCase() && ev.args.fee === 0n) mintsInTx += 1;
       if (ev.args.creator.toLowerCase() === owner.toLowerCase() && ev.args.packageHash.toLowerCase() === pkg.hash.toLowerCase()) {
         id = ev.args.id.toString();
         contractFee = ev.args.fee;
@@ -178,7 +182,7 @@ export async function checkRegistration(env: NonNullable<ReturnType<typeof agent
   }
   if (!id) throw new AgentApiError(400, "That transaction did not mint this agent from this account.");
   // With no fee in the contract, the $5 is paid alongside the mint: check it was, with its burn, before running it.
-  if (contractFee === 0n) await checkDollarFee(receipt.logs, owner);
+  if (contractFee === 0n) await checkDollarFee(receipt.logs, owner, undefined, mintsInTx);
   return {
     id,
     name,

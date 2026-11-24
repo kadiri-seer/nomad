@@ -22,6 +22,15 @@ export const json = (body: unknown, status = 200) => NextResponse.json(body, { s
 const chain = { id: CHAIN_ID, name: "Robinhood Chain", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [PUBLIC_RPC] } } } as const;
 const publicClient = () => createPublicClient({ chain, transport: http(PUBLIC_RPC, { timeout: 15_000 }) });
 
+let fivePriceCache: { at: number; nomad: bigint } | null = null;
+/** $5 of $NOMAD at Stoa's price, read at most every minute. */
+async function nomadFor5(): Promise<bigint> {
+  if (fivePriceCache && Date.now() - fivePriceCache.at < 60_000) return fivePriceCache.nomad;
+  const q = await stoa().quote(USDG, NOMAD, 5_000_000n, TREASURY);
+  fivePriceCache = { at: Date.now(), nomad: q.amountOut };
+  return q.amountOut;
+}
+
 let gasCache: { at: number; wei: bigint } | null = null;
 /** The chain's gas price, read at most every 30 seconds. */
 async function gasPrice(): Promise<bigint | null> {
@@ -113,6 +122,7 @@ export function sponsorDeps(user: string | null = null): { sponsor: SponsorDeps;
       agents: (AGENTS_CONTRACT ?? "") as Address | "",
       signer: privateKeyToAccount(key as Hex),
       useFreeOp: (account, day) => useFreeOpFor(redis, { account, user }, day),
+      nomadFor5,
       gasPrice,
       hold: (account, wei, hash, until) => hold(credits, account, wei, hash, until),
       agentByAccount: (account) => agentStore(redis).byAccount(account)

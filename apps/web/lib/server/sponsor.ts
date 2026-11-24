@@ -128,6 +128,40 @@ const MIN_TOPUP_SWAP_OUT = (MIN_TOPUP_USDG * 9n) / 10n;
  */
 const BURN = "0x000000000000000000000000000000000000dEaD";
 
+/**
+ * What a mint operation pays as the $5 creation fee: how many agents it mints, and the $NOMAD it sends to the burn
+ * address and the treasury alongside.
+ */
+export function mintFeeOf(callData: Hex, sender: Address, agents: Address | ""): { mints: number; paid: bigint; burned: bigint } {
+  let calls: readonly { to: Address; data?: Hex; value?: bigint }[];
+  try {
+    calls = decodeCallsMAv2(callData, sender);
+  } catch {
+    return { mints: 0, paid: 0n, burned: 0n };
+  }
+  let mints = 0;
+  let paid = 0n;
+  let burned = 0n;
+  for (const c of calls) {
+    const to = lc(c.to);
+    try {
+      if (agents && to === lc(agents) && decodeFunctionData({ abi: AGENTS_ABI, data: c.data ?? "0x" }).functionName === "mint") mints += 1;
+      else if (to === lc(NOMAD)) {
+        const d = decodeFunctionData({ abi: erc20Abi, data: c.data ?? "0x" });
+        if (d.functionName !== "transfer") continue;
+        const dest = lc(d.args[0] as string);
+        if (dest === lc(BURN)) {
+          burned += d.args[1] as bigint;
+          paid += d.args[1] as bigint;
+        } else if (dest === lc(TREASURY)) paid += d.args[1] as bigint;
+      }
+    } catch {
+      /* not one of these */
+    }
+  }
+  return { mints, paid, burned };
+}
+
 /** A free send goes somewhere else: not back to the account itself, and not to the treasury (that is Add credits). */
 const sendable = (to: Address, amount: bigint, sender: Address) => amount > 0n && lc(to) !== lc(sender) && lc(to) !== lc(TREASURY);
 
@@ -281,6 +315,11 @@ export type SponsorDeps = {
    * (to settle at the real cost once it lands, or release once it expires); false when the credits do not cover it.
    */
   hold: (account: Address, maxCostWei: bigint, userOpHash: Hex, validUntil: number) => Promise<boolean>;
+  /**
+   * $5 of $NOMAD at Stoa's price now. When given, a mint is free only if it pays about that per agent (at least 80%,
+   * for the price moving), with at least 15% of it burned; otherwise it is paid from credits like anything else.
+   */
+  nomadFor5?: () => Promise<bigint>;
   /** The chain's gas price now, in wei, to check the fee a free operation names; null when it cannot be read. */
   gasPrice?: () => Promise<bigint | null>;
   /** Agent wallets and whose account pays for them (agent operations are charged to the creator's credits). */
@@ -342,6 +381,11 @@ export async function sponsor(deps: SponsorDeps, params: unknown[]) {
   const agent = deps.agentByAccount ? await deps.agentByAccount(op.sender) : null;
   const payer = agent?.owner ?? op.sender;
   let kind = classify(op.callData, op.sender, deps.agents);
+  if (kind === "mint" && deps.nomadFor5) {
+    const f = mintFeeOf(op.callData, op.sender, deps.agents);
+    const want = await deps.nomadFor5().catch(() => null);
+    if (!want || f.mints < 1 || f.paid * 10n < want * 8n * BigInt(f.mints) || f.burned * 100n < f.paid * 15n) kind = "paid";
+  }
   if (kind === "paid" && deps.agentByAccount) kind = await classifyAgentMove(op.callData, op.sender, agent, deps.agentByAccount);
   let paidBy: "treasury" | "credits" = "credits";
   if (kind !== "paid" && freeGasOk(op, deps.gasPrice ? await deps.gasPrice().catch(() => null) : null) && (await deps.useFreeOp(payer, now.toISOString().slice(0, 10)))) paidBy = "treasury";
