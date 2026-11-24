@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "schedules": {
+    "agents-runner": {
+      "schedule": "*/15 * * * *",
+      "path": "/api/agents/wake",
+      "requestMethod": "POST"
+    }
+  }
+}
