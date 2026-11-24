@@ -17,7 +17,7 @@ type Content = { role: string; parts: Part[] };
 export type ResearchLimits = { maxCalls: number; maxRounds: number; maxMs: number; maxTokens: number };
 export const RESEARCH_LIMITS: ResearchLimits = { maxCalls: 6, maxRounds: 4, maxMs: 100_000, maxTokens: 900 };
 
-export function gemini(apiKey: string, opts: { model?: string; fetchImpl?: typeof fetch; now?: () => number } = {}) {
+export function gemini(apiKey: string, opts: { model?: string; fetchImpl?: typeof fetch; now?: () => number; onError?: (detail: string) => void } = {}) {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const models = [...new Set([opts.model, ...MODELS].filter((m): m is string => !!m && /^[a-z0-9.-]{3,60}$/.test(m)))];
   let working: string | null = null;
@@ -33,6 +33,10 @@ export function gemini(apiKey: string, opts: { model?: string; fetchImpl?: typeo
         signal: AbortSignal.timeout(30_000),
         cache: "no-store"
       });
+      if (!r.ok) {
+        const e = (await r.clone().json().catch(() => ({}))) as { error?: { message?: string; status?: string } };
+        opts.onError?.(`${model}: HTTP ${r.status} ${e.error?.status ?? ""} ${(e.error?.message ?? "").slice(0, 300)}`.trim());
+      }
       if (tryNext(r.status) && !pinned) continue;
       if (!r.ok) return null;
       working = model;

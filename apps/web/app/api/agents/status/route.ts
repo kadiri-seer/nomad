@@ -7,13 +7,21 @@ import { agentEnv } from "@/lib/server/agent-api";
 import { gemini } from "@/lib/server/gemini";
 import { idlexPayer } from "@/lib/server/runner-keys";
 import { privyKeysReady } from "@/lib/server/privy-auth";
-import { agentHealth } from "@/lib/server/agent-health";
+import { agentHealth, researchCheck } from "@/lib/server/agent-health";
+import { toolKit } from "@/lib/server/agent-tools";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 120;
 
 export async function GET(req: Request) {
   // ?check=1: the live check of everything agents depend on (cached for ten minutes).
-  if (new URL(req.url).searchParams.get("check") === "1") {
+  const check = new URL(req.url).searchParams.get("check");
+  if (check === "research") {
+    const env = agentEnv();
+    if (!env) return json({ ready: false });
+    return json(await researchCheck(env.store, () => toolKit({ cache: env.store })));
+  }
+  if (check === "1") {
     const env = agentEnv();
     if (!env) return json({ ready: false });
     return json(await agentHealth(env.store));
