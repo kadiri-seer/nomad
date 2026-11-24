@@ -119,6 +119,9 @@ importers:
       '@nomad/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@veninlab/venin':
+        specifier: 0.1.0
+        version: 0.1.0
       better-sqlite3:
         specifier: ^12.4.0
         version: 12.11.1
@@ -379,6 +382,9 @@ importers:
       '@nomad/schema':
         specifier: workspace:*
         version: link:../schema
+      '@veninlab/venin':
+        specifier: 0.1.0
+        version: 0.1.0
 
   packages/storage:
     dependencies:
@@ -1697,6 +1703,9 @@ packages:
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
+
+  '@veninlab/venin@0.1.0':
+    resolution: {integrity: sha512-sNSvhB2ofBy9GlOavbtdp2MRfy4TNa9MDROE1Hvz4IaapruTvSCHwdnIiBa87LrOWkfoSiebfZzfeeE0H9puvA==}
 
   '@vitest/expect@4.1.12':
     resolution: {integrity: sha512-vFlTt+YEu9WBpNjdGayNmlMVzrWPi1+sv853/7t2FU7hpO5gAFBKHzQmkCq5Xjpr+evegF2994LQT3hF3mRlqQ==}
@@ -5349,6 +5358,8 @@ snapshots:
   '@types/stylis@4.2.7': {}
 
   '@types/trusted-types@2.0.7': {}
+
+  '@veninlab/venin@0.1.0': {}
 
   '@vitest/expect@4.1.12':
     dependencies:

@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Nomad, approvalsFor, missingApprovals } from "@nomad/migration";
-import { parseVeninReport, textFiles, type VeninReport, type VeninScanner } from "@nomad/security";
+import { isInfection, loadVenin, parseVeninReport, textFiles, type VeninReport, type VeninScanner } from "@nomad/security";
 import { setup, type Env } from "../helpers";
 
 /**
@@ -120,9 +120,33 @@ describe("reading Venin's answer", () => {
   });
 });
 
-// The real scanner, when a build of Venin's scan is available (VENIN_JSON_BIN): same files, Venin's own verdict.
+// Venin's real scanner, the published npm package Nomad ships with: what a plain Nomad finds on its own.
+describe("with Venin's published scanner", () => {
+  it("is what Nomad loads, and finds the planted order in what a move would write", async () => {
+    const real = await loadVenin();
+    expect(real).not.toBeNull();
+    const n = new Nomad({ home: join(env.home, ".nomad-npm"), venin: real });
+    try {
+      appendFileSync(join(env.roots.claude, "CLAUDE.md"), `\n${PLANTED}\n`);
+      const plan = await n.plan({ source: source(), destination: dest() });
+      expect(plan.venin.ran).toBe(true);
+      expect(plan.venin.plantedOrders).toBeGreaterThan(0);
+      expect(plan.approvalsRequired).toContain("planted-orders");
+    } finally {
+      n.close();
+    }
+  });
+  it("answers a clean folder with no planted orders", async () => {
+    const real = (await loadVenin())!;
+    const r = await real([{ path: "MEMORY.md", content: "Likes short replies." }]);
+    expect(r.read).toBe(1);
+    expect(r.findings.filter(isInfection)).toEqual([]);
+  });
+});
+
+// A native build of Venin's scan, when one is given (VENIN_JSON_BIN): the same verdict outside WebAssembly.
 const BIN = process.env.VENIN_JSON_BIN;
-describe.skipIf(!BIN)("with Venin's real scanner", () => {
+describe.skipIf(!BIN)("with a native build of Venin's scanner", () => {
   it("finds the planted order in what a move would write", async () => {
     const real: VeninScanner = async (files) => parseVeninReport(spawnSync(BIN!, [], { input: JSON.stringify({ files }), encoding: "utf8" }).stdout);
     const n = new Nomad({ home: join(env.home, ".nomad-real"), venin: real });

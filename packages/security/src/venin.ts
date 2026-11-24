@@ -10,7 +10,7 @@
 
 export type VeninFinding = {
   organ: string;
-  /** comment: hidden text that gives orders; order: planted orders; actor, wide, pay: risky setup. */
+  /** hidden: invisible characters; comment: hidden text that gives orders; order: planted orders; actor, wide, pay: risky setup. */
   check: string;
   kind: string;
   file: string;
@@ -22,12 +22,13 @@ export type VeninReport = { read: number; skipped: string[]; findings: VeninFind
 export type VeninScanner = (files: { path: string; content: string }[]) => Promise<VeninReport>;
 
 /**
- * The npm package with Venin's scanner. Null until Venin publishes it; NOMAD_VENIN_PACKAGE can name one to try.
+ * The npm package with Venin's scanner (WebAssembly, no network: its only import is wasm-bindgen's own setup).
+ * Pinned in the CLI's dependencies; NOMAD_VENIN_PACKAGE can name another build to try.
  */
-export const VENIN_PACKAGE: string | null = null;
+export const VENIN_PACKAGE: string | null = "@veninlab/venin";
 
-/** Checks that count as an infection: orders someone planted, in plain or hidden text. */
-export const INFECTION_CHECKS = new Set(["order", "comment"]);
+/** Checks that count as an infection: orders someone planted, in plain text, in comments, or in hidden characters. */
+export const INFECTION_CHECKS = new Set(["order", "comment", "hidden"]);
 export const isInfection = (f: VeninFinding) => INFECTION_CHECKS.has(f.check);
 
 const MAX_FILE_BYTES = 512 * 1024;

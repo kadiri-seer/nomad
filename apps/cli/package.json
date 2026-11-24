@@ -1,6 +1,6 @@
 {
   "name": "@nomad/cli",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "description": "Nomad command line: export, import, migrate and manage AI agents.",
   "type": "module",
   "license": "MIT",
@@ -31,7 +31,8 @@
     "better-sqlite3": "^12.4.0",
     "drizzle-orm": "^0.45.0",
     "@modelcontextprotocol/sdk": "^1.20.0",
-    "@nomad/local": "workspace:*"
+    "@nomad/local": "workspace:*",
+    "@veninlab/venin": "0.1.0"
   },
   "devDependencies": {
     "tsup": "^8.5.0"

@@ -30,7 +30,7 @@ MCP servers named `__proto__`, `constructor` or `prototype` are neither read nor
 
 ## Venin's check-up on every move
 
-When Venin's scanner is installed (its npm package, from [Venin](https://venin.io)), every move preview runs it on exactly the files the move would write: the text Nomad is about to put in the destination app, after conversion. Venin reports planted orders (instructions someone hid or planted in tool, skill, rule or note text) and risky setup (wide permissions, tools that act with no one asking, pay tools without limits). Nomad shows every finding in the preview and does not change Venin's verdicts.
+Nomad ships with Venin's scanner (`@veninlab/venin` 0.1.0 on npm, from [Venin](https://venin.io), MIT; WebAssembly with no network or file access), and every move preview runs it on exactly the files the move would write: the text Nomad is about to put in the destination app, after conversion. Venin reports planted orders (instructions someone hid or planted in tool, skill, rule or note text) and risky setup (wide permissions, tools that act with no one asking, pay tools without limits). Nomad shows every finding in the preview and does not change Venin's verdicts.
 
 - Planted orders need the `planted-orders` approval (`--approve-planted-orders` in the CLI, a checkbox in the dashboard). Approve only if you wrote those instructions yourself.
 - An assistant can never give that approval: the MCP server refuses to apply such a move, whatever it was started with.
@@ -38,7 +38,7 @@ When Venin's scanner is installed (its npm package, from [Venin](https://venin.i
 - Without Venin's scanner, moves work as before and the preview says nothing about it. If the scanner fails, the preview says the move was not checked.
 - Venin reads only the text it is given. Nomad passes it the files the move writes (text files under 512 KB), never key files or wallet folders.
 
-Tested with a stand-in scanner in every CI run, and with a build of Venin's own scan (`VENIN_JSON_BIN`), which found the planted order in what a move would write.
+Tested with a stand-in scanner and with Venin's published package in every CI run: the package finds the planted order in what a move would write. A native build of Venin's scan (`VENIN_JSON_BIN`) gives the same verdict.
 
 ## Steps you copy
 
