@@ -59,6 +59,8 @@ export type RunnerDeps = {
     ask(prompt: string, system: string): Promise<string | null>;
     withTools?(prompt: string, system: string): Promise<{ text: string; used: string[] } | null>;
   };
+  /** Waits (OddsEngine's deeper scan takes about a minute); a test passes one that returns at once. */
+  sleep?: (ms: number) => Promise<void>;
   /** OddsEngine's token scan, run just before each buy when Nomad's OddsEngine key is set. */
   oddsEngine?: { name: string; scanToken(token: Address): Promise<OddsVerdict | null> };
   /** Venin's check on text an agent would remember or show; planted orders keep it out. */
@@ -270,7 +272,13 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
       let v = await d.store.cacheGet<OddsVerdict>(key);
       if (!v) {
         v = await d.oddsEngine.scanToken(c.address).catch(() => null);
-        if (v && !v.skipped) await d.store.cacheSet(key, v, 3600);
+        // Its deeper scan (bundles, clusters, early buyers) arrives in about a minute: wait for it once.
+        if (v && !v.skipped && v.deepRunning && !v.facts.length) {
+          await (d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))))(60_000);
+          v = (await d.oddsEngine.scanToken(c.address).catch(() => null)) ?? v;
+        }
+        // A finished scan is shared for an hour; one still running only briefly.
+        if (v && !v.skipped) await d.store.cacheSet(key, v, v.deepRunning ? 90 : 3600);
       }
       if (v?.skipped) checked = " OddsEngine's daily limit for Nomad's agents was reached, so it went on the other checks.";
       else if (!v) checked = " OddsEngine did not answer, so it went on the other checks.";

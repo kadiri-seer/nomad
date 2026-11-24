@@ -132,7 +132,8 @@ function harness(opts: { oddsEngine?: RunnerDeps["oddsEngine"]; venin?: RunnerDe
     ai: opts.ai ?? null,
     idlex: opts.idlex ?? null,
     ...(opts.venin ? { venin: opts.venin } : {}),
-    ...(opts.oddsEngine ? { oddsEngine: opts.oddsEngine } : {})
+    ...(opts.oddsEngine ? { oddsEngine: opts.oddsEngine } : {}),
+    sleep: async () => undefined
   };
   return { d, store, sent, charges, balances, redis };
 }
@@ -561,6 +562,16 @@ describe("second safety checks: Rushr and OddsEngine", () => {
     const down = harness({ oddsEngine: { name: "OddsEngine", scanToken: async () => null } });
     expect((await runAgent(down.d, agent()))[0]).toMatch(/^Bought HOOKR.*OddsEngine did not answer/);
     expect(down.charges).toEqual([]);
+  });
+});
+
+describe("OddsEngine's deeper scan", () => {
+  it("waits once for it when the first answer has no findings yet, and uses what it finds", async () => {
+    const answers = [{ facts: [], context: "", deepRunning: true }, { facts: ["40% of supply bought in the launch block"], context: "" }];
+    let n = 0;
+    const h = harness({ ai: { name: "Gemini", ask: async (p) => (p.includes("On-chain facts") ? "RED FLAG: yes\nMost supply was sniped at launch." : "RED FLAG: no\nok") }, oddsEngine: { name: "OddsEngine", scanToken: async () => answers[Math.min(n++, 1)] } });
+    expect((await runAgent(h.d, agent())).at(-1)).toMatch(/^Skipped HOOKR: Gemini read OddsEngine's on-chain facts as a red flag/);
+    expect(n).toBe(2);
   });
 });
 
