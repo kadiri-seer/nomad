@@ -10,8 +10,9 @@ import { createPublicClient, http, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { redisFromEnv, type RedisLike } from "../vote/redis";
 import { AGENTS_CONTRACT } from "../economy";
-import { CHAIN_ID, PAYMASTER, PUBLIC_RPC } from "../accounts/chain";
-import { hold, useFreeOp, type CreditsDeps } from "./credits";
+import { CHAIN_ID, NOMAD, PAYMASTER, PUBLIC_RPC, TREASURY, USDG } from "../accounts/chain";
+import { hold, useFreeOpFor, type CreditsDeps } from "./credits";
+import { stoa } from "./stoa";
 import { agentStore } from "./agents-store";
 import type { SponsorDeps } from "./sponsor";
 
@@ -71,6 +72,7 @@ export function creditsDeps(redis: RedisLike): CreditsDeps {
         return null;
       }
     },
+    nomadValueMicros: async (amount: bigint) => (await stoa().quote(NOMAD, USDG, amount, TREASURY)).amountOut,
     userOpCost: async (hash: Hex) => {
       const r = await bundlerCall("eth_getUserOperationReceipt", [hash]);
       const res = r.result as { actualGasCost?: string } | null | undefined;
@@ -79,8 +81,11 @@ export function creditsDeps(redis: RedisLike): CreditsDeps {
   };
 }
 
-/** The paymaster service's dependencies, or why it is not available on this deployment. */
-export function sponsorDeps(): { sponsor: SponsorDeps; credits: CreditsDeps } | string {
+/**
+ * The paymaster service's dependencies, or why it is not available on this deployment. `user` is the Privy id of
+ * the signed-in person making the request: free operations go only to them, never to the server's own calls.
+ */
+export function sponsorDeps(user: string | null = null): { sponsor: SponsorDeps; credits: CreditsDeps } | string {
   if (!PAYMASTER) return "Gas is not set up on this site yet.";
   const key = process.env.NOMAD_PAYMASTER_SIGNER_KEY?.trim();
   if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) return "Gas is not set up on this site yet.";
@@ -94,9 +99,24 @@ export function sponsorDeps(): { sponsor: SponsorDeps; credits: CreditsDeps } | 
       paymaster: PAYMASTER as Address,
       agents: (AGENTS_CONTRACT ?? "") as Address | "",
       signer: privateKeyToAccount(key as Hex),
-      useFreeOp: (account, day) => useFreeOp(redis, account, day),
+      useFreeOp: (account, day) => useFreeOpFor(redis, { account, user }, day),
       hold: (account, wei, hash, until) => hold(credits, account, wei, hash, until),
       agentByAccount: (account) => agentStore(redis).byAccount(account)
     }
   };
+}
+
+/** A small per-address limit on the public account routes, so nobody can run through the bundler's quota. */
+export async function rateLimited(req: Request, route: string, perMinute: number): Promise<boolean> {
+  const redis = redisFromEnv();
+  if (!redis) return false;
+  const ip = (req.headers.get("x-real-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown").trim().slice(0, 64);
+  const key = `nomad:rl:${route}:${ip}:${Math.floor(Date.now() / 60_000)}`;
+  try {
+    const n = Number(await redis.cmd(["INCR", key]));
+    if (n === 1) await redis.cmd(["EXPIRE", key, 120]);
+    return n > perMinute;
+  } catch {
+    return false;
+  }
 }

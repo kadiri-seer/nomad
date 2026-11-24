@@ -40,14 +40,27 @@ export function ownerFromProvider(address: Address, provider: EIP1193Provider) {
 }
 
 /** The smart account and a client that sends its operations, gas paid through Nomad's paymaster route. */
-export async function accountClient(owner: ReturnType<typeof ownerFromProvider>, salt = 0n) {
+/**
+ * `getToken` gives the signed-in person's Privy access token: the paymaster route needs it to grant the free
+ * operations (account set-up, buying $NOMAD, credits, funding, withdrawing); without it everything is paid from credits.
+ */
+export async function accountClient(owner: ReturnType<typeof ownerFromProvider>, salt = 0n, getToken?: () => Promise<string | null>) {
   const account = await toModularAccountV2({ client: publicClient, owner, salt });
   const bundler = createBundlerClient({
     account,
     client: publicClient,
     chain: robinhood,
     transport: http("/api/account/bundler"),
-    paymaster: createPaymasterClient({ transport: http("/api/account/paymaster") }),
+    paymaster: createPaymasterClient({
+      transport: http("/api/account/paymaster", {
+        fetchFn: async (input, init) => {
+          const headers = new Headers(init?.headers);
+          const token = getToken ? await getToken().catch(() => null) : null;
+          if (token) headers.set("authorization", `Bearer ${token}`);
+          return fetch(input, { ...init, headers });
+        }
+      })
+    }),
     userOperation: {
       async estimateFeesPerGas() {
         const block = await publicClient.getBlock();
@@ -64,7 +77,7 @@ export async function accountClient(owner: ReturnType<typeof ownerFromProvider>,
       }
     }
   });
-  return { account, bundler };
+  return { account, bundler, getToken };
 }
 
 /** Sends calls as one operation and waits for it on-chain. */

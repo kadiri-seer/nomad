@@ -6,6 +6,7 @@ import { json } from "@/lib/server/account-routes";
 import { agentEnv } from "@/lib/server/agent-api";
 import { gemini } from "@/lib/server/gemini";
 import { idlexPayer } from "@/lib/server/runner-keys";
+import { privyKeysReady } from "@/lib/server/privy-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -22,5 +23,5 @@ export async function GET() {
       await env.store.cacheSet("gemini-probe", probe, probe.ok ? 3600 : 120);
     }
   }
-  return json({ ready: !!env, ai: key ? "gemini" : "idlex", aiAnswering: probe?.ok ?? null, aiModel: probe?.model ?? null, aiDetail: probe?.detail ?? null, idlexPayer: env ? idlexPayer(env.secret).address : null });
+  return json({ ready: !!env, ai: key ? "gemini" : "idlex", aiAnswering: probe?.ok ?? null, aiModel: probe?.model ?? null, aiDetail: probe?.detail ?? null, idlexPayer: env ? idlexPayer(env.secret).address : null, signInCheck: await privyKeysReady().catch(() => false) });
 }

@@ -2,8 +2,8 @@
  * The account pages' way to Alchemy's bundler on Robinhood Chain, so the API key stays on the server. Only the
  * ERC-4337 bundler methods pass, and only for the v0.7 EntryPoint.
  */
-import { bundlerCall, json } from "@/lib/server/account-routes";
-import { ENTRY_POINT } from "@/lib/accounts/chain";
+import { bundlerCall, json, rateLimited } from "@/lib/server/account-routes";
+import { ENTRY_POINT, PAYMASTER } from "@/lib/accounts/chain";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +31,12 @@ export async function POST(req: Request) {
   if (!ALLOWED.has(method)) return json({ jsonrpc: "2.0", id, error: { code: -32601, message: `${method} is not available here.` } });
   if (NEEDS_ENTRY_POINT.has(method) && String(params[1] ?? "").toLowerCase() !== ENTRY_POINT.toLowerCase()) {
     return json({ jsonrpc: "2.0", id, error: { code: -32602, message: "Only the v0.7 EntryPoint is supported." } });
+  }
+  if (await rateLimited(req, "bundler", 120)) return json({ jsonrpc: "2.0", id, error: { code: -32005, message: "Too many requests. Wait a minute and try again." } }, 429);
+  // Only operations paid through Nomad's paymaster are sent: this route is for Nomad accounts, not a free bundler.
+  if (method === "eth_sendUserOperation") {
+    const op = (params[0] ?? {}) as { paymaster?: unknown };
+    if (!PAYMASTER || String(op.paymaster ?? "").toLowerCase() !== PAYMASTER.toLowerCase()) return json({ jsonrpc: "2.0", id, error: { code: -32602, message: "Only operations paid through Nomad are sent here." } });
   }
   if (!process.env.ALCHEMY_RPC_URL?.trim()) return json({ jsonrpc: "2.0", id, error: { code: -32001, message: "Transactions are not set up on this site yet." } });
   try {

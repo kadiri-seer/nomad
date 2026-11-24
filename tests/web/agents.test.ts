@@ -378,7 +378,7 @@ describe("agent store", () => {
 
 describe("who pays for moves between an account and its agents", () => {
   const byAccount = async (a: Address) => (a.toLowerCase() === WALLET.toLowerCase() ? { owner: OWNER } : null);
-  const t = (token: Address, to: Address, amount = 5n) => ({ to: token, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [to, amount] }), value: 0n });
+  const t = (token: Address, to: Address, amount = 5_000_000n) => ({ to: token, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [to, amount] }), value: 0n });
   it("treats taking everything back to the creator as a withdrawal", async () => {
     const data = encodeCallsMAv2([t(USDG, OWNER), t(TOKEN, OWNER)]);
     expect(await classifyAgentMove(data, WALLET, { owner: OWNER }, byAccount)).toBe("withdraw");
@@ -388,6 +388,7 @@ describe("who pays for moves between an account and its agents", () => {
     expect(await classifyAgentMove(encodeCallsMAv2([t(USDG, WALLET)]), OWNER, null, byAccount)).toBe("fund-agent");
     expect(await classifyAgentMove(encodeCallsMAv2([t(USDG, WALLET)]), SIGNER, null, byAccount)).toBe("paid");
     expect(await classifyAgentMove(encodeCallsMAv2([t(TOKEN, WALLET)]), OWNER, null, byAccount)).toBe("paid");
+    expect(await classifyAgentMove(encodeCallsMAv2([t(USDG, WALLET, 99_999n)]), OWNER, null, byAccount)).toBe("paid"); // under 0.10 USDG
   });
 });
 

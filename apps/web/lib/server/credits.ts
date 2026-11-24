@@ -37,6 +37,8 @@ export type CreditsDeps = {
   txReceipt: (hash: Hex) => Promise<Receipt | null>;
   /** A user operation's actual gas cost in wei once it landed, or null when it has not (the bundler's receipt). */
   userOpCost: (userOpHash: Hex) => Promise<bigint | null>;
+  /** What an amount of $NOMAD is worth in micro-USDG right now (Stoa's quote), for the $NOMAD top-up bonus. */
+  nomadValueMicros?: (amount: bigint) => Promise<bigint>;
   now?: () => Date;
 };
 
@@ -68,6 +70,27 @@ export async function balanceOf(deps: Pick<CreditsDeps, "redis">, account: Addre
   return { balanceUsd: usd(b.balance), heldUsd: usd(b.held), availableUsd: usd(b.available), micros: b };
 }
 
+/** All the operations the treasury pays outright in a UTC day, across every account: a ceiling on what free
+ * operations can ever cost it, whatever happens. */
+export const FREE_OPS_GLOBAL_PER_DAY = 300;
+
+/**
+ * Records one operation the treasury pays outright, for a person signed in with Google (their Privy id): false once
+ * they, their account, or everyone together used today's. Without a signed-in person nothing is free.
+ */
+export async function useFreeOpFor(redis: RedisLike, who: { account: Address; user: string | null }, day: string): Promise<boolean> {
+  // "*" only when Privy's keys could not be loaded at all: then the account and global limits still hold.
+  if (!who.user) return false;
+  const bump = async (key: string, max: number) => {
+    const n = Number(await redis.cmd(["INCR", key]));
+    if (n === 1) await redis.cmd(["EXPIRE", key, 2 * 86400]);
+    return n <= max;
+  };
+  if (!(await bump(`nomad:free:all:${day}`, FREE_OPS_GLOBAL_PER_DAY))) return false;
+  if (who.user !== "*" && !(await bump(`nomad:free:user:${who.user}:${day}`, FREE_OPS_PER_DAY))) return false;
+  return bump(FREE(who.account, day), FREE_OPS_PER_DAY);
+}
+
 /** Records one operation the treasury pays outright; false once the account used today's. */
 export async function useFreeOp(redis: RedisLike, account: Address, day: string): Promise<boolean> {
   const n = Number(await redis.cmd(["INCR", FREE(account, day)]));
@@ -79,9 +102,13 @@ export async function useFreeOp(redis: RedisLike, account: Address, day: string)
 export async function hold(deps: CreditsDeps, account: Address, maxCostWei: bigint, userOpHash: Hex, validUntil: number): Promise<boolean> {
   await settle(deps, account);
   const micros = gasCharge(maxCostWei, await deps.ethUsd());
-  const b = await readBalance(deps.redis, account);
-  if (b.available < micros) return false;
-  await deps.redis.cmd(["HINCRBY", KEY(account), "held", micros.toString()]);
+  // Hold first, then check: two operations asked for at the same moment can never both pass on the same credits.
+  const held = BigInt(String(await deps.redis.cmd(["HINCRBY", KEY(account), "held", micros.toString()])));
+  const balance = BigInt(hashToObject(await deps.redis.cmd(["HGETALL", KEY(account)])).balance ?? "0");
+  if (balance - held < 0n) {
+    await deps.redis.cmd(["HINCRBY", KEY(account), "held", (-micros).toString()]);
+    return false;
+  }
   await deps.redis.cmd(["HSET", PENDING(account), userOpHash.toLowerCase(), JSON.stringify({ held: micros.toString(), validUntil })]);
   return true;
 }
@@ -150,7 +177,7 @@ export async function claimTopUp(deps: CreditsDeps, account: string, txHash: str
   });
   if (!window) throw new CreditsError(400, "That transaction is not a payment from this account.");
   let usdg = 0n;
-  let paidInNomad = false;
+  let nomadOut = 0n;
   for (const l of window as typeof receipt.logs) {
     let ev;
     try {
@@ -160,10 +187,17 @@ export async function claimTopUp(deps: CreditsDeps, account: string, txHash: str
     }
     if (ev.eventName !== "Transfer") continue;
     if (lc(l.address) === lc(USDG) && lc(ev.args.to) === lc(TREASURY)) usdg += ev.args.value;
-    if (lc(l.address) === lc(NOMAD) && lc(ev.args.from) === lc(acct)) paidInNomad = true;
+    if (lc(l.address) === lc(NOMAD) && lc(ev.args.from) === lc(acct)) nomadOut += ev.args.value;
   }
   if (usdg < MIN_TOPUP_USDG) throw new CreditsError(400, "That transaction did not pay the treasury at least 1 USDG.");
-  const added = paidInNomad ? (usdg * (10_000n + NOMAD_TOPUP_BONUS_BPS)) / 10_000n : usdg;
+  // The bonus is on what was really paid in $NOMAD: at most the market value (in USDG) of the $NOMAD that left the
+  // account, so a USDG top-up with a crumb of $NOMAD sent alongside earns no bonus.
+  let bonusBase = 0n;
+  if (nomadOut > 0n && deps.nomadValueMicros) {
+    const value = await deps.nomadValueMicros(nomadOut).catch(() => 0n);
+    bonusBase = value < usdg ? value : usdg;
+  }
+  const added = usdg + (bonusBase * NOMAD_TOPUP_BONUS_BPS) / 10_000n;
   if ((await deps.redis.cmd(["SADD", CLAIMED, txHash.toLowerCase()])) !== 1) throw new CreditsError(409, "That top-up was counted already.");
   await deps.redis.cmd(["HINCRBY", KEY(acct), "balance", added.toString()]);
   await settle(deps, acct);
@@ -173,10 +207,14 @@ export async function claimTopUp(deps: CreditsDeps, account: string, txHash: str
 /** Charges an agent run's AI cost (micro-dollars) to the account; false when the credits do not cover it. */
 export async function chargeRun(deps: CreditsDeps, account: Address, micros: bigint): Promise<boolean> {
   await settle(deps, account);
-  const b = await readBalance(deps.redis, account);
   if (micros <= 0n) return true;
-  if (b.available < micros) return false;
-  await deps.redis.cmd(["HINCRBY", KEY(account), "balance", (-micros).toString()]);
+  // Take first, then check, and give back if it went below what is held: never spends the same credits twice.
+  const balance = BigInt(String(await deps.redis.cmd(["HINCRBY", KEY(account), "balance", (-micros).toString()])));
+  const held = BigInt(hashToObject(await deps.redis.cmd(["HGETALL", KEY(account)])).held ?? "0");
+  if (balance - held < 0n) {
+    await deps.redis.cmd(["HINCRBY", KEY(account), "balance", micros.toString()]);
+    return false;
+  }
   return true;
 }
 

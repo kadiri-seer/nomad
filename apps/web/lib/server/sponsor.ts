@@ -100,10 +100,13 @@ export function maxCostWei(op: RpcUserOp): bigint {
 
 export type Kind = "topup" | "buy-nomad" | "mint" | "withdraw" | "fund-agent" | "paid";
 
+/** A $NOMAD top-up swap must pay the treasury at least this (90% of the 1 USDG minimum, for the price moving). */
+const MIN_TOPUP_SWAP_OUT = (MIN_TOPUP_USDG * 9n) / 10n;
+
 /**
  * What an operation does, from its calls. The treasury pays only when every call is part of one of these, exactly:
  *   topup:     USDG sent to the treasury (at least MIN_TOPUP_USDG), or a Stoa swap paying out to the treasury;
- *   buy-nomad: a Stoa swap from USDG to $NOMAD (with its USDG approval);
+ *   buy-nomad: a Stoa swap of at least 1 USDG to $NOMAD (with its USDG approval), or any amount alongside a mint;
  *   mint:      minting a Nomad agent (with its $NOMAD approval to the agents contract).
  * Anything else, or any mix with anything else, is paid from credits.
  */
@@ -115,7 +118,8 @@ export function classify(callData: Hex, sender: Address, agents: Address | ""): 
     return "paid";
   }
   if (!calls.length) return "paid";
-  const kinds = new Set<Kind>();
+  // "small-buy" is a USDG to $NOMAD swap under 1 USDG: free only as the top-up inside a mint.
+  const kinds = new Set<Kind | "small-buy">();
   for (const c of calls) {
     if ((c.value ?? 0n) !== 0n) return "paid";
     const to = lc(c.to);
@@ -134,8 +138,8 @@ export function classify(callData: Hex, sender: Address, agents: Address | ""): 
     } else if (to === lc(STOA_ROUTER)) {
       const swap = stoaSwap(data);
       if (!swap) return "paid";
-      if (lc(swap.to) === lc(TREASURY) && lc(swap.tokenOut) === lc(USDG)) kinds.add("topup");
-      else if (lc(swap.to) === lc(sender) && lc(swap.tokenIn) === lc(USDG) && lc(swap.tokenOut) === lc(NOMAD)) kinds.add("buy-nomad");
+      if (lc(swap.to) === lc(TREASURY) && lc(swap.tokenOut) === lc(USDG) && swap.minOut >= MIN_TOPUP_SWAP_OUT) kinds.add("topup");
+      else if (lc(swap.to) === lc(sender) && lc(swap.tokenIn) === lc(USDG) && lc(swap.tokenOut) === lc(NOMAD)) kinds.add(swap.amountIn >= MIN_TOPUP_USDG ? "buy-nomad" : "small-buy");
       else return "paid";
     } else if (agents && to === lc(agents)) {
       try {
@@ -149,8 +153,9 @@ export function classify(callData: Hex, sender: Address, agents: Address | ""): 
     }
   }
   // Approvals alone, or more than one purpose in one operation, are not free.
-  if (kinds.size !== 1) return kinds.has("mint") && kinds.has("buy-nomad") && kinds.size === 2 ? "mint" : "paid";
-  return [...kinds][0];
+  if (kinds.has("mint")) return [...kinds].every((k) => k === "mint" || k === "buy-nomad" || k === "small-buy") ? "mint" : "paid";
+  if (kinds.size !== 1 || kinds.has("small-buy")) return "paid";
+  return [...kinds][0] as Kind;
 }
 
 /**
@@ -158,6 +163,9 @@ export function classify(callData: Hex, sender: Address, agents: Address | ""): 
  * out of an agent's wallet back to its creator's account ("withdraw"), and sending USDG from an account to one of its
  * own agents ("fund-agent"). Anything else from an agent's wallet is charged to its creator's credits.
  */
+/** The smallest agent funding the treasury pays the gas of (0.10 USDG); smaller ones are paid from credits. */
+export const MIN_FUND_AGENT_USDG = 100_000n;
+
 export async function classifyAgentMove(
   callData: Hex,
   sender: Address,
@@ -177,13 +185,13 @@ export async function classifyAgentMove(
     try {
       const d = decodeFunctionData({ abi: erc20Abi, data: c.data ?? "0x" });
       if (d.functionName !== "transfer") return "paid";
-      transfers.push({ token: c.to, to: d.args[0] as Address });
+      transfers.push({ token: c.to, to: d.args[0] as Address, amount: d.args[1] as bigint });
     } catch {
       return "paid";
     }
   }
   if (agentOfSender) return transfers.every((t) => lc(t.to) === lc(agentOfSender.owner)) ? "withdraw" : "paid";
-  if (transfers.length !== 1 || lc(transfers[0].token) !== lc(USDG)) return "paid";
+  if (transfers.length !== 1 || lc(transfers[0].token) !== lc(USDG) || transfers[0].amount < MIN_FUND_AGENT_USDG) return "paid";
   const target = await agentByAccount(transfers[0].to);
   return target && lc(target.owner) === lc(sender) ? "fund-agent" : "paid";
 }
@@ -216,11 +224,11 @@ const STOA_SWAP_ABI = [
   }
 ] as const;
 
-export function stoaSwap(data: Hex): { tokenIn: Address; tokenOut: Address; to: Address; amountIn: bigint } | null {
+export function stoaSwap(data: Hex): { tokenIn: Address; tokenOut: Address; to: Address; amountIn: bigint; minOut: bigint } | null {
   try {
     const d = decodeFunctionData({ abi: STOA_SWAP_ABI, data });
     const p = d.args[0];
-    return { tokenIn: p.tokenIn, tokenOut: p.tokenOut, to: p.to, amountIn: p.amountIn };
+    return { tokenIn: p.tokenIn, tokenOut: p.tokenOut, to: p.to, amountIn: p.amountIn, minOut: p.minOut };
   } catch {
     return null;
   }

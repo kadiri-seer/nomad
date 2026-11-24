@@ -135,6 +135,7 @@ function AgentSheet({ client, agent, onClose, onConfirm, onChanged }: { client: 
       return fail(new Error("Enter an amount in USDG."));
     }
     if (amount <= 0n) return fail(new Error("Enter an amount in USDG."));
+    if (amount < 100_000n) return fail(new Error("Fund at least 0.10 USDG."));
     onConfirm({
       title: `Fund ${agent.name}`,
       amount: `-${fmtUsdg(amount)} USDG`,
@@ -152,7 +153,7 @@ function AgentSheet({ client, agent, onClose, onConfirm, onChanged }: { client: 
   const doWithdraw = async () => {
     setBusy(true);
     try {
-      const via = await accountClient(client.owner, BigInt(agent.salt));
+      const via = await accountClient(client.owner, BigInt(agent.salt), client.getToken);
       if (via.account.address.toLowerCase() !== agent.account.toLowerCase()) throw new Error("This agent's wallet is not yours to withdraw from.");
       const tokens: { token: Address; symbol: string; amount: bigint }[] = [];
       const u = await erc20Balance(USDG, agent.account);

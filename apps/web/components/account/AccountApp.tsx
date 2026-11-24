@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PrivyProvider, usePrivy, useWallets } from "@privy-io/react-auth";
 import { formatUnits, parseAbi, parseUnits, type Address } from "viem";
-import { PRIVY_APP_ID, PAYMASTER, NOMAD, USDG } from "@/lib/accounts/chain";
+import { MIN_TOPUP_USDG, PRIVY_APP_ID, PAYMASTER, NOMAD, USDG } from "@/lib/accounts/chain";
 import { AGENTS_CONTRACT } from "@/lib/economy";
 import { DEFAULT_RUN_EVERY_HOURS, registerMessage, RUN_EVERY_HOURS } from "@/lib/agents/shared";
 import { grantSession, newSalt } from "@/lib/agents/wallet";
@@ -72,7 +72,7 @@ export function AccountApp({ placeholder, autoLogin = false }: { placeholder?: R
 }
 
 function Account({ placeholder, autoLogin }: { placeholder?: React.ReactNode; autoLogin: boolean }) {
-  const { ready, authenticated, login, logout } = usePrivy();
+  const { ready, authenticated, login, logout, getAccessToken } = usePrivy();
   const [asked, setAsked] = useState(false);
   useEffect(() => {
     // A tap on "Continue with Google" made before sign-in was ready opens it now.
@@ -93,7 +93,7 @@ function Account({ placeholder, autoLogin }: { placeholder?: React.ReactNode; au
       try {
         const provider = await embedded.getEthereumProvider();
         const owner = ownerFromProvider(embedded.address as Address, provider as never);
-        const c = await accountClient(owner);
+        const c = await accountClient(owner, 0n, getAccessToken);
         if (!off) setClient({ ...c, owner, signer: embedded.address as Address });
       } catch {
         if (!off) setError("Your account could not be opened. Reload the page to try again.");
@@ -366,7 +366,7 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
       ],
       note: "Nomad's runner gets a key that can only approve tokens and swap on Stoa from this agent's wallet, within its limits. You stay its owner: withdraw or pause any time.",
       build: async () => {
-        const agentClient = await accountClient(client.owner, salt);
+        const agentClient = await accountClient(client.owner, salt, client.getToken);
         if (agentClient.account.address.toLowerCase() !== sj.account!.toLowerCase()) throw new Error("The agent's wallet did not match. Nothing was sent.");
         grant = await grantSession(agentClient.account, sj.sessionAddress!);
         return [...(topUp?.calls ?? []), ...mintCalls(agents, fee, nm, pkg.hash)];
@@ -502,8 +502,8 @@ function BuyNomad({ usdg, onClose, onConfirm }: { usdg: bigint; onClose: () => v
         <input value={amount} inputMode="decimal" onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, "").slice(0, 10))} />
       </label>
       <p className="acct-body">{err ?? (out !== null ? `You get about ${fmtNomad(out)} $NOMAD.` : value > 0n ? "Getting a price" : "")}</p>
-      <button type="button" className="acct-primary" disabled={!out || value > usdg} onClick={() => out && onConfirm(value, out)}>
-        {value > usdg ? "Not enough USDG" : "Continue"}
+      <button type="button" className="acct-primary" disabled={!out || value > usdg || value < MIN_TOPUP_USDG} onClick={() => out && onConfirm(value, out)}>
+        {value > usdg ? "Not enough USDG" : value < MIN_TOPUP_USDG ? "At least 1 USDG" : "Continue"}
       </button>
       <p className="acct-small">Swapped through Stoa on Robinhood Chain. Prices move; the amount is checked again when you approve.</p>
     </Sheet>

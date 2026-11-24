@@ -40,11 +40,11 @@ describe("hashes match the contracts", () => {
 });
 
 const erc = (fn: "transfer" | "approve", to: Address, amount: bigint) => encodeFunctionData({ abi: erc20Abi, functionName: fn, args: [to, amount] });
-const swap = (tokenIn: Address, tokenOut: Address, to: Address) =>
+const swap = (tokenIn: Address, tokenOut: Address, to: Address, amountIn = 5_000_000n, minOut = 950_000n) =>
   encodeFunctionData({
     abi: [{ type: "function", name: "swap", stateMutability: "payable", inputs: [{ name: "p", type: "tuple", components: [{ name: "tokenIn", type: "address" }, { name: "tokenOut", type: "address" }, { name: "mid", type: "address" }, { name: "leg1", type: "tuple", components: [{ name: "venue", type: "address" }, { name: "isPool", type: "bool" }] }, { name: "leg2", type: "tuple", components: [{ name: "venue", type: "address" }, { name: "isPool", type: "bool" }] }, { name: "amountIn", type: "uint256" }, { name: "minOut", type: "uint256" }, { name: "to", type: "address" }, { name: "deadline", type: "uint256" }, { name: "referrer", type: "address" }] }], outputs: [{ type: "uint256" }] }] as const,
     functionName: "swap",
-    args: [{ tokenIn, tokenOut, mid: "0x0000000000000000000000000000000000000000", leg1: { venue: AGENTS, isPool: false }, leg2: { venue: AGENTS, isPool: false }, amountIn: 10n ** 6n, minOut: 1n, to, deadline: 9999999999n, referrer: "0x0000000000000000000000000000000000000000" }]
+    args: [{ tokenIn, tokenOut, mid: "0x0000000000000000000000000000000000000000", leg1: { venue: AGENTS, isPool: false }, leg2: { venue: AGENTS, isPool: false }, amountIn, minOut, to, deadline: 9999999999n, referrer: "0x0000000000000000000000000000000000000000" }]
   });
 const mint = encodeFunctionData({ abi: AGENTS_ABI, functionName: "mint", args: ["Scout", `0x${"11".repeat(32)}`, "", 0n, 142000n * 10n ** 18n] });
 const ops = (calls: { to: Address; data: Hex; value?: bigint }[]) => encodeCallsMAv2(calls.map((c) => ({ value: 0n, ...c })));
@@ -67,6 +67,10 @@ describe("who pays", () => {
     expect(classify(ops([{ to: AGENTS, data: mint, value: 1n }]), SENDER, AGENTS)).toBe("paid"); // sends ETH
     expect(classify(ops([{ to: AGENTS, data: mint }]), SENDER, "")).toBe("paid"); // minting not open
     expect(classify("0xdeadbeef", SENDER, AGENTS)).toBe("paid");
+    expect(classify(ops([{ to: STOA_ROUTER, data: swap(USDG, NOMAD, SENDER, 999_999n) }]), SENDER, AGENTS)).toBe("paid"); // a crumb of $NOMAD
+    expect(classify(ops([{ to: STOA_ROUTER, data: swap(NOMAD, USDG, TREASURY, 10n ** 18n, 100_000n) }]), SENDER, AGENTS)).toBe("paid"); // a crumb to the treasury
+    expect(classify(ops([{ to: STOA_ROUTER, data: swap(USDG, NOMAD, SENDER, 200_000n) }, { to: AGENTS, data: mint }]), SENDER, AGENTS)).toBe("mint"); // a small top-up inside a mint is fine
+    expect(classify(ops([{ to: USDG, data: erc("transfer", TREASURY, 5_000_000n) }, { to: AGENTS, data: mint }]), SENDER, AGENTS)).toBe("paid"); // credits mixed into a mint
   });
 });
 
