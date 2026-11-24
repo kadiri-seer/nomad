@@ -24,6 +24,11 @@ export default function Docs() {
         Open Nomad from your apps, or type <code>nomad ui</code>. The dashboard runs in your browser from <code>127.0.0.1</code> with a one-time session token, so only your computer can reach it. Everything the command line does is there too, including the move wizard.
       </p>
 
+      <h2>Reach your agents from any app</h2>
+      <p>
+        Run <code>nomad connect</code> once, and every app on this computer can reach <Link href="/docs/your-nomad">Your Nomad</Link>: ask &ldquo;Nomad, show my agents&rdquo; in Claude Code, Codex, OpenClaw and others, then borrow one for this chat or bring it in for good.
+      </p>
+
       <h2>For developers</h2>
       <p>
         With Node.js 22 or newer you can skip the installer: <code>npx thenomad</code> runs it once, and <code>npm install -g thenomad</code> keeps the <code>nomad</code> command.

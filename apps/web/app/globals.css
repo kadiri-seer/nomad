@@ -2094,3 +2094,11 @@ html[data-theme="dark"] .acct-balance { background: #2a2925; color: #f3f2ee; }
 .acct-moves li:first-child { padding-top: 0; }
 .acct-moves li:last-child { border-bottom: none; }
 .acct-moves a { font-weight: 600; color: var(--brand); }
+
+/* ------------------------------ Your Nomad, on the home page ------------------------------ */
+.yn-chat { margin-top: 24px; display: flex; flex-direction: column; gap: 10px; max-width: 440px; }
+.yn-you { align-self: flex-end; margin: 0; background: var(--brand); color: #fff; padding: 10px 14px; border-radius: 14px 14px 4px 14px; font-weight: 500; }
+.yn-reply { align-self: flex-start; background: var(--card); border: 1px solid var(--line); padding: 12px 16px; border-radius: 14px 14px 14px 4px; color: var(--ink); }
+.yn-reply p { margin: 0 0 6px; }
+.yn-reply ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; color: var(--ink-2); }
+.yn-note { margin: 0; font-size: 0.85rem; color: var(--muted); }

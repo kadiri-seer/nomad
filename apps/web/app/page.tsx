@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ALL_INFOS } from "@nomad/adapters/catalog";
 import { CompatDemo } from "@/components/CompatDemo";
 import { InstallNomad } from "@/components/InstallNomad";
-import { REPO_URL, SiteFooter } from "@/components/SiteFooter";
+import { SiteFooter } from "@/components/SiteFooter";
 
 const STEPS = [
   { t: "Read the agent", d: "Nomad finds your agent and reads everything that makes it who it is into one portable format." },
@@ -115,6 +115,47 @@ export default function Home() {
           </div>
         </section>
 
+        <section className="section" id="your-nomad">
+          <div className="wrap split">
+            <div>
+              <p className="label">Your Nomad</p>
+              <h2 style={{ marginTop: 12 }}>Every agent you have, in one home.</h2>
+              <p className="lede" style={{ marginTop: 18 }}>
+                Run <code>nomad connect</code> once, then ask for any agent from the app you are in.
+              </p>
+              <div className="yn-chat" aria-label="Example: asking for your agents inside an app">
+                <p className="yn-you">Nomad, show my agents</p>
+                <div className="yn-reply">
+                  <p>You have 3 agents:</p>
+                  <ul>
+                    <li>
+                      <strong>Kestrel</strong>, research. In Claude Code and OpenClaw.
+                    </li>
+                    <li>
+                      <strong>Ledger</strong>, bookkeeping. In Codex, one version behind.
+                    </li>
+                    <li>
+                      <strong>Scout</strong>, trading. Not in any app yet.
+                    </li>
+                  </ul>
+                </div>
+                <p className="yn-note">An example. Your list shows your own agents.</p>
+              </div>
+              <Link href="/docs/your-nomad" className="btn btn-quiet" style={{ marginTop: 24 }}>
+                How Your Nomad works
+              </Link>
+            </div>
+            <dl style={{ margin: 0 }}>
+              {HOME.map((c) => (
+                <div key={c.t} style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: 16, padding: "16px 0", borderBottom: "1px solid var(--line)" }}>
+                  <dt style={{ fontWeight: 600 }}>{c.t}</dt>
+                  <dd style={{ margin: 0, color: "var(--ink-2)" }}>{c.d}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </section>
+
         <section className="section" id="how">
           <div className="wrap">
             <div className="section-head">
@@ -133,29 +174,6 @@ export default function Home() {
                 </li>
               ))}
             </ol>
-          </div>
-        </section>
-
-        <section className="section" id="your-nomad">
-          <div className="wrap split">
-            <div>
-              <p className="label">Your Nomad</p>
-              <h2 style={{ marginTop: 12 }}>Every agent you have, in one home.</h2>
-              <p className="lede" style={{ marginTop: 18 }}>
-                Run <code>nomad connect</code> once, then ask for any agent from the app you are in.
-              </p>
-              <a href={`${REPO_URL}/blob/main/docs/guides/your-nomad.md`} className="btn btn-quiet" style={{ marginTop: 24 }}>
-                Read the guide
-              </a>
-            </div>
-            <dl style={{ margin: 0 }}>
-              {HOME.map((c) => (
-                <div key={c.t} style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: 16, padding: "16px 0", borderBottom: "1px solid var(--line)" }}>
-                  <dt style={{ fontWeight: 600 }}>{c.t}</dt>
-                  <dd style={{ margin: 0, color: "var(--ink-2)" }}>{c.d}</dd>
-                </div>
-              ))}
-            </dl>
           </div>
         </section>
 
