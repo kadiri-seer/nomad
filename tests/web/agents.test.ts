@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { encodeAbiParameters, encodeFunctionData, erc20Abi, keccak256, toHex, type Address, type Hex } from "viem";
+import { decodeFunctionData, encodeAbiParameters, encodeEventTopics, encodeFunctionData, erc20Abi, keccak256, parseAbi, toHex, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { encodeCallsMAv2 } from "@alchemy/smart-accounts";
-import { STOA_ROUTER, USDG } from "../../apps/web/lib/accounts/chain";
+import { NOMAD, STOA_ROUTER, TREASURY, USDG } from "../../apps/web/lib/accounts/chain";
+import { feeCalls } from "../../apps/web/lib/accounts/client";
 import { agentPackage, ownerActionMessage, validLimits, type AgentRecord } from "../../apps/web/lib/agents/shared";
 import { SESSION_FUNCTIONS } from "../../apps/web/lib/agents/wallet";
 import { agentStore } from "../../apps/web/lib/server/agents-store";
 import { gemini } from "../../apps/web/lib/server/gemini";
-import { cappedOddsEngine } from "../../apps/web/lib/server/agent-api";
+import { cappedOddsEngine, checkDollarFee } from "../../apps/web/lib/server/agent-api";
 import { verifyGithubToken } from "../../apps/web/lib/server/github-oidc";
 import { idlexPayer, runnerSecret, sessionKey, sessionSigner } from "../../apps/web/lib/server/runner-keys";
 import { buildCandidates, cleanSymbol, parseDecision, passesChecks, reportOf, runAgent, splitNote, swapCalls, tick, type Candidate, type RunnerDeps } from "../../apps/web/lib/server/runner";
@@ -587,5 +588,31 @@ describe("OddsEngine's daily limit", () => {
     const h = harness({ oddsEngine: { name: "OddsEngine", scanToken: async () => ({ facts: [], context: "", skipped: true }) } });
     expect((await runAgent(h.d, agent()))[0]).toMatch(/^Bought HOOKR.*OddsEngine's daily limit for Nomad's agents was reached/);
     expect(h.charges).toEqual([]);
+  });
+});
+
+describe("the $5 creation fee", () => {
+  const DEAD = "0x000000000000000000000000000000000000dEaD" as Address;
+  const N = (v: number) => BigInt(v) * 10n ** 18n;
+  const T = parseAbi(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
+  const log = (from: Address, to: Address, value: bigint) => ({ address: NOMAD, topics: encodeEventTopics({ abi: T, eventName: "Transfer", args: { from, to } }) as Hex[], data: encodeAbiParameters([{ type: "uint256" }], [value]) });
+  const price = async () => N(80_000); // $5 of $NOMAD now
+
+  it("passes when about $5 was paid from the creator's account, with $1 of it burned", async () => {
+    await checkDollarFee([log(OWNER, DEAD, N(16_000)), log(OWNER, TREASURY, N(64_000))], OWNER, price);
+    await checkDollarFee([log(OWNER, DEAD, N(15_000)), log(OWNER, TREASURY, N(60_000))], OWNER, price); // the price moved a little
+  });
+
+  it("refuses too little, too little burned, someone else's payment, or no price check", async () => {
+    await expect(checkDollarFee([log(OWNER, DEAD, N(10_000)), log(OWNER, TREASURY, N(40_000))], OWNER, price)).rejects.toMatchObject({ status: 402 });
+    await expect(checkDollarFee([log(OWNER, DEAD, N(1_000)), log(OWNER, TREASURY, N(79_000))], OWNER, price)).rejects.toMatchObject({ status: 402 });
+    await expect(checkDollarFee([log(SIGNER, DEAD, N(16_000)), log(SIGNER, TREASURY, N(64_000))], OWNER, price)).rejects.toMatchObject({ status: 402 });
+    await expect(checkDollarFee([], OWNER, async () => Promise.reject(new Error("down")))).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("the account page's fee calls send $1 of $5 to the burn address and the rest to the treasury", () => {
+    const [burn, rest] = feeCalls(N(80_000), 2000n);
+    expect(decodeFunctionData({ abi: erc20Abi, data: burn.data }).args).toEqual([DEAD, N(16_000)]);
+    expect(decodeFunctionData({ abi: erc20Abi, data: rest.data }).args).toEqual([TREASURY, N(64_000)]);
   });
 });

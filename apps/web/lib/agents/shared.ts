@@ -58,6 +58,15 @@ export const SESSION_DAYS = 365;
 
 /** Charged to the creator's credits for each paid AI job an agent's run uses, in micro-USD ($0.005). */
 export const AI_JOB_CHARGE_MICROS = 5_000n;
+/**
+ * Creating an agent costs $5 of $NOMAD at Stoa's price at that moment, $1 of it burned and $4 to Nomad's treasury,
+ * paid in the same approval as the mint. (This applies once the agents contract's own fee is 0; while it is not,
+ * the contract's fee is what is paid.)
+ */
+export const AGENT_FEE_USD = 5;
+export const AGENT_FEE_BURN_BPS = 2_000n;
+export const BURN_ADDRESS = "0x000000000000000000000000000000000000dEaD";
+
 /** Charged to the creator's credits for each OddsEngine check before a buy, in micro-USD ($0.005). */
 export const ODDSENGINE_CHECK_CHARGE_MICROS = 5_000n;
 /** A run is skipped (and the creator told) when credits are below this, in micro-USD ($0.05). */

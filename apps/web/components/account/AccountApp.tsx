@@ -11,7 +11,7 @@ import { PrivyProvider, usePrivy, useWallets } from "@privy-io/react-auth";
 import { formatUnits, parseAbi, parseUnits, type Address } from "viem";
 import { MIN_TOPUP_USDG, PRIVY_APP_ID, PAYMASTER, NOMAD, USDG } from "@/lib/accounts/chain";
 import { AGENTS_CONTRACT } from "@/lib/economy";
-import { DEFAULT_RESEARCH, DEFAULT_RUN_EVERY_HOURS, registerMessage, RUN_EVERY_HOURS, type Template } from "@/lib/agents/shared";
+import { AGENT_FEE_BURN_BPS, AGENT_FEE_USD, DEFAULT_RESEARCH, DEFAULT_RUN_EVERY_HOURS, registerMessage, RUN_EVERY_HOURS, type Template } from "@/lib/agents/shared";
 import { grantSession, newSalt } from "@/lib/agents/wallet";
 import { MyAgents } from "./MyAgents";
 import { Sheet } from "./Sheet";
@@ -24,6 +24,7 @@ import {
   buyNomadCalls,
   fmtNomad,
   fmtUsdg,
+  feeCalls,
   mintBurnBps,
   mintCalls,
   mintFee,
@@ -407,17 +408,40 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
   const [every, setEvery] = useState<number>(DEFAULT_RUN_EVERY_HOURS);
   const [burnBps, setBurnBps] = useState<bigint | null>(null);
   const burnedOf = (f: bigint) => (f * (burnBps ?? 0n)) / 10_000n;
+  // `fee` is what creating costs in $NOMAD: the contract's own fee while it has one, otherwise $5 at Stoa's price now.
   const [fee, setFee] = useState<bigint | null>(null);
+  const [contractFee, setContractFee] = useState<bigint | null>(null);
+  const dollarFee = contractFee === 0n;
   const agents = AGENTS_CONTRACT as Address;
   useEffect(() => {
-    mintFee(agents).then(setFee).catch(() => setFee(null));
-    mintBurnBps(agents).then(setBurnBps).catch(() => setBurnBps(null));
+    let off = false;
+    const load = async () => {
+      const f = await mintFee(agents);
+      if (off) return;
+      setContractFee(f);
+      if (f > 0n) {
+        setFee(f);
+        setBurnBps(await mintBurnBps(agents));
+      } else {
+        setFee(await nomadForUsd(AGENT_FEE_USD));
+        setBurnBps(AGENT_FEE_BURN_BPS);
+      }
+    };
+    load().catch(() => setFee(null));
+    const t = setInterval(() => load().catch(() => undefined), 30_000);
+    return () => {
+      off = true;
+      clearInterval(t);
+    };
   }, [agents]);
   const short = fee !== null && bal ? (bal.nomad >= fee ? 0n : fee - bal.nomad) : 0n;
   const ok = name.trim().length > 0 && name.trim().length <= 64 && fee !== null && (template === "trader" || instructions.trim().length > 0);
 
   const go = async () => {
-    if (!fee || !bal) return;
+    if (!fee || !bal || contractFee === null) return;
+    // $5 at Stoa's price right now, so the approval shows exactly what is paid.
+    const cost = dollarFee ? await nomadForUsd(AGENT_FEE_USD) : fee;
+    const short = bal.nomad >= cost ? 0n : cost - bal.nomad;
 
     let topUp: { usdg: bigint; calls: Call[] } | null = null;
     if (short > 0n) {
@@ -443,12 +467,12 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
     const nm = name.trim();
     onConfirm({
       title: `Approve: create agent "${nm}"`,
-      amount: `-${fmtNomad(fee)} $NOMAD`,
-      amountNote: usdOf(fee),
+      amount: `-${fmtNomad(cost)} $NOMAD`,
+      amountNote: usdOf(cost),
       rows: [
         ...(topUp ? ([["First, swap", `${fmtUsdg(topUp.usdg)} USDG for the missing $NOMAD`]] as [string, string][]) : []),
-        ["Burned", `${fmtNomad(burnedOf(fee))} $NOMAD`],
-        ["To Nomad's treasury", `${fmtNomad(fee - burnedOf(fee))} $NOMAD`],
+        ["Burned", `${fmtNomad(burnedOf(cost))} $NOMAD`],
+        ["To Nomad's treasury", `${fmtNomad(cost - burnedOf(cost))} $NOMAD`],
         ["Its wallet", `${sj.account.slice(0, 6)}...${sj.account.slice(-4)}, yours`],
         ["Network fee", "Included"]
       ],
@@ -459,7 +483,7 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
         const agentClient = await accountClient(client.owner, salt, client.getToken);
         if (agentClient.account.address.toLowerCase() !== sj.account!.toLowerCase()) throw new Error("The agent's wallet did not match. Nothing was sent.");
         grant = await grantSession(agentClient.account, sj.sessionAddress!);
-        return [...(topUp?.calls ?? []), ...mintCalls(agents, fee, nm, pkg.hash)];
+        return [...(topUp?.calls ?? []), ...mintCalls(agents, contractFee, nm, pkg.hash), ...(dollarFee ? feeCalls(cost, AGENT_FEE_BURN_BPS) : [])];
       },
       after: async (txHash) => {
         if (!grant) throw new Error("The agent was minted, but its set-up was not finished.");
@@ -486,8 +510,8 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
         if (r.ok || r.status === 409) storeDel(`${PENDING_PREFIX}${txHash}`);
         if (!r.ok) throw new Error(j.error ?? "The agent was minted but could not be set up yet.");
         return researcher
-          ? `${fmtNomad(fee)} $NOMAD paid, ${fmtNomad(burnedOf(fee))} burned. Keep some credits, and its first report comes within 15 minutes, under Your agents.`
-          : `${fmtNomad(fee)} $NOMAD paid, ${fmtNomad(burnedOf(fee))} burned. Fund its wallet with USDG and keep some credits, and it starts within 15 minutes.`;
+          ? `${fmtNomad(cost)} $NOMAD paid, ${fmtNomad(burnedOf(cost))} burned. Keep some credits, and its first report comes within 15 minutes, under Your agents.`
+          : `${fmtNomad(cost)} $NOMAD paid, ${fmtNomad(burnedOf(cost))} burned. Fund its wallet with USDG and keep some credits, and it starts within 15 minutes.`;
       },
       done: { title: `${nm} is created`, body: "" }
     });

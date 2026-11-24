@@ -1,7 +1,8 @@
 /** What the agent routes share: building the runner from the deployment's settings, and checking a registration. */
 import { decodeEventLog, getAddress, isAddress, parseAbi, verifyMessage, type Address, type Hex } from "viem";
 import { AGENTS_CONTRACT } from "../economy";
-import { agentPackage, registerMessage, RUN_EVERY_HOURS, SESSION_DAYS, TEMPLATES, validLimits, type AgentRecord, type Template } from "../agents/shared";
+import { AGENT_FEE_USD, agentPackage, BURN_ADDRESS, registerMessage, RUN_EVERY_HOURS, SESSION_DAYS, TEMPLATES, validLimits, type AgentRecord, type Template } from "../agents/shared";
+import { NOMAD, TREASURY, USDG } from "../accounts/chain";
 import { redisFromEnv } from "../vote/redis";
 import { balanceOf as creditBalance, chargeRun } from "./credits";
 import { sponsorDeps } from "./account-routes";
@@ -77,6 +78,7 @@ export function publicAgent(a: AgentRecord) {
   return { ...rest, waitingFor: pendingJob ? (pendingJob.kind === "check" ? `a second opinion on ${pendingJob.symbol}` : "an answer from Idlex") : null };
 }
 
+const TRANSFER_EVENT = parseAbi(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
 const MINTED = parseAbi(["event Minted(uint256 indexed id, address indexed creator, bytes32 indexed packageHash, string name, string uri, uint256 price, uint256 fee, uint256 burned)"]);
 
 export type Registration = {
@@ -94,6 +96,35 @@ export type Registration = {
   mintTx: string;
   signature: string;
 };
+
+/**
+ * The $5 creation fee paid in the mint's transaction (when the contract's own fee is 0): $NOMAD from the creator's
+ * account to the burn address and the treasury, worth at least 90% of $5 at Stoa's price now (it moves), with at
+ * least 15% of it burned. `nomadFor5` is the price check, for tests.
+ */
+export async function checkDollarFee(logs: readonly { address: string; data: Hex; topics: readonly Hex[] }[], from: Address, nomadFor5?: () => Promise<bigint>) {
+  let burned = 0n;
+  let toTreasury = 0n;
+  for (const l of logs) {
+    if (l.address.toLowerCase() !== NOMAD.toLowerCase()) continue;
+    try {
+      const ev = decodeEventLog({ abi: TRANSFER_EVENT, data: l.data, topics: l.topics as [Hex, ...Hex[]] });
+      if (ev.args.from.toLowerCase() !== from.toLowerCase()) continue;
+      if (ev.args.to.toLowerCase() === BURN_ADDRESS.toLowerCase()) burned += ev.args.value;
+      else if (ev.args.to.toLowerCase() === TREASURY.toLowerCase()) toTreasury += ev.args.value;
+    } catch {
+      /* another event */
+    }
+  }
+  const total = burned + toTreasury;
+  let want: bigint;
+  try {
+    want = nomadFor5 ? await nomadFor5() : (await stoa().quote(USDG, NOMAD, BigInt(AGENT_FEE_USD) * 1_000_000n, TREASURY)).amountOut;
+  } catch {
+    throw new AgentApiError(503, "The price check is not answering. Your agent is minted and will be set up on your next visit.");
+  }
+  if (total * 10n < want * 9n || burned * 100n < total * 15n) throw new AgentApiError(402, "That mint did not pay the $5 creation fee, so the agent will not run.");
+}
 
 /** Checks a new agent against the chain (its mint, its owner, its wallet) and returns the record to store. */
 export async function checkRegistration(env: NonNullable<ReturnType<typeof agentEnv>>, b: Registration, now = Date.now()): Promise<AgentRecord> {
@@ -132,16 +163,22 @@ export async function checkRegistration(env: NonNullable<ReturnType<typeof agent
   const receipt = await serverClient().getTransactionReceipt({ hash: b.mintTx as Hex }).catch(() => null);
   if (!receipt || receipt.status !== "success") throw new AgentApiError(409, "The mint is not on-chain yet. Try again in a moment.");
   let id: string | null = null;
+  let contractFee = 0n;
   for (const log of receipt.logs) {
     if (log.address.toLowerCase() !== AGENTS_CONTRACT.toLowerCase()) continue;
     try {
       const ev = decodeEventLog({ abi: MINTED, data: log.data, topics: log.topics });
-      if (ev.args.creator.toLowerCase() === owner.toLowerCase() && ev.args.packageHash.toLowerCase() === pkg.hash.toLowerCase()) id = ev.args.id.toString();
+      if (ev.args.creator.toLowerCase() === owner.toLowerCase() && ev.args.packageHash.toLowerCase() === pkg.hash.toLowerCase()) {
+        id = ev.args.id.toString();
+        contractFee = ev.args.fee;
+      }
     } catch {
       /* another event */
     }
   }
   if (!id) throw new AgentApiError(400, "That transaction did not mint this agent from this account.");
+  // With no fee in the contract, the $5 is paid alongside the mint: check it was, with its burn, before running it.
+  if (contractFee === 0n) await checkDollarFee(receipt.logs, owner);
   return {
     id,
     name,

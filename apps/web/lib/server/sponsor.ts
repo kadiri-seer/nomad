@@ -126,6 +126,8 @@ const MIN_TOPUP_SWAP_OUT = (MIN_TOPUP_USDG * 9n) / 10n;
  *   sell:      a Stoa swap of any token to USDG, paid out to the account itself (with its approval).
  * Anything else, or any mix with anything else, is paid from credits.
  */
+const BURN = "0x000000000000000000000000000000000000dEaD";
+
 /** A free send goes somewhere else: not back to the account itself, and not to the treasury (that is Add credits). */
 const sendable = (to: Address, amount: bigint, sender: Address) => amount > 0n && lc(to) !== lc(sender) && lc(to) !== lc(TREASURY);
 
@@ -138,7 +140,8 @@ export function classify(callData: Hex, sender: Address, agents: Address | ""): 
   }
   if (!calls.length) return "paid";
   // "small-buy" is a USDG to $NOMAD swap under 1 USDG: free only as the top-up inside a mint.
-  const kinds = new Set<Kind | "small-buy">();
+  // "mint-fee": $NOMAD sent to the burn address or the treasury, free only as the $5 fee inside a mint.
+  const kinds = new Set<Kind | "small-buy" | "mint-fee">();
   // A plain ETH transfer: one call, no data.
   if (calls.length === 1 && (!calls[0].data || calls[0].data === "0x")) return sendable(calls[0].to, calls[0].value ?? 0n, sender) ? "send" : "paid";
   for (const c of calls) {
@@ -153,6 +156,7 @@ export function classify(callData: Hex, sender: Address, agents: Address | ""): 
         return "paid";
       }
       if (d.functionName === "transfer" && to === lc(USDG) && lc(d.args[0] as string) === lc(TREASURY) && (d.args[1] as bigint) >= MIN_TOPUP_USDG) kinds.add("topup");
+      else if (d.functionName === "transfer" && to === lc(NOMAD) && [lc(TREASURY), lc(BURN)].includes(lc(d.args[0] as string)) && calls.length > 1) kinds.add("mint-fee");
       else if (d.functionName === "transfer" && sendable(d.args[0] as Address, d.args[1] as bigint, sender) && calls.length === 1) kinds.add("send");
       else if (d.functionName === "approve" && lc(d.args[0] as string) === lc(STOA_ROUTER)) continue;
       else if (d.functionName === "approve" && to === lc(NOMAD) && agents && lc(d.args[0] as string) === lc(agents)) continue;
@@ -185,8 +189,8 @@ export function classify(callData: Hex, sender: Address, agents: Address | ""): 
     }
   }
   // Approvals alone, or more than one purpose in one operation, are not free.
-  if (kinds.has("mint")) return [...kinds].every((k) => k === "mint" || k === "buy-nomad" || k === "small-buy") ? "mint" : "paid";
-  if (kinds.size !== 1 || kinds.has("small-buy")) return "paid";
+  if (kinds.has("mint")) return [...kinds].every((k) => k === "mint" || k === "buy-nomad" || k === "small-buy" || k === "mint-fee") ? "mint" : "paid";
+  if (kinds.size !== 1 || kinds.has("small-buy") || kinds.has("mint-fee")) return "paid";
   return [...kinds][0] as Kind;
 }
 

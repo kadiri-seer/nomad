@@ -132,8 +132,17 @@ export { agentPackage } from "../agents/shared";
 /** Minting: approve exactly the fee, then mint (free copies by default; the creator can set a price later). */
 export function mintCalls(agents: Address, fee: bigint, name: string, packageHash: Hex): Call[] {
   return [
-    { to: NOMAD, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [agents, fee] }) },
+    ...(fee > 0n ? [{ to: NOMAD, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [agents, fee] }) }] : []),
     { to: agents, data: encodeFunctionData({ abi: AGENTS_ABI, functionName: "mint", args: [name, packageHash, "", 0n, fee] }) }
+  ];
+}
+
+/** The $5 creation fee paid alongside the mint (when the contract's own fee is 0): $1 burned, $4 to the treasury. */
+export function feeCalls(total: bigint, burnBps: bigint): Call[] {
+  const burned = (total * burnBps) / 10_000n;
+  return [
+    { to: NOMAD, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: ["0x000000000000000000000000000000000000dEaD", burned] }) },
+    { to: NOMAD, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [TREASURY, total - burned] }) }
   ];
 }
 

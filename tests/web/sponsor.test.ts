@@ -144,3 +144,14 @@ describe("the fee a free operation may name", () => {
     expect(used).toBe(0);
   });
 });
+
+describe("the $5 creation fee paid alongside a mint", () => {
+  const DEAD = "0x000000000000000000000000000000000000dEaD" as Address;
+  const mint0 = encodeFunctionData({ abi: AGENTS_ABI, functionName: "mint", args: ["Anne", `0x${"22".repeat(32)}`, "", 0n, 0n] });
+  it("is part of the mint: its burn and treasury transfers are free only with a mint", () => {
+    expect(classify(ops([{ to: AGENTS, data: mint0 }, { to: NOMAD, data: erc("transfer", DEAD, 16_000n) }, { to: NOMAD, data: erc("transfer", TREASURY, 64_000n) }]), SENDER, AGENTS)).toBe("mint");
+    expect(classify(ops([{ to: STOA_ROUTER, data: swap(USDG, NOMAD, SENDER, 2_000_000n) }, { to: AGENTS, data: mint0 }, { to: NOMAD, data: erc("transfer", DEAD, 1n) }, { to: NOMAD, data: erc("transfer", TREASURY, 1n) }]), SENDER, AGENTS)).toBe("mint");
+    expect(classify(ops([{ to: NOMAD, data: erc("transfer", DEAD, 16_000n) }, { to: NOMAD, data: erc("transfer", TREASURY, 64_000n) }]), SENDER, AGENTS)).toBe("paid"); // no mint
+    expect(classify(ops([{ to: AGENTS, data: mint0 }, { to: NOMAD, data: erc("transfer", AGENTS, 5n) }]), SENDER, AGENTS)).toBe("paid"); // elsewhere
+  });
+});
