@@ -7,7 +7,6 @@ import { agentEnv } from "@/lib/server/agent-api";
 import { gemini } from "@/lib/server/gemini";
 import { idlexPayer } from "@/lib/server/runner-keys";
 import { privyKeysReady } from "@/lib/server/privy-auth";
-import { keeperAddresses } from "@/lib/server/fee-keeper";
 import { agentHealth, oddsCheck, researchCheck } from "@/lib/server/agent-health";
 import { buildCandidates } from "@/lib/server/runner";
 import { stoa } from "@/lib/server/stoa";
@@ -50,5 +49,5 @@ export async function GET(req: Request) {
       await env.store.cacheSet("gemini-probe", probe, probe.ok ? 3600 : 120);
     }
   }
-  return json({ ready: !!env, ai: key ? "gemini" : "idlex", aiAnswering: probe?.ok ?? null, aiModel: probe?.model ?? null, aiDetail: probe?.detail ?? null, idlexPayer: env ? idlexPayer(env.secret).address : null, signInCheck: await privyKeysReady().catch(() => false), oddsEngine: !!process.env.ODDSENGINE_API_KEY?.trim(), feeKeeper: env ? { ...keeperAddresses(env.secret), last: await env.store.cacheGet("fee-keeper-state") } : null });
+  return json({ ready: !!env, ai: key ? "gemini" : "idlex", aiAnswering: probe?.ok ?? null, aiModel: probe?.model ?? null, aiDetail: probe?.detail ?? null, idlexPayer: env ? idlexPayer(env.secret).address : null, signInCheck: await privyKeysReady().catch(() => false), oddsEngine: !!process.env.ODDSENGINE_API_KEY?.trim() });
 }
