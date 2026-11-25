@@ -5,7 +5,7 @@ export * from "./markdown";
 export * from "./document";
 export * from "./merge";
 
-export const NOMAD_VERSION = "0.7.5";
+export const NOMAD_VERSION = "0.7.6";
 
 export class NomadError extends Error {
   constructor(
