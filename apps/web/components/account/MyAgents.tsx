@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { encodeFunctionData, erc20Abi, keccak256, parseUnits, toHex, type Address, type Hex } from "viem";
 import { USDG } from "@/lib/accounts/chain";
 import { accountClient, fmtUsdg, publicClient, rememberTokens, type Call } from "@/lib/accounts/client";
-import { DEFAULT_RESEARCH, ownerActionMessage, RUN_EVERY_HOURS, type Move, type Position } from "@/lib/agents/shared";
+import { DEFAULT_RESEARCH, ownerActionMessage, RUN_EVERY_HOURS, viewMessage, type Move, type Position } from "@/lib/agents/shared";
 import { hostedEnterMessage, linkMessage } from "@/lib/bounties/shared";
 import { Sheet } from "./Sheet";
 import { writeSnapshot } from "./snapshot";
@@ -51,7 +51,14 @@ export function MyAgents({ client, onConfirm, version, onAgents }: { client: Cli
       .then((j: { entries: { agentId?: string; status: string }[] }) => setBountyStatus(Object.fromEntries(j.entries.filter((e) => e.agentId).map((e) => [e.agentId!, e.status]))))
       .catch(() => undefined);
     try {
-      const r = await fetch(`/api/agents/mine?owner=${owner}`, { cache: "no-store" });
+      // Moves and reports are only for the creator: the sign-in wallet signs to see them (no prompt).
+      // If signing is not ready, the list still shows, without the latest moves.
+      const signed = async () => {
+        const at = Date.now();
+        const signature = await client.owner.signMessage({ message: viewMessage(client.signer, at) });
+        return fetch("/api/agents/mine", { method: "POST", cache: "no-store", headers: { "content-type": "application/json" }, body: JSON.stringify({ signer: client.signer, at, signature }) });
+      };
+      const r = await signed().catch(() => fetch(`/api/agents/mine?owner=${owner}`, { cache: "no-store" }));
       const j = await r.json();
       setAgents(r.ok ? j.agents : []);
       if (r.ok) onAgents?.((j.agents as AgentView[]).map((a) => a.account));
@@ -126,7 +133,10 @@ function AgentSheet({ client, agent, onClose, onConfirm, onChanged }: { client: 
   const main = client.account.address as Address;
 
   useEffect(() => {
-    fetch(`/api/agents/one/${agent.id}`, { cache: "no-store" })
+    const at = Date.now();
+    client.owner
+      .signMessage({ message: ownerActionMessage(agent.id, "view", at) })
+      .then((signature) => fetch(`/api/agents/one/${agent.id}`, { method: "POST", cache: "no-store", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "view", at, signature }) }))
       .then((r) => r.json())
       .then((j) => {
         setMoves(j.moves ?? []);

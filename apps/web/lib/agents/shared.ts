@@ -143,6 +143,11 @@ export function registerMessage(mintTx: string, salt: string) {
   return `Nomad agent: register mint ${mintTx.toLowerCase()} with wallet salt ${salt}`;
 }
 
+/** The message a creator signs to see their agents' moves and reports, which only they can see. */
+export function viewMessage(signer: string, at: number) {
+  return `Nomad agents: view my agents as ${signer.toLowerCase()} at ${at}`;
+}
+
 /** The message an agent's creator signs to pause, resume or change it. */
 export function ownerActionMessage(id: string, action: string, at: number) {
   return `Nomad agent ${id}: ${action} at ${at}`;

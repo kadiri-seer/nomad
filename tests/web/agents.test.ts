@@ -681,3 +681,15 @@ describe("run records and bounty work", () => {
     expect(asked).toBe(false);
   });
 });
+
+describe("who sees an agent's moves", () => {
+  it("the public view has no instructions, grant or what it waits for; the creator's view adds what it waits for", async () => {
+    const { publicAgent, ownerAgent } = await import("../../apps/web/lib/server/agent-api");
+    const a = agent({ template: "blank", instructions: "secret plan", pendingJob: { id: "j", kind: "check", token: TOKEN, symbol: "HOOKR", at: 1 } });
+    const pub = JSON.stringify(publicAgent(a));
+    expect(pub).not.toContain("secret plan");
+    expect(pub).not.toContain("HOOKR");
+    expect(pub).not.toContain("deferredAction");
+    expect(ownerAgent(a).waitingFor).toBe("a second opinion on HOOKR");
+  });
+});

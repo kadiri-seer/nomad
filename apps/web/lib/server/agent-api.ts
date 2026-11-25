@@ -75,11 +75,19 @@ export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = 
   };
 }
 
-/** The public view of an agent (no signed grant). */
-/** What anyone may see of an agent: never its signed grant, and never its instructions (the creator's own words). */
+/**
+ * What anyone may see of an agent: its name, kind, limits and wallet. Never its signed grant, its instructions, what
+ * it is waiting for, or its moves and reports: those are for its creator (ownerAgent, behind a signature).
+ */
 export function publicAgent(a: AgentRecord) {
-  const { deferredAction: _d, instructions, pendingJob, ...rest } = a;
-  return { ...rest, hasInstructions: !!instructions, waitingFor: pendingJob ? (pendingJob.kind === "check" ? `a second opinion on ${pendingJob.symbol}` : "an answer from Idlex") : null };
+  const { deferredAction: _d, instructions, pendingJob: _p, ...rest } = a;
+  return { ...rest, hasInstructions: !!instructions };
+}
+
+/** What the agent's creator sees: the public view plus what it is waiting for. */
+export function ownerAgent(a: AgentRecord) {
+  const p = a.pendingJob;
+  return { ...publicAgent(a), waitingFor: p ? (p.kind === "check" ? `a second opinion on ${p.symbol}` : "an answer from Idlex") : null };
 }
 
 const TRANSFER_EVENT = parseAbi(["event Transfer(address indexed from, address indexed to, uint256 value)"]);

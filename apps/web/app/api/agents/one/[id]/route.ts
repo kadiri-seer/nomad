@@ -1,11 +1,12 @@
 /**
- * One agent: its record, moves and holdings (GET), and its creator's changes (POST): pause, resume, or how often it
- * runs. Changes are signed by the creator's Google wallet, which owns the agent's wallet.
+ * One agent: what anyone may see of it (GET), and its creator's own requests (POST, signed by the creator's Google
+ * wallet, which owns the agent's wallet): see its moves, reports and holdings; pause, resume or set how often it runs;
+ * read or change its instructions.
  */
 import { keccak256, toHex, verifyMessage, type Hex } from "viem";
 import { veninCheck } from "@/lib/server/venin-check";
 import { json } from "@/lib/server/account-routes";
-import { agentEnv, publicAgent } from "@/lib/server/agent-api";
+import { agentEnv, ownerAgent, publicAgent } from "@/lib/server/agent-api";
 import { ownerActionMessage, RUN_EVERY_HOURS } from "@/lib/agents/shared";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   if (!env || !/^\d{1,30}$/.test(id)) return json({ error: "Not found." }, 404);
   const a = await env.store.get(id);
   if (!a) return json({ error: "Not found." }, 404);
-  return json({ agent: publicAgent(a), moves: await env.store.moves(id, 30), positions: await env.store.positions(id) });
+  return json({ agent: publicAgent(a) });
 }
 
 export async function POST(req: Request, ctx: Ctx) {
@@ -41,6 +42,8 @@ export async function POST(req: Request, ctx: Ctx) {
         ? `run every ${Number(b.runEveryHours)} hours`
         : b.action === "read"
           ? "read instructions"
+          : b.action === "view"
+            ? "view"
           : b.action === "instructions"
             ? `set instructions ${keccak256(toHex(text))}`
             : null;
@@ -51,6 +54,7 @@ export async function POST(req: Request, ctx: Ctx) {
   if (!ok) return json({ error: "Only the agent's creator can change it." }, 403);
   // Its instructions are private: only its creator reads or changes them. A Trader follows Nomad's rules instead.
   if (b.action === "read") return json({ instructions: a.instructions ?? "" });
+  if (b.action === "view") return json({ agent: ownerAgent(a), moves: await env.store.moves(id, 30), positions: await env.store.positions(id) });
   if (b.action === "instructions") {
     if (a.template === "trader") return json({ error: "A Trader follows Nomad's trading rules and has no instructions to edit." }, 400);
     if (a.template === "blank" && !text) return json({ error: "Instructions must be 1 to 4,000 characters." }, 400);
@@ -60,7 +64,7 @@ export async function POST(req: Request, ctx: Ctx) {
     else delete a.instructions;
     await env.store.save(a);
     await env.store.addMove(id, { at: Date.now(), text: "Its creator changed its instructions." });
-    return json({ agent: publicAgent(a) });
+    return json({ agent: ownerAgent(a) });
   }
   const now = Date.now();
   if (b.action === "pause") {
@@ -77,5 +81,5 @@ export async function POST(req: Request, ctx: Ctx) {
     await env.store.addMove(id, { at: now, text: `Now runs every ${a.runEveryHours} hours.` });
   }
   await env.store.save(a);
-  return json({ agent: publicAgent(a) });
+  return json({ agent: ownerAgent(a) });
 }
