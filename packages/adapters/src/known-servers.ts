@@ -1205,7 +1205,83 @@ export function oddsEngineCreditExtras(
   return none;
 }
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE];
+/** Exactly https://<host><path> on the default port, with no user name or password (a trailing slash is fine). */
+const isExactHost = (url: string | undefined, host: string, path: string) => {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && u.hostname === host && !u.port && !u.username && !u.password && (u.pathname === path || u.pathname === `${path}/`);
+  } catch {
+    return false;
+  }
+};
+
+/** The sign-in step for a Robinhood server, which every app does itself. */
+const robinhoodSignIn = (name: string, platform: string) =>
+  `Sign in to Robinhood again for "${name}" on ${platform}: open its list of MCP servers (/mcp in Claude Code or Codex, Connectors in Claude Desktop, Tools & MCPs in Cursor), choose ${name} and authenticate. If Robinhood asks you to finish setting up, do it in a desktop browser.`;
+
+/**
+ * Robinhood's Trading MCP, as Robinhood documents it (robinhood.com/us/en/support/articles/agentic-trading-overview
+ * and /onboarding-an-external-agent, read Nov 25, 2026): the hosted server https://agent.robinhood.com/mcp/trading,
+ * Streamable HTTP. Each app signs in to Robinhood itself (OAuth) and keeps that sign-in in its own storage, so the
+ * configuration holds only the address. It reads all of the person's Robinhood accounts and trades only in their
+ * Agentic account, with the money deposited there; it trades without asking if told to.
+ */
+const ROBINHOOD_TRADING: ServerProfile = {
+  id: "robinhood-trading",
+  vendor: "Robinhood",
+  label: "Robinhood Trading MCP (trades in a Robinhood Agentic account; sign in again in each app)",
+  matches: (t) => !!t.mcp && t.mcp.transport !== "stdio" && isExactHost(t.mcp.url, "agent.robinhood.com", "/mcp/trading"),
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [],
+  looserDefaults: {},
+  apply(t, out, platform) {
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: `"${t.name}" is Robinhood's Trading MCP, for a Robinhood Agentic account. Nomad copies only its address. The sign-in to Robinhood stays with the app that made it and is never copied.`
+    });
+    out.notes.push({
+      level: "warning",
+      category: "tools",
+      message: `"${t.name}" can read all your Robinhood accounts, including account numbers, positions, balances and order history, and place real trades in your Agentic account with the money in it. It trades without asking if its instructions tell it to, so check this agent's instructions on ${platform} before you sign in.`
+    });
+    out.manualSteps.push(robinhoodSignIn(t.name, platform));
+  }
+};
+
+/**
+ * Robinhood's Banking MCP, as Robinhood documents it (robinhood.com/us/en/support/articles/agentic-credit-card, read
+ * Nov 25, 2026): the hosted server https://banking-agent.robinhood.com/mcp/banking, for the agentic virtual cards of
+ * a Robinhood Gold Card. Signed in by each app itself, like the Trading MCP. It reads the cards the person authorized
+ * (their card numbers, for checkout, spending history and settings) and nothing else in their account.
+ */
+const ROBINHOOD_BANKING: ServerProfile = {
+  id: "robinhood-banking",
+  vendor: "Robinhood",
+  label: "Robinhood Banking MCP (an agentic virtual card; sign in again in each app)",
+  matches: (t) => !!t.mcp && t.mcp.transport !== "stdio" && isExactHost(t.mcp.url, "banking-agent.robinhood.com", "/mcp/banking"),
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [],
+  looserDefaults: {},
+  apply(t, out, platform) {
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: `"${t.name}" is Robinhood's Banking MCP, for the agentic virtual card of a Robinhood Gold Card. Nomad copies only its address. The sign-in to Robinhood stays with the app that made it and is never copied.`
+    });
+    out.notes.push({
+      level: "warning",
+      category: "tools",
+      message: `"${t.name}" gives the agent the full number of each agentic card you authorized, so it can pay at checkout. Keep purchase approvals on, or monthly limits set, in the Robinhood Banking app before you sign in on ${platform}.`
+    });
+    out.manualSteps.push(robinhoodSignIn(t.name, platform));
+  }
+};
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE, ROBINHOOD_TRADING, ROBINHOOD_BANKING];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {
