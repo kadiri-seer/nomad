@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import type { Address, Hex } from "viem";
 import { PROOF_LABEL, reviewMessage, type Bounty, type BountyResult, type Entry } from "@/lib/bounties/shared";
+import { CopyButton } from "../CopyButton";
 import { Sheet } from "./Sheet";
 import type { Client } from "./types";
 
@@ -19,12 +20,15 @@ const short = (a: string) => `${a.slice(0, 6)}...${a.slice(-4)}`;
 export function BountyReview({ client }: { client: Client }) {
   const [reviewer, setReviewer] = useState(false);
   const [open, setOpen] = useState(false);
+  // The sign-in wallet proves who it is (silently, no prompt); the server answers only about that wallet.
   useEffect(() => {
-    fetch(`/api/bounties/review?signer=${client.signer}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => setReviewer(!!j.reviewer))
-      .catch(() => undefined);
-  }, [client.signer]);
+    (async () => {
+      const at = Date.now();
+      const signature = await client.owner.signMessage({ message: reviewMessage("check", at) });
+      const r = await fetch("/api/bounties/review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ signer: client.signer, action: "check", at, signature }) });
+      if (r.ok) setReviewer(!!(await r.json()).reviewer);
+    })().catch(() => undefined);
+  }, [client]);
   if (!reviewer) return null;
   return (
     <section className="acct-card">
@@ -116,9 +120,7 @@ function ReviewSheet({ client, onClose }: { client: Client; onClose: () => void 
                 </p>
                 <div className="acct-between">
                   <code className="acct-address">{b.result.winner}</code>
-                  <button type="button" className="acct-quiet" onClick={() => navigator.clipboard.writeText(b.result!.winner).catch(() => undefined)}>
-                    Copy
-                  </button>
+                  <CopyButton text={b.result.winner} className="acct-quiet" />
                 </div>
                 <div className="acct-grid2">
                   <input className="acct-input" aria-label="Payout transaction hash" placeholder="0x..." spellCheck={false} value={tx[b.id] ?? ""} onChange={(ev) => setTx({ ...tx, [b.id]: ev.target.value.trim() })} />

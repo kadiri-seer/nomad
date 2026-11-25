@@ -15,6 +15,7 @@ import { AGENT_FEE_BURN_BPS, AGENT_FEE_USD, DEFAULT_RESEARCH, DEFAULT_RUN_EVERY_
 import { grantSession, newSalt } from "@/lib/agents/wallet";
 import { MyAgents } from "./MyAgents";
 import { BountyReview } from "./BountyReview";
+import { CopyButton } from "../CopyButton";
 import { Sheet } from "./Sheet";
 import { clearSnapshot, readSnapshot, writeSnapshot } from "./snapshot";
 import { Mark } from "@/components/Logo";
@@ -306,7 +307,7 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
         <Sheet title="Add funds" onClose={() => setSheet(null)}>
           <p className="acct-body">Send $NOMAD or USDG on Robinhood Chain to your account:</p>
           <code className="acct-address">{address}</code>
-          <button type="button" className="acct-secondary" onClick={() => navigator.clipboard?.writeText(address)}>Copy address</button>
+          <CopyButton text={address} label="Copy address" className="acct-secondary" />
           <p className="acct-small">Send on Robinhood Chain only. Funds sent from another network may be lost.</p>
         </Sheet>
       )}

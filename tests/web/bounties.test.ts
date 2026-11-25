@@ -73,8 +73,8 @@ function setup(opts: { list?: Bounty[]; balance?: bigint; now?: number } = {}) {
   const s = bounties(d);
   const enter = async (agentId: string, signer = creator, bountyId = "fees", at = now) =>
     s.enterHosted({ bounty: bountyId, agentId, at, signature: await signer.signMessage({ message: hostedEnterMessage(bountyId, agentId, at) }) });
-  const review = async (action: "list" | "pick" | "paid", extra: { bounty?: string; winner?: Address; tx?: Hex } = {}, who = reviewer) => {
-    const label = action === "list" ? "list" : action === "pick" ? `pick ${extra.bounty} ${extra.winner!.toLowerCase()}` : `paid ${extra.bounty} ${extra.tx!.toLowerCase()}`;
+  const review = async (action: "check" | "list" | "pick" | "paid", extra: { bounty?: string; winner?: Address; tx?: Hex } = {}, who = reviewer) => {
+    const label = action === "check" || action === "list" ? action : action === "pick" ? `pick ${extra.bounty} ${extra.winner!.toLowerCase()}` : `paid ${extra.bounty} ${extra.tx!.toLowerCase()}`;
     return s.review({ signer: who.address, action, ...extra, at: now, signature: await who.signMessage({ message: reviewMessage(label, now) }) });
   };
   return { s, d, agents, paidTxs, enter, review, setNow: (t: number) => (now = t) };
@@ -177,6 +177,14 @@ describe("bounties: handing in", () => {
 });
 
 describe("bounties: review and payout", () => {
+  it("only a listed sign-in wallet learns it is a reviewer, and only by signing as itself", async () => {
+    const t = setup();
+    expect(await t.review("check")).toEqual({ reviewer: true });
+    expect(await t.review("check", {}, creator)).toEqual({ reviewer: false });
+    // Asking about someone else's address does not work: the signature must be theirs.
+    await expect(t.s.review({ signer: reviewer.address, action: "check", at: NOW, signature: await creator.signMessage({ message: reviewMessage("check", NOW) }) })).rejects.toThrow(/does not match/);
+  });
+
   it("only the team reviews; the winner is picked after the close and the payout is checked on chain", async () => {
     const t = setup();
     await t.enter("1");

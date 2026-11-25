@@ -368,9 +368,11 @@ export function bounties(d: BountyDeps) {
       const signer = getAddress(body.signer);
       const at = fresh(body.at);
       const action =
-        body.action === "list" ? "list" : body.action === "pick" && typeof body.winner === "string" && isAddress(body.winner, { strict: false }) ? `pick ${String(body.bounty)} ${lc(body.winner)}` : body.action === "paid" && isHash(body.tx) ? `paid ${String(body.bounty)} ${lc(body.tx)}` : null;
+        body.action === "check" ? "check" : body.action === "list" ? "list" : body.action === "pick" && typeof body.winner === "string" && isAddress(body.winner, { strict: false }) ? `pick ${String(body.bounty)} ${lc(body.winner)}` : body.action === "paid" && isHash(body.tx) ? `paid ${String(body.bounty)} ${lc(body.tx)}` : null;
       if (!action) throw new BountyError(400, "Unknown review step.");
       if (!(await d.verify(signer, reviewMessage(action, at), sig(body.signature)).catch(() => false))) throw new BountyError(403, "The signature does not match.");
+      // Whether a wallet reviews is told only to that wallet, so nobody can look up who the reviewers are.
+      if (body.action === "check") return { reviewer: await isReviewer(signer) };
       if (!(await isReviewer(signer))) throw new BountyError(403, "Only the Nomad team can review bounties.");
 
       if (body.action === "list") {

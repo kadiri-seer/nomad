@@ -21,5 +21,5 @@ import type { Bounty } from "./shared";
 
 export const BOUNTIES: Bounty[] = [];
 
-/** The Nomad accounts (or their Google wallets) that may pick winners and record payouts. */
-export const REVIEWERS: Address[] = [];
+/** The sign-in wallets (or Nomad accounts) that may see the review and pick winners. Prizes are paid from the treasury. */
+export const REVIEWERS: Address[] = ["0x742e2cB0D250c22D71a1df00Cf9D2c40214544a4"];
