@@ -14,7 +14,7 @@ import { idlexPayer, runnerSecret, sessionKey, sessionSigner } from "../../apps/
 import { buildCandidates, cleanSymbol, parseDecision, passesChecks, reportOf, runAgent, splitNote, swapCalls, tick, type Candidate, type RunnerDeps } from "../../apps/web/lib/server/runner";
 import { classifyAgentMove } from "../../apps/web/lib/server/sponsor";
 import type { Quote } from "../../apps/web/lib/server/stoa";
-import { MemoryRedis } from "../../apps/web/lib/vote/redis";
+import { MemoryRedis } from "../../apps/web/lib/redis";
 
 const WALLET = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as Address;
 const OWNER = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as Address;

@@ -3,7 +3,7 @@ import { keccak256, toHex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { decryptPackage, encryptPackage, looksEncrypted, openMessage, sha256Hex, storeMessage } from "../../apps/web/lib/agent-package";
 import { KeyError, releaseKey, storePackage, UPLOADS_PER_DAY, type Deps, type OnChainAgent } from "../../apps/web/lib/server/agent-keys";
-import { MemoryRedis } from "../../apps/web/lib/vote/redis";
+import { MemoryRedis } from "../../apps/web/lib/redis";
 import { parsePartners, safeUri } from "../../apps/web/lib/economy";
 
 /** Paid copies: only a wallet that owns the agent, created it or has a copy gets the key; the file is checked. */

@@ -1,6 +1,6 @@
 # Token and builder bounties
 
-$NOMAD has two jobs: governance and funding development. Holders decide which integrations Nomad gets next, and the reward wallet pays the builders who deliver them. The token coordinates the people deciding what Nomad becomes and the builders making it happen.
+$NOMAD funds Nomad's development: the reward wallet pays the builders who add new integrations, and the token pays for minting agents.
 
 ## Token details
 
@@ -13,48 +13,30 @@ Check the contract address against this page before you buy. Tokens with the sam
 
 ## How it works
 
-1. **Integration suggestions.** Anyone can suggest a new agent platform or tool for Nomad to support. Suggestions that the maintainers accept as buildable go forward to a vote.
-2. **Community voting.** Holders vote on which accepted integration is built next.
-3. **Builder bounties.** The winning integration gets a bounty, paid in $NOMAD from the reward wallet.
-4. **Verification.** Builders submit the integration as a pull request. It is reviewed and must pass Nomad's adapter contract tests and security checks before it is merged.
-5. **Payout.** Once the integration is merged and verified, the builder receives the bounty.
-6. **Ecosystem expansion.** Each completed integration makes Nomad useful to more agent builders and users, which brings more suggestions and more work for the community.
+1. **Integration suggestions.** Anyone can suggest a new agent platform or tool for Nomad to support.
+2. **Builder bounties.** Nomad picks the integrations it wants next and posts a bounty for each, paid in $NOMAD from the reward wallet.
+3. **Verification.** Builders submit the integration as a pull request. It is reviewed and must pass Nomad's adapter contract tests and security checks before it is merged.
+4. **Payout.** Once the integration is merged and verified, the builder receives the bounty.
+5. **Ecosystem expansion.** Each completed integration makes Nomad useful to more agent builders and users, which brings more suggestions and more work for the community.
 
 ## The flywheel
 
-1. The community suggests integrations and token holders vote.
-2. The vote selects the next integration.
+1. The community suggests integrations.
+2. Nomad picks the next one.
 3. The reward wallet funds a builder bounty for it.
 4. Builders develop the integration and pass the tests.
 5. Verified integrations expand what Nomad can move.
 6. More integrations bring more users, more builders and more suggestions.
 
-## Taking part as a holder
+## Taking part
 
 ### Suggest an integration
 
-Use the suggestion box on the [Vote page](https://nomad-iota-six.vercel.app/vote): type the app's name and, if you like, why it should be next. No account or wallet is needed. With a GitHub account you can use the [suggestion form](https://github.com/kadiri-seer/nomad/issues/new?template=integration-proposal.yml) instead; both count.
-
-### Vote
-
-1. Open the [Vote page](https://nomad-iota-six.vercel.app/vote) while a round is open. Each new round is also announced on @thenomadlabs.
-2. Connect the wallet that holds your $NOMAD.
-3. Pick an option.
-4. Sign the message to confirm. Voting is free: no transaction is sent, there is no fee, and no tokens leave your wallet.
+Use the [suggestion form](https://github.com/kadiri-seer/nomad/issues/new?template=integration-proposal.yml) on GitHub: give the app's name and, if you like, why it should be next.
 
 ### Check the payouts
 
 Every bounty payment is sent from the reward wallet and linked on its [bounty issue](https://github.com/kadiri-seer/nomad/issues?q=is%3Aissue+in%3Atitle+%22%5BBounty%5D%22), so anyone can confirm who was paid and how much. The [holders list](https://robinhoodchain.blockscout.com/token/0x14c0a77e792f6c9818888630e95c50cf3b48c979?tab=holders) is public on the explorer too.
-
-## Voting rules
-
-- Rounds run back to back: each vote lasts 48 hours, and the next round opens within minutes after one closes, as long as at least two accepted suggestions are waiting. Each ballot holds up to five accepted suggestions: the ones with the most backing (thumbs-up reactions on GitHub, plus earlier backs from the Vote page).
-- Past winners do not go on the ballot again.
-- One $NOMAD is one vote. Balances are counted at the moment the vote opens, so tokens bought during a vote do not add votes.
-- The team's wallets and the reward wallet do not vote.
-- The option with the most votes wins and becomes the next bounty. In a tie, the option with more voting wallets wins; if that is also tied, the older suggestion wins.
-- One vote per wallet, and it cannot be changed.
-- Everything is public: the ballot, the balances taken when the round opened and every signed vote are published in [governance/rounds](../governance/rounds). When a round closes, every signature is checked again and the votes are recounted before the result is posted. See [governance/README.md](../governance/README.md).
 
 ## The reward wallet
 
@@ -68,7 +50,7 @@ When finances permit, the treasury may buy $NOMAD and burn it. Each buyback and 
 
 ## What the token does not include
 
-Buybacks, burns and fees can change or stop at any time, and none are promised, on any schedule or in any amount. The token comes with no staking and no share of revenue, and holding it is not a share in Nomad or its income. Holding it gives a vote on Nomad's roadmap.
+Buybacks, burns and fees can change or stop at any time, and none are promised, on any schedule or in any amount. The token comes with no staking and no share of revenue, and holding it is not a share in Nomad or its income.
 
 ## Building an integration for a bounty
 

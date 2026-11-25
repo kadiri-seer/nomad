@@ -3,7 +3,7 @@ import { decodeEventLog, getAddress, isAddress, parseAbi, verifyMessage, type Ad
 import { AGENTS_CONTRACT } from "../economy";
 import { AGENT_FEE_USD, agentPackage, BURN_ADDRESS, registerMessage, RUN_EVERY_HOURS, SESSION_DAYS, TEMPLATES, validLimits, type AgentRecord, type RunRecord, type Template } from "../agents/shared";
 import { NOMAD, TREASURY, USDG } from "../accounts/chain";
-import { redisFromEnv } from "../vote/redis";
+import { redisFromEnv } from "../redis";
 import { balanceOf as creditBalance, chargeRun } from "./credits";
 import { sponsorDeps } from "./account-routes";
 import { agentStore } from "./agents-store";

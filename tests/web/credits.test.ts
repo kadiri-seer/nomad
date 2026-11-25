@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { encodeAbiParameters, encodeEventTopics, parseAbi, type Address, type Hex } from "viem";
-import { MemoryRedis } from "../../apps/web/lib/vote/redis";
+import { MemoryRedis } from "../../apps/web/lib/redis";
 import { ENTRY_POINT, NOMAD, TREASURY, USDG } from "../../apps/web/lib/accounts/chain";
 import { balanceOf, chargeRun, claimTopUp, CreditsError, FREE_OPS_GLOBAL_PER_DAY, gasCharge, hold, settle, useFreeOp, useFreeOpFor, type CreditsDeps, type Receipt } from "../../apps/web/lib/server/credits";
 import { FREE_OPS_PER_DAY } from "../../apps/web/lib/accounts/chain";

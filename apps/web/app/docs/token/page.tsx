@@ -1,19 +1,18 @@
 import Link from "next/link";
 import { REPO_URL } from "@/components/SiteFooter";
-import { X_HANDLE, X_URL } from "@/components/Social";
 import { REWARD_SAFE, REWARD_SAFE_URL, TOKEN_CA, TOKEN_CHAIN, TOKEN_CHART_URL, TOKEN_EXPLORER_URL, TOKEN_HOLDERS_URL, TOKEN_TICKER } from "@/lib/token";
 
 export const metadata = {
   title: "Token and builder bounties",
-  description: "How $NOMAD holders choose which integrations Nomad gets next, and how builders are paid for delivering them."
+  description: "What $NOMAD is for: builder bounties for new integrations, minting agents, and fees, buybacks and burns."
 };
 
 const PROPOSAL_URL = `${REPO_URL}/issues/new?template=integration-proposal.yml`;
 const BOUNTIES_URL = `${REPO_URL}/issues?q=is%3Aissue+in%3Atitle+%22%5BBounty%5D%22`;
 
 const FLYWHEEL = [
-  "The community suggests integrations and token holders vote.",
-  "The vote selects the next integration.",
+  "The community suggests integrations.",
+  "Nomad picks the next one.",
   "The reward wallet funds a builder bounty for it.",
   "Builders develop the integration and pass the tests.",
   "Verified integrations expand what Nomad can move.",
@@ -26,7 +25,7 @@ export default function Token() {
       <p className="label">Documentation</p>
       <h1>Token and builder bounties</h1>
       <p>
-        {TOKEN_TICKER} has two jobs: governance and funding development. Holders decide which integrations Nomad gets next, and the reward wallet pays the builders who deliver them. The token coordinates the people deciding what Nomad becomes and the builders making it happen.
+        {TOKEN_TICKER} funds Nomad&apos;s development: the reward wallet pays the builders who add new integrations, and the token pays for minting agents.
       </p>
 
       <h2>Token details</h2>
@@ -49,13 +48,10 @@ export default function Token() {
       <h2>How it works</h2>
       <ol>
         <li>
-          <strong>Integration suggestions.</strong> Anyone can suggest a new agent platform or tool for Nomad to support. Suggestions that the maintainers accept as buildable go forward to a vote.
+          <strong>Integration suggestions.</strong> Anyone can suggest a new agent platform or tool for Nomad to support.
         </li>
         <li>
-          <strong>Community voting.</strong> Holders vote on which accepted integration is built next.
-        </li>
-        <li>
-          <strong>Builder bounties.</strong> The winning integration gets a bounty, paid in {TOKEN_TICKER} from the reward wallet.
+          <strong>Builder bounties.</strong> Nomad picks the integrations it wants next and posts a bounty for each, paid in {TOKEN_TICKER} from the reward wallet.
         </li>
         <li>
           <strong>Verification.</strong> Builders submit the integration as a pull request. It is reviewed and must pass Nomad&apos;s adapter contract tests and security checks before it is merged.
@@ -74,39 +70,17 @@ export default function Token() {
           <li key={step}>{step}</li>
         ))}
       </ol>
-      <p>The token gives the community real influence over Nomad&apos;s development and gives developers an economic reason to extend it.</p>
+      <p>The token gives developers an economic reason to extend Nomad.</p>
 
-      <h2>Taking part as a holder</h2>
+      <h2>Taking part</h2>
       <h3>Suggest an integration</h3>
       <p>
-        Use the suggestion box on the <Link href="/vote">Vote page</Link>: type the app&apos;s name and, if you like, why it should be next. No account or wallet is needed. With a GitHub account you can use the <a href={PROPOSAL_URL}>suggestion form</a> instead; both count.
+        Use the <a href={PROPOSAL_URL}>suggestion form</a> on GitHub: give the app&apos;s name and, if you like, why it should be next.
       </p>
-      <h3>Vote</h3>
-      <ol>
-        <li>
-          Open the <Link href="/vote">Vote page</Link> while a round is open. Each new round is also announced on {X_HANDLE}.
-        </li>
-        <li>Connect the wallet that holds your {TOKEN_TICKER}.</li>
-        <li>Pick an option.</li>
-        <li>Sign the message to confirm. Voting is free: no transaction is sent, there is no fee, and no tokens leave your wallet.</li>
-      </ol>
       <h3>Check the payouts</h3>
       <p>
         Every bounty payment is sent from the <a href={REWARD_SAFE_URL}>reward wallet</a> and linked on its <a href={BOUNTIES_URL}>bounty issue</a>, so anyone can confirm who was paid and how much. The <a href={TOKEN_HOLDERS_URL}>holders list</a> is public on the explorer too.
       </p>
-
-      <h2>Voting rules</h2>
-      <ul>
-        <li>Rounds run back to back: each vote lasts 48 hours, and the next round opens within minutes after one closes, as long as at least two accepted suggestions are waiting. Each ballot holds up to five accepted suggestions: the ones with the most backing (thumbs-up reactions on GitHub, plus earlier backs from the Vote page).</li>
-        <li>Past winners do not go on the ballot again.</li>
-        <li>One {TOKEN_TICKER} is one vote. Balances are counted at the moment the vote opens, so tokens bought during a vote do not add votes.</li>
-        <li>The team&apos;s wallets and the reward wallet do not vote.</li>
-        <li>The option with the most votes wins and becomes the next bounty. In a tie, the option with more voting wallets wins; if that is also tied, the older suggestion wins.</li>
-        <li>One vote per wallet, and it cannot be changed.</li>
-        <li>
-          Everything is public: the ballot, the balances taken when the round opened and every signed vote are published in the <a href={`${REPO_URL}/tree/main/governance/rounds`}>repository</a>. When a round closes, every signature is checked again and the votes are recounted before the result is posted.
-        </li>
-      </ul>
 
       <h2>The reward wallet</h2>
       <p>
@@ -123,7 +97,7 @@ export default function Token() {
 
       <h2>What the token does not include</h2>
       <p>
-        Buybacks, burns and fees can change or stop at any time, and none are promised, on any schedule or in any amount. The token comes with no staking and no share of revenue, and holding it is not a share in Nomad or its income. Holding it gives a vote on Nomad&apos;s roadmap.
+        Buybacks, burns and fees can change or stop at any time, and none are promised, on any schedule or in any amount. The token comes with no staking and no share of revenue, and holding it is not a share in Nomad or its income.
       </p>
 
       <h2>Building an integration for a bounty</h2>

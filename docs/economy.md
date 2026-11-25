@@ -14,8 +14,7 @@ How money moves around Nomad, and where each part can be checked. The live numbe
 3. **Payments for services.** Nomad AI can pay a service only through Upoch, only to a recipient listed in its guard's
    policy, only that recipient's exact amount and only when due. This is off until a recipient is listed. See the
    Nomad AI repo's README.
-4. **Builder bounties.** Integrations that win a holder vote get a bounty in $NOMAD from the treasury, a Safe that needs
-   two approvals. Bounties are GitHub issues labelled `bounty`; each payout is linked on its issue.
+4. **Builder bounties.** Nomad posts bounties in $NOMAD from the treasury for the integrations it wants next. Bounties are GitHub issues labelled `bounty`; each payout is linked on its issue.
 5. **Minted agents.** Creators mint agents with the NomadAgents contract (`contracts/`) for a fee in $NOMAD and set a
    price for copies. Part of each fee is burned. See [contracts/README.md](../contracts/README.md).
 6. **Paid copies.** A creator can deliver an agent encrypted: the browser encrypts the `.nomad` file before upload,

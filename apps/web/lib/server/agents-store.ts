@@ -1,7 +1,7 @@
-/** Where agents live between runs: Redis (the same store as credits and votes). */
+/** Where agents live between runs: Redis (the same store as credits). */
 import { getAddress, type Address } from "viem";
-import type { RedisLike } from "../vote/redis";
-import { hashToObject } from "../vote/redis";
+import type { RedisLike } from "../redis";
+import { hashToObject } from "../redis";
 import { NOTES_KEPT, NOTES_SHOWN, RUNS_KEPT, type AgentRecord, type Move, type Position, type RunRecord } from "../agents/shared";
 
 const AGENT = (id: string) => `nomad:agent:${id}`;

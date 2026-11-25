@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { createPublicClient, http, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { redisFromEnv, type RedisLike } from "../vote/redis";
+import { redisFromEnv, type RedisLike } from "../redis";
 import { AGENTS_CONTRACT } from "../economy";
 import { CHAIN_ID, NOMAD, PAYMASTER, PUBLIC_RPC, TREASURY, USDG } from "../accounts/chain";
 import { hold, useFreeOpFor, type CreditsDeps } from "./credits";

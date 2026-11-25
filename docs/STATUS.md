@@ -250,7 +250,11 @@ Tested (automated, every push, `tests/security/wallet-keys.test.ts`): which valu
 
 Not covered: wallet keys in formats other than those above (for example an encrypted keystore file, which is already left out as a credential file unless `--include-sensitive-files` is used, and is encrypted).
 
-## Holder vote (added)
+## Holder vote (removed on 25 November 2026)
+
+- The Vote page, its API, the suggestion box and the round job were removed. Past rounds stay in `governance/rounds/` as a record.
+
+What it was:
 
 - Vote page at `/vote`, vote API under `/api/vote`, round job in `.github/workflows/vote-rounds.yml`, round files in `governance/`. See [governance/README.md](../governance/README.md).
 - Tested: signature checks, weighting from the balance snapshot, one vote per wallet, closed and upcoming rounds, tie rules, the explorer and transfer-replay snapshots, the round job (opening, closing, recount, GitHub comments and labels), and an end-to-end run in a browser with wallets that really sign, a stand-in database and the close step recounting those votes.

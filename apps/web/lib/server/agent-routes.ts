@@ -1,6 +1,6 @@
 /** Shared setup for the paid-copy routes: what is configured, and errors as JSON. */
 import { NextResponse } from "next/server";
-import { redisFromEnv } from "../vote/redis";
+import { redisFromEnv } from "../redis";
 import { AGENTS_CONTRACT } from "../economy";
 import { chainReader, filebaseUpload, KeyError, type Deps } from "./agent-keys";
 

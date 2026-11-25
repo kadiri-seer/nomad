@@ -18,7 +18,6 @@ const MORE = [
   { href: "/bounties", label: "Bounties" },
   { href: "/docs/adapters", label: "Platforms" },
   { href: "/docs/security", label: "Security" },
-  { href: "/vote", label: "Vote" },
   { href: "/inspect", label: "Inspector" }
 ];
 

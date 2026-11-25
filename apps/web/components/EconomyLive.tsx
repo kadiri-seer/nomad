@@ -317,7 +317,7 @@ export function EconomyLive() {
             </p>
           ) : data.bounties.length === 0 ? (
             <p className="muted" style={{ margin: 0 }}>
-              No bounty has been posted yet. Each integration that wins a <Link href="/vote">holder vote</Link> gets one.
+              No bounty has been posted yet.
             </p>
           ) : (
             <div className="table-wrap">

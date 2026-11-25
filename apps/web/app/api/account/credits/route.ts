@@ -3,7 +3,7 @@
  * a top-up the account made on-chain.
  */
 import { getAddress } from "viem";
-import { redisFromEnv } from "@/lib/vote/redis";
+import { redisFromEnv } from "@/lib/redis";
 import { creditsDeps, json } from "@/lib/server/account-routes";
 import { balanceOf, claimTopUp, CreditsError, settle } from "@/lib/server/credits";
 

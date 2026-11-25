@@ -4,7 +4,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { hostedEnterMessage, linkMessage, outsideEnterMessage, reviewMessage, similarity, submitMessage, type Bounty } from "../../apps/web/lib/bounties/shared";
 import { bounties, bountyStore, type BountyDeps } from "../../apps/web/lib/server/bounties";
 import type { AgentRecord, RunRecord } from "../../apps/web/lib/agents/shared";
-import { MemoryRedis } from "../../apps/web/lib/vote/redis";
+import { MemoryRedis } from "../../apps/web/lib/redis";
 
 const DAY = 86_400_000;
 const NOW = Date.parse("2026-12-03T12:00:00Z");

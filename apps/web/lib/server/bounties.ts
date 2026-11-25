@@ -29,7 +29,7 @@ import {
   type PrizeToken,
   type Proof
 } from "../bounties/shared";
-import { hashToObject, type RedisLike } from "../vote/redis";
+import { hashToObject, type RedisLike } from "../redis";
 
 export class BountyError extends Error {
   constructor(public status: number, message: string) {

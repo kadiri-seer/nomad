@@ -7,8 +7,8 @@
 import { createPublicClient, http, recoverMessageAddress, type Abi } from "viem";
 import { AGENTS_ABI } from "../agents-contract";
 import { MAX_PACKAGE_BYTES, SIGNED_MAX_AGE_MS, isCid, looksEncrypted, openMessage, storeMessage } from "../agent-package";
-import type { RedisLike } from "../vote/redis";
-import { hashToObject } from "../vote/redis";
+import type { RedisLike } from "../redis";
+import { hashToObject } from "../redis";
 
 export const RPC = "https://rpc.mainnet.chain.robinhood.com";
 const KEY_PREFIX = "nomad:agentpkg:";

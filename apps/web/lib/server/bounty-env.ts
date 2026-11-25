@@ -4,7 +4,7 @@ import { scanText } from "@nomad/security";
 import { NOMAD, TREASURY, USDG } from "../accounts/chain";
 import { BOUNTIES, REVIEWERS } from "../bounties/list";
 import type { PrizeToken } from "../bounties/shared";
-import { redisFromEnv } from "../vote/redis";
+import { redisFromEnv } from "../redis";
 import { agentStore } from "./agents-store";
 import { mainAccountOf, serverClient } from "./agent-exec";
 import { bounties, bountyStore } from "./bounties";

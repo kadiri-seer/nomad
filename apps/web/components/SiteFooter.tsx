@@ -36,9 +36,6 @@ export function SiteFooter() {
                 <Link href="/docs/adapters">Platforms</Link>
               </li>
               <li>
-                <Link href="/vote">Holder vote</Link>
-              </li>
-              <li>
                 <Link href="/agents">Minted agents</Link>
               </li>
               <li>

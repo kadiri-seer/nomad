@@ -9,8 +9,8 @@
  * Every dependency comes in as an argument, so the rules are tested without the network.
  */
 import { decodeEventLog, getAddress, parseAbi, type Address, type Hex, type Log } from "viem";
-import type { RedisLike } from "../vote/redis";
-import { hashToObject } from "../vote/redis";
+import type { RedisLike } from "../redis";
+import { hashToObject } from "../redis";
 import { ENTRY_POINT, FREE_OPS_PER_DAY, GAS_MARGIN_BPS, MIN_TOPUP_USDG, NOMAD, NOMAD_TOPUP_BONUS_BPS, TREASURY, USDG } from "../accounts/chain";
 
 export class CreditsError extends Error {
