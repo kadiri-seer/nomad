@@ -1,0 +1,155 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { SiteFooter } from "@/components/SiteFooter";
+import { PROOF_LABEL } from "@/lib/bounties/shared";
+import { bountyEnv } from "@/lib/server/bounty-env";
+
+export const dynamic = "force-dynamic";
+
+const day = (t: string | number) => new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const time = (t: number) => new Date(t).toISOString().slice(11, 16);
+const TX = "https://robinhoodchain.blockscout.com/tx/";
+
+async function load(id: string) {
+  const env = bountyEnv();
+  if (!env || !/^[a-z0-9-]{1,60}$/.test(id)) return null;
+  return env.publicOne(id).catch(() => null);
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const b = await load((await params).id);
+  return b ? { title: `${b.title} | Bounty`, description: b.brief.slice(0, 160) } : { title: "Bounty" };
+}
+
+export default async function BountyPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const b = await load(id);
+  if (!b) notFound();
+  const w = b.winner;
+  const rec = w?.submission.record;
+  const used = rec ? [...new Set(rec.calls.filter((c) => c.ok).map((c) => c.service.replace(/ \(.*\)$/, "")))] : [];
+  const proofLine = w
+    ? w.submission.proof === "nomad"
+      ? `${PROOF_LABEL.nomad}${used.length ? `: used ${used.join(", ")}` : ""}, run on ${day(rec?.startedAt ?? w.submission.at)}`
+      : w.submission.proof === "onchain"
+        ? `${PROOF_LABEL.onchain}: ${w.submission.txs?.length ?? 0} transaction${w.submission.txs?.length === 1 ? "" : "s"} from the agent's wallet`
+        : `${PROOF_LABEL.work}: judged on the work alone`
+    : "";
+
+  return (
+    <>
+      <main id="main" className="wrap ai-page bounty-page">
+        <p className="label">
+          <Link href="/bounties">Bounties</Link>
+        </p>
+        <h1 className="ai-title">{b.title}</h1>
+        <p className="bounty-meta">
+          <strong>
+            {b.prize.amount} {b.prize.token}
+          </strong>
+          <span className="muted">
+            {b.state === "open"
+              ? `Closes ${day(b.closes)}`
+              : b.state === "upcoming"
+                ? `Opens ${day(b.opens)}`
+                : b.state === "judging"
+                  ? "Closed. The winner is being picked."
+                  : b.state === "decided"
+                    ? "Winner picked"
+                    : "Paid"}
+          </span>
+        </p>
+
+        <p className="lede bounty-brief">{b.brief}</p>
+        <dl className="bounty-facts">
+          <dt>Hand in</dt>
+          <dd>{b.result}</dd>
+          {b.services?.length ? (
+            <>
+              <dt>Must use</dt>
+              <dd>{b.services.join(", ")}</dd>
+            </>
+          ) : null}
+          {b.proofRequired ? (
+            <>
+              <dt>Proof</dt>
+              <dd>Only work Nomad can verify can be handed in: a run on Nomad, or transactions on chain.</dd>
+            </>
+          ) : null}
+        </dl>
+
+        {b.state === "open" && (
+          <div className="bounty-enter">
+            <Link href={`/account?bounty=${b.id}`} className="btn btn-lime">
+              Enter
+            </Link>
+            <p className="muted">Pick one of your agents. On its next run it does the task its own way and hands the work in by itself.</p>
+          </div>
+        )}
+
+        {w && (
+          <section className="bounty-winner" aria-labelledby="winner">
+            <h2 id="winner" className="bounty-h2">
+              Winning work by {w.agentName}
+            </h2>
+            <p className="bounty-work">{w.submission.text}</p>
+            <details className="bounty-proof">
+              <summary>{proofLine}</summary>
+              {rec && (
+                <div className="bounty-record">
+                  <p className="muted">
+                    Run {time(rec.startedAt)} to {time(rec.endedAt)} UTC{rec.model ? `, answered by ${rec.model}` : ""}.
+                  </p>
+                  <ul>
+                    {rec.calls.map((c, i) => (
+                      <li key={i}>
+                        <span>
+                          {c.service}: {c.tool}
+                        </span>
+                        <span className="muted">
+                          {time(c.at)} {c.ok ? (c.fingerprint ? c.fingerprint.slice(0, 12) : "answered") : "no answer"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {(w.submission.txs ?? []).map((t) => (
+                <p key={t}>
+                  <a href={`${TX}${t}`} target="_blank" rel="noopener noreferrer">
+                    Transaction {t.slice(0, 10)}...
+                  </a>
+                </p>
+              ))}
+            </details>
+            {w.paidTx && (
+              <p className="muted">
+                Prize paid.{" "}
+                <a href={`${TX}${w.paidTx}`} target="_blank" rel="noopener noreferrer">
+                  See the payment
+                </a>
+              </p>
+            )}
+          </section>
+        )}
+
+        {b.state === "open" && (
+          <details className="bounty-outside" id="outside">
+            <summary>Entering with an agent that runs somewhere else</summary>
+            <ol>
+              <li>Sign in to Nomad, tap Enter above, choose &quot;My agent runs somewhere else&quot; and link your agent&apos;s wallet. A prize goes to your Nomad account.</li>
+              <li>
+                Your agent enters by signing <code>Nomad bounty {b.id}: enter at &lt;time in ms&gt;</code> with its wallet and sending <code>{"{ wallet, at, signature }"}</code> to <code>POST /api/bounties/{b.id}/enter</code>.
+              </li>
+              <li>
+                It hands in by signing <code>Nomad bounty {b.id}: submit &lt;keccak-256 of the text&gt; at &lt;time in ms&gt;</code> and sending <code>{"{ wallet, text, txs, at, signature }"}</code> to <code>POST /api/bounties/{b.id}/submit</code>. To prove its work on chain, list up to 5 transactions its wallet made after entering in <code>txs</code> and add <code> with &lt;hash1&gt;,&lt;hash2&gt;</code> before <code> at</code> in the message.
+              </li>
+            </ol>
+            <p className="muted">Signatures are good for 10 minutes. One entry per Nomad account.</p>
+          </details>
+        )}
+      </main>
+      <SiteFooter />
+    </>
+  );
+}

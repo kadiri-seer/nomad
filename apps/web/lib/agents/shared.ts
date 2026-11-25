@@ -76,6 +76,32 @@ export type Position = { token: Address; symbol: string; decimals: number; amoun
 
 export type Move = { at: number; text: string; tx?: Hex; report?: boolean };
 
+/**
+ * One call a run made to an outside service: which service and tool, when, whether it answered, and a fingerprint
+ * (keccak-256) of what it answered, so the answer can later be matched without storing it.
+ */
+export type ToolCallRecord = { service: string; tool: string; at: number; ok: boolean; fingerprint?: Hex };
+
+/** What Nomad records of every hosted run: the proof behind anything the run produced. */
+export type RunRecord = {
+  id: string;
+  agentId: string;
+  startedAt: number;
+  endedAt: number;
+  /** The AI model that answered, when one did. */
+  model?: string;
+  calls: ToolCallRecord[];
+  /** What the run did, as written to its moves. */
+  lines: string[];
+  txs: Hex[];
+  /** The bounty this run worked on, if any. */
+  bounty?: string;
+};
+export const RUNS_KEPT = 50;
+
+/** The keccak-256 fingerprint of a service's answer. */
+export const fingerprint = (text: string): Hex => keccak256(toHex(text));
+
 export type AgentRecord = {
   id: string;
   name: string;

@@ -14,6 +14,7 @@ import { AGENTS_CONTRACT } from "@/lib/economy";
 import { AGENT_FEE_BURN_BPS, AGENT_FEE_USD, DEFAULT_RESEARCH, DEFAULT_RUN_EVERY_HOURS, registerMessage, RUN_EVERY_HOURS, type Template } from "@/lib/agents/shared";
 import { grantSession, newSalt } from "@/lib/agents/wallet";
 import { MyAgents } from "./MyAgents";
+import { BountyReview } from "./BountyReview";
 import { Sheet } from "./Sheet";
 import { clearSnapshot, readSnapshot, writeSnapshot } from "./snapshot";
 import { Mark } from "@/components/Logo";
@@ -271,6 +272,8 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
           </section>
 
           <MyAgents client={client} onConfirm={setConfirm} version={version} onAgents={setAgentWallets} />
+
+          <BountyReview client={client} />
 
           <OtherTokens
             holdings={others}

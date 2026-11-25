@@ -42,6 +42,9 @@ export function SiteFooter() {
                 <Link href="/agents">Minted agents</Link>
               </li>
               <li>
+                <Link href="/bounties">Bounties</Link>
+              </li>
+              <li>
                 <Link href="/economy">Economy</Link>
               </li>
             </ul>

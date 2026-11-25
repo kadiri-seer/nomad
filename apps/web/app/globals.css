@@ -2113,3 +2113,131 @@ html[data-theme="dark"] .acct-balance { background: #2a2925; color: #f3f2ee; }
   background: var(--lime);
   color: #0e1013;
 }
+
+/* ------------------------------ bounties ------------------------------ */
+
+.bounty-page {
+  max-width: 760px;
+}
+.bounty-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.bounty-list li {
+  border-bottom: 1px solid var(--line);
+}
+.bounty-list a {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 16px;
+  padding: 18px 2px;
+  color: inherit;
+  text-decoration: none;
+}
+.bounty-list a:hover .bounty-name {
+  text-decoration: underline;
+}
+.bounty-name {
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+.bounty-prize {
+  font-family: var(--mono);
+  text-align: right;
+}
+.bounty-when {
+  grid-column: 1 / -1;
+  font-size: 0.9rem;
+}
+.bounty-past .bounty-name {
+  font-weight: 500;
+}
+.bounty-h2 {
+  margin: 48px 0 8px;
+  font-size: 1.15rem;
+}
+.bounty-meta {
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+  margin: 12px 0 28px;
+}
+.bounty-meta strong {
+  font-family: var(--mono);
+  font-size: 1.2rem;
+}
+.bounty-brief {
+  margin: 0 0 24px;
+}
+.bounty-facts {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px 16px;
+  margin: 0 0 32px;
+}
+.bounty-facts dt {
+  color: var(--muted);
+}
+.bounty-facts dd {
+  margin: 0;
+}
+.bounty-enter {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 40px;
+}
+.bounty-enter p {
+  margin: 0;
+  max-width: 52ch;
+}
+.bounty-work {
+  white-space: pre-line;
+  line-height: 1.6;
+}
+.bounty-proof,
+.bounty-outside {
+  margin-top: 16px;
+}
+.bounty-proof summary,
+.bounty-outside summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.bounty-record ul {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+}
+.bounty-record li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+.bounty-outside ol {
+  padding-left: 20px;
+  line-height: 1.6;
+}
+.bounty-outside li {
+  margin-bottom: 10px;
+}
+.bounty-review {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.bounty-entry summary {
+  display: flex;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 10px 0;
+  font-weight: 600;
+}
+.bounty-winner > .muted {
+  margin-top: 16px;
+}

@@ -2,7 +2,7 @@
 import { getAddress, type Address } from "viem";
 import type { RedisLike } from "../vote/redis";
 import { hashToObject } from "../vote/redis";
-import { NOTES_KEPT, NOTES_SHOWN, type AgentRecord, type Move, type Position } from "../agents/shared";
+import { NOTES_KEPT, NOTES_SHOWN, RUNS_KEPT, type AgentRecord, type Move, type Position, type RunRecord } from "../agents/shared";
 
 const AGENT = (id: string) => `nomad:agent:${id}`;
 const OWNER = (a: Address) => `nomad:agents:owner:${a.toLowerCase()}`;
@@ -11,6 +11,7 @@ const DUE = "nomad:agents:due";
 const MOVES = (id: string) => `nomad:agent:${id}:moves`;
 const NOTES = (id: string) => `nomad:agent:${id}:notes`;
 const POSITIONS = (id: string) => `nomad:agent:${id}:positions`;
+const RUNS = (id: string) => `nomad:agent:${id}:runs`;
 
 export function agentStore(redis: RedisLike) {
   const get = async (id: string): Promise<AgentRecord | null> => {
@@ -68,6 +69,15 @@ export function agentStore(redis: RedisLike) {
     async moves(id: string, n = 20): Promise<Move[]> {
       const raw = ((await redis.cmd(["LRANGE", MOVES(id), 0, n - 1])) as string[] | null) ?? [];
       return raw.map((r) => JSON.parse(r) as Move);
+    },
+    /** The record of each run, newest first (the last RUNS_KEPT). */
+    async addRun(id: string, r: RunRecord) {
+      await redis.cmd(["LPUSH", RUNS(id), JSON.stringify(r)]);
+      await redis.cmd(["LTRIM", RUNS(id), 0, RUNS_KEPT - 1]);
+    },
+    async runs(id: string, n = 10): Promise<RunRecord[]> {
+      const raw = ((await redis.cmd(["LRANGE", RUNS(id), 0, n - 1])) as string[] | null) ?? [];
+      return raw.map((r) => JSON.parse(r) as RunRecord);
     },
     async positions(id: string): Promise<Position[]> {
       const h = hashToObject(await redis.cmd(["HGETALL", POSITIONS(id)]));

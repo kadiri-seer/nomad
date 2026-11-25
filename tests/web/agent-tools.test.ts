@@ -1,3 +1,4 @@
+import { keccak256, toHex } from "viem";
 import { describe, expect, it } from "vitest";
 import { geminiSchema, MAX_TOOL_ANSWER_CHARS, TOOL_SERVERS, toolKit, withFallback, type ToolServer } from "../../apps/web/lib/server/agent-tools";
 import { gemini } from "../../apps/web/lib/server/gemini";
@@ -85,6 +86,10 @@ describe("the tool kit", () => {
     expect(await kit.call("hey_chain_overview", { blob: "y".repeat(3000) })).toMatch(/^Not run: the request was too long/);
     expect(f.seen.some((s) => s.name === "send_funds")).toBe(false);
     expect(kit.used()).toEqual(["HEY Research"]);
+    // The run's record: each call that reached a server, with a fingerprint of its full answer.
+    const calls = kit.calls!();
+    expect(calls.map((c) => [c.service, c.tool, c.ok])).toEqual([["HEY Research", "find_projects", true]]);
+    expect(calls[0].fingerprint).toBe(keccak256(toHex("x".repeat(MAX_TOOL_ANSWER_CHARS + 500))));
   });
 
   it("withholds an answer Venin finds planted orders in, and says when a server does not answer", async () => {
@@ -132,7 +137,7 @@ describe("Gemini with tools", () => {
     }) as unknown as typeof fetch;
     const log: string[] = [];
     const r = await gemini("k", { fetchImpl }).withTools("p", "s", kit(log));
-    expect(r).toEqual({ text: "REPORT: calm (HEY Research)", used: ["HEY Research"] });
+    expect(r).toEqual({ text: "REPORT: calm (HEY Research)", used: ["HEY Research"], calls: [], model: "gemini-3.1-flash-lite" });
     expect(log).toEqual(["hey_chain_overview"]);
     expect(bodies[1].contents[1]).toEqual({ role: "model", parts: [{ functionCall: { name: "hey_chain_overview", args: {} }, thoughtSignature: "sig" }] });
     expect(bodies[1].contents[2].parts[0]).toEqual({ functionResponse: { name: "hey_chain_overview", response: { result: "calm day" } } });

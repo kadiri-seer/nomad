@@ -1,14 +1,14 @@
 /** What the agent routes share: building the runner from the deployment's settings, and checking a registration. */
 import { decodeEventLog, getAddress, isAddress, parseAbi, verifyMessage, type Address, type Hex } from "viem";
 import { AGENTS_CONTRACT } from "../economy";
-import { AGENT_FEE_USD, agentPackage, BURN_ADDRESS, registerMessage, RUN_EVERY_HOURS, SESSION_DAYS, TEMPLATES, validLimits, type AgentRecord, type Template } from "../agents/shared";
+import { AGENT_FEE_USD, agentPackage, BURN_ADDRESS, registerMessage, RUN_EVERY_HOURS, SESSION_DAYS, TEMPLATES, validLimits, type AgentRecord, type RunRecord, type Template } from "../agents/shared";
 import { NOMAD, TREASURY, USDG } from "../accounts/chain";
 import { redisFromEnv } from "../vote/redis";
 import { balanceOf as creditBalance, chargeRun } from "./credits";
 import { sponsorDeps } from "./account-routes";
 import { agentStore } from "./agents-store";
 import { agentSender, expectedAgentWallet, mainAccountOf, serverClient } from "./agent-exec";
-import { gemini } from "./gemini";
+import { gemini, type ResearchLimits } from "./gemini";
 import { toolKit } from "./agent-tools";
 import { veninCheck } from "./venin-check";
 import { ODDSENGINE_DAILY_CAP, oddsEngine, type OddsVerdict } from "./oddsengine";
@@ -17,6 +17,7 @@ import { idlex } from "./idlex";
 import { idlexPayer, runnerSecret, sessionSigner } from "./runner-keys";
 import { buildCandidates, type RunnerDeps } from "./runner";
 import { stoa } from "./stoa";
+import { bountyEnv } from "./bounty-env";
 
 export class AgentApiError extends Error {
   constructor(public status: number, message: string) {
@@ -53,6 +54,7 @@ export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = 
   const key = process.env.GEMINI_API_KEY?.trim();
   const g = key ? gemini(key, { model: process.env.GEMINI_MODEL?.trim() }) : null;
   const toolsOn = process.env.AGENT_TOOLS !== "off";
+  const b = bountyEnv();
   return {
     store: env.store,
     now,
@@ -65,7 +67,8 @@ export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = 
     candidates: () => buildCandidates(s, env.store, (a) => rushrSafety(a)),
     sender: (agent) => agentSender(agent, env.secret, env.sponsor, env.bundlerUrl),
     // Each research question gets its own tool kit, so its sources are only the services that answered it.
-    ai: g ? { name: g.name, ask: g.ask, ...(toolsOn ? { withTools: (prompt: string, system: string) => g.withTools(prompt, system, toolKit({ cache: env.store })) } : {}) } : null,
+    ai: g ? { name: g.name, ask: g.ask, ...(toolsOn ? { withTools: (prompt: string, system: string, limits?: ResearchLimits) => g.withTools(prompt, system, toolKit({ cache: env.store }), limits) } : {}) } : null,
+    ...(b ? { bounties: { tasks: (a: AgentRecord) => b.tasks(a), submit: (a: AgentRecord, id: string, text: string, rec: RunRecord) => b.submitHosted(a, id, text, rec) } } : {}),
     venin: (path, text) => veninCheck(path, text),
     ...(process.env.ODDSENGINE_API_KEY?.trim() ? { oddsEngine: cappedOddsEngine(env.store, oddsEngine(process.env.ODDSENGINE_API_KEY.trim())) } : {}),
     idlex: idlexOn ? idlex(idlexPayer(env.secret)) : null

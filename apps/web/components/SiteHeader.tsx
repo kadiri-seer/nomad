@@ -15,6 +15,7 @@ const LINKS = [
   { href: "/docs", label: "Docs" }
 ];
 const MORE = [
+  { href: "/bounties", label: "Bounties" },
   { href: "/docs/adapters", label: "Platforms" },
   { href: "/docs/security", label: "Security" },
   { href: "/vote", label: "Vote" },

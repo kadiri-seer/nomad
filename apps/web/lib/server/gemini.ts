@@ -9,6 +9,7 @@ const MODELS = ["gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-fla
 const tryNext = (status: number) => status === 404 || status === 429 || status >= 500;
 
 import type { ToolKit } from "./agent-tools";
+import type { ToolCallRecord } from "../agents/shared";
 
 type Part = { text?: string; functionCall?: { id?: string; name: string; args?: unknown }; thoughtSignature?: string; [k: string]: unknown };
 type Content = { role: string; parts: Part[] };
@@ -73,7 +74,7 @@ export function gemini(apiKey: string, opts: { model?: string; fetchImpl?: typeo
      * A question the AI may answer after using research tools: it calls tools from `kit` (at most `limits.maxCalls`,
      * over at most `limits.maxRounds` rounds and `limits.maxMs`), then answers in text. Null when no model answered.
      */
-    async withTools(prompt: string, system: string, kit: ToolKit, limits: ResearchLimits = RESEARCH_LIMITS): Promise<{ text: string; used: string[] } | null> {
+    async withTools(prompt: string, system: string, kit: ToolKit, limits: ResearchLimits = RESEARCH_LIMITS): Promise<{ text: string; used: string[]; calls: ToolCallRecord[]; model: string | null } | null> {
       const started = now();
       const declarations = await kit.declarations().catch(() => []);
       const contents: Content[] = [{ role: "user", parts: [{ text: prompt.slice(0, 12_000) }] }];
@@ -98,7 +99,7 @@ export function gemini(apiKey: string, opts: { model?: string; fetchImpl?: typeo
         const asked = parts.filter((p) => p.functionCall && typeof p.functionCall.name === "string");
         if (!asked.length || last) {
           const text = parts.map((p) => (typeof p.text === "string" ? p.text : "")).join("").trim();
-          return text ? { text: text.slice(0, 4000), used: kit.used() } : null;
+          return text ? { text: text.slice(0, 4000), used: kit.used(), calls: kit.calls?.() ?? [], model } : null;
         }
         // The model's turn goes back exactly as it came (thought signatures included), then each tool's answer.
         contents.push({ role: "model", parts });

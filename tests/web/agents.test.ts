@@ -621,3 +621,63 @@ describe("the $5 creation fee", () => {
     expect(decodeFunctionData({ abi: erc20Abi, data: rest.data }).args).toEqual([TREASURY, N(64_000)]);
   });
 });
+
+describe("run records and bounty work", () => {
+  const calls = [{ service: "HEY Research", tool: "get_project_snapshot", at: 1, ok: true, fingerprint: "0x01" as Hex }];
+  const bountyAi = (answer: string) => {
+    const asked: { prompt: string; system: string }[] = [];
+    const ai: RunnerDeps["ai"] = {
+      name: "Gemini",
+      ask: async () => "RED FLAG: no\nfine",
+      withTools: async (prompt, system) => (asked.push({ prompt, system }), { text: system.includes("SUBMISSION") ? answer : "RED FLAG: no\nfine", used: ["HEY Research"], calls, model: "gemini-3.1-flash-lite" })
+    };
+    return { ai, asked };
+  };
+  const task = { id: "fees", title: "Fee research", brief: "Compare fees on the busiest venues.", result: "A short report.", services: ["HEY Research"] };
+
+  it("every run is recorded: services called, model, what it did and its transactions", async () => {
+    const h = harness({ ai: bountyAi("x").ai });
+    await runAgent(h.d, agent());
+    const [r] = await h.store.runs("7", 1);
+    expect(r.agentId).toBe("7");
+    expect(r.model).toBe("gemini-3.1-flash-lite");
+    expect(r.calls.map((c) => c.service)).toEqual(["Stoa", "HEY Research"]);
+    expect(r.txs).toHaveLength(1);
+    expect(r.lines[0]).toMatch(/^Bought HOOKR/);
+  });
+
+  it("an agent with a bounty does the task its own way and hands the work in with the run's record", async () => {
+    const { ai, asked } = bountyAi("SUBMISSION:\nStoa charges 0.3% (Stoa).\nNOTE: fees checked");
+    const h = harness({ ai });
+    const handed: { id: string; text: string; services: string[]; bounty?: string }[] = [];
+    h.d.bounties = { tasks: async () => [task], submit: async (_a, id, text, rec) => (handed.push({ id, text, services: rec.calls.map((c) => c.service), bounty: rec.bounty }), { ok: true }) };
+    const lines = await runAgent(h.d, agent({ template: "blank", instructions: "only trust on-chain numbers" }));
+    expect(handed).toEqual([{ id: "fees", text: "Stoa charges 0.3% (Stoa).", services: ["Stoa", "HEY Research", "HEY Research"], bounty: "fees" }]);
+    const prompt = asked.find((a) => a.system.includes("SUBMISSION"))!.prompt;
+    expect(prompt).toContain("Compare fees on the busiest venues.");
+    expect(prompt).toContain("only trust on-chain numbers");
+    expect(prompt).toContain("It must use: HEY Research.");
+    expect(lines.at(-1)).toBe('Handed in its work for the bounty "Fee research".');
+    expect((await h.store.runs("7", 1))[0].bounty).toBe("fees");
+  });
+
+  it("a Researcher with a bounty spends its run on the task, and a failed check or nothing to hand in waits for next run", async () => {
+    const { ai, asked } = bountyAi("SUBMISSION: none");
+    const h = harness({ ai });
+    h.d.bounties = { tasks: async () => [task], submit: async () => ({ ok: true }) };
+    const lines = await runAgent(h.d, agent({ template: "researcher" }));
+    expect(asked).toHaveLength(1);
+    expect(lines).toEqual(['Worked on the bounty "Fee research" but had nothing to hand in yet. It tries again next run.']);
+    const h2 = harness({ ai: bountyAi("SUBMISSION: a real answer here").ai });
+    h2.d.bounties = { tasks: async () => [task], submit: async () => ({ ok: false, problem: "it is too close to another entry" }) };
+    expect((await runAgent(h2.d, agent({ template: "researcher" })))[0]).toMatch(/did not pass a check: it is too close to another entry\. It tries again next run\./);
+  });
+
+  it("no bounty work on a run skipped for credits", async () => {
+    const h = harness({ ai: bountyAi("SUBMISSION: x").ai, credits: 0n });
+    let asked = false;
+    h.d.bounties = { tasks: async () => ((asked = true), [task]), submit: async () => ({ ok: true }) };
+    await runAgent(h.d, agent());
+    expect(asked).toBe(false);
+  });
+});

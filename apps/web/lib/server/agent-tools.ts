@@ -7,6 +7,7 @@
 import { mcpClient, type McpTool } from "./mcp";
 import { RUSHR_API, RUSHR_TOOLS, runRushrTool } from "./rushr";
 import { veninCheck, type VeninVerdict } from "./venin-check";
+import { fingerprint, type ToolCallRecord } from "../agents/shared";
 
 /** An MCP server, or Rushr's public REST API (`rest: "rushr"`), whose tools are defined in rushr.ts. */
 export type ToolServer = { id: string; name: string; url: string; headers?: Record<string, string>; tools: string[]; rest?: "rushr"; fallbackUrl?: string };
@@ -41,6 +42,8 @@ export type ToolKit = {
   call(name: string, args: unknown): Promise<string>;
   /** The services whose tools answered in this run, by name. */
   used(): string[];
+  /** Every call made, for the run's record. */
+  calls?(): ToolCallRecord[];
 };
 
 const TYPES = new Set(["string", "number", "integer", "boolean", "array", "object"]);
@@ -101,6 +104,7 @@ export function toolKit(deps: { cache: Cache; fetchImpl?: typeof fetch; servers?
     return c;
   };
   const used = new Set<string>();
+  const log: ToolCallRecord[] = [];
   const byName = new Map<string, { server: ToolServer; tool: string }>();
   const venin = deps.venin ?? ((p: string, t: string) => veninCheck(p, t));
 
@@ -140,16 +144,20 @@ export function toolKit(deps: { cache: Cache; fetchImpl?: typeof fetch; servers?
       const a = args && typeof args === "object" && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
       if (JSON.stringify(a).length > MAX_ARGS_CHARS) return "Not run: the request was too long.";
       let text: string;
+      const at = Date.now();
       try {
         text = t.server.rest === "rushr" ? await runRushrTool(t.tool, a, deps.fetchImpl) : await client(t.server).call(t.tool, a);
       } catch (e) {
+        log.push({ service: t.server.name, tool: t.tool, at, ok: false });
         return `${t.server.name} did not answer: ${plain((e as Error).message, 120)}`;
       }
       used.add(t.server.name);
+      log.push({ service: t.server.name, tool: t.tool, at, ok: true, fingerprint: fingerprint(text) });
       const v = await venin(`${t.server.id}/${t.tool}.md`, text);
       if (v.planted > 0) return `Withheld: Venin found planted instructions in ${t.server.name}'s answer, so it is not shown.`;
       return text.length > MAX_TOOL_ANSWER_CHARS ? `${text.slice(0, MAX_TOOL_ANSWER_CHARS)} [cut]` : text;
     },
-    used: () => [...used]
+    used: () => [...used],
+    calls: () => [...log]
   };
 }
