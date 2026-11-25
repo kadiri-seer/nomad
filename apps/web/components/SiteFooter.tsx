@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Logo } from "./Logo";
 import { XLink } from "./Social";
 import { TokenCA } from "./TokenCA";
+import { webOnly } from "@/lib/site";
 
 export const REPO_URL = "https://github.com/kadiri-seer/nomad";
 
@@ -39,7 +40,7 @@ export function SiteFooter() {
                 <Link href="/agents">Minted agents</Link>
               </li>
               <li>
-                <Link href="/bounties">Bounties</Link>
+                <Link href={webOnly("/bounties")}>Bounties</Link>
               </li>
               <li>
                 <Link href="/economy">Economy</Link>

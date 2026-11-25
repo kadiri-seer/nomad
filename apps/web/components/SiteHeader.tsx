@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Logo } from "./Logo";
 import { XLink } from "./Social";
 import { ThemeToggle } from "./ThemeToggle";
+import { webOnly } from "@/lib/site";
 
 /** The few links people look for first. Everything else sits under More, so the bar stays calm. */
 const LINKS = [
@@ -15,7 +16,7 @@ const LINKS = [
   { href: "/docs", label: "Docs" }
 ];
 const MORE = [
-  { href: "/bounties", label: "Bounties" },
+  { href: webOnly("/bounties"), label: "Bounties" },
   { href: "/docs/adapters", label: "Platforms" },
   { href: "/docs/security", label: "Security" },
   { href: "/inspect", label: "Inspector" }

@@ -9,7 +9,9 @@ const config: NextConfig = {
   transpilePackages: ["@nomad/adapters", "@nomad/archive", "@nomad/compatibility", "@nomad/core", "@nomad/migration", "@nomad/schema", "@nomad/security", "@nomad/storage"],
   serverExternalPackages: ["better-sqlite3", "@veninlab/venin"],
   poweredByHeader: false,
-  ...(exporting ? { output: "export" as const, pageExtensions: ["tsx"], distDir: ".next-export" } : {}),
+  // Pages named page.web.tsx (the bounties) need the server, so they are only in the website, never in the export.
+  ...(exporting ? { output: "export" as const, pageExtensions: ["tsx"], distDir: ".next-export" } : { pageExtensions: ["web.tsx", "tsx", "ts", "jsx", "js"] }),
+  env: { NEXT_PUBLIC_NOMAD_EXPORT: exporting ? "1" : "" },
   reactStrictMode: true,
   async headers() {
     if (exporting) return [];
