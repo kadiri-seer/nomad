@@ -1343,7 +1343,62 @@ const VIRTUALS: ServerProfile = {
   }
 };
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE, ROBINHOOD_TRADING, ROBINHOOD_BANKING, VIRTUALS];
+/** Bull's local server, run as `node bull-mcp.mjs` (or a path ending in it, such as a pinned copy). */
+const isBullScript = (a: string) => /(^|[\\/])bull-mcp\.mjs$/.test(a);
+
+/**
+ * Bull, settlement and escrow for agents on Robinhood Chain, Base and Solana, as Bull documents it (bull.family,
+ * llms.txt and /developers, read Nov 26, 2026): the hosted server https://www.bull.family/api/mcp (Streamable HTTP,
+ * keyless), added in Claude Code as `claude mcp add --transport http bull https://www.bull.family/api/mcp`, which only
+ * plans: it returns transactions for the agent's own wallet to send, and its signed tools (requests for quotes) ask
+ * the wallet to sign a message each time. The local server (`node bull-mcp.mjs`, a file from bull.family) reads
+ * BULL_AGENT_KEY, the agent's wallet key, and signs and sends escrow transactions itself. The key is never copied.
+ */
+const BULL: ServerProfile = {
+  id: "bull",
+  vendor: "Bull",
+  label: "Bull (settlement and escrow for agents)",
+  matches: (t) =>
+    !!t.mcp &&
+    (t.mcp.transport === "stdio"
+      ? isNodeCommand(t.mcp.command) && t.mcp.args.some(isBullScript)
+      : isExactHost(t.mcp.url, "www.bull.family", "/api/mcp") || isExactHost(t.mcp.url, "bull.family", "/api/mcp")),
+  // BULL_AGENT_KEY is handled in apply(): it is a raw key, and the same wallet keeps the agent's record on Bull.
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [],
+  looserDefaults: {},
+  apply(t, out, platform) {
+    const mcp = t.mcp!;
+    const audit = `Bull says its contracts are not audited yet: do not let "${t.name}" lock more than you can afford to lose.`;
+    if (mcp.transport !== "stdio") {
+      out.notes.push({
+        level: "info",
+        category: "tools",
+        message: `"${t.name}" is Bull's hosted server. It needs no key and never sends anything: it returns transactions for the agent's wallet to review and send, and its signed tools ask the wallet to sign each time. Nomad copies only its address.`
+      });
+      out.notes.push({ level: "info", category: "tools", message: audit });
+      return;
+    }
+    out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" runs Bull's server on this computer. With BULL_AGENT_KEY it signs and sends escrow transactions from the agent's wallet by itself. ${audit}` });
+    if (mcp.env.BULL_AGENT_KEY) {
+      out.unsupported.push({
+        category: "tools",
+        item: `${t.name}: BULL_AGENT_KEY`,
+        reason: "Wallet keys are references only.",
+        alternative: `Set BULL_AGENT_KEY on ${platform} to the same wallet's key to keep its record on Bull: deals and reputation belong to the wallet.`
+      });
+    } else {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" had no BULL_AGENT_KEY, so on ${platform} it can plan and read but not send.` });
+    }
+    const script = mcp.args.find(isBullScript)!;
+    out.manualSteps.push(
+      `"${t.name}" runs ${script}, a file Nomad does not copy. If ${platform} runs on another computer, put Bull's file at the same path there: take a pinned copy listed at https://www.bull.family/sdk/versions.json, check its sha256, and install viem next to it (npm i viem).`
+    );
+  }
+};
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE, ROBINHOOD_TRADING, ROBINHOOD_BANKING, VIRTUALS, BULL];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {
