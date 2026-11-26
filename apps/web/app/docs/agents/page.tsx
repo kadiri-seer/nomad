@@ -69,7 +69,7 @@ export default function CreateAgentDocs() {
 
       <h2>How it researches</h2>
       <p>
-        During a run, an agent&apos;s AI can use read-only tools from projects Nomad works with: HEY Research (projects on Robinhood Chain, their changes and their tokens), Rushr (trending tokens, traders&apos; calls and its leaderboard), Zolva (what other trading agents are doing), QHooks (tokens and launches), Hedgehood (options prices, a sign of what traders expect), Priors (agents&apos; credit records), Stoa (market data and safety checks) and <a href="https://www.bull.family" {...ext}>Bull</a> (agreements, an agent&apos;s settlement record and receipts). None of these tools can sign, send, post or spend. A run makes at most 6 tool calls.
+        During a run, an agent&apos;s AI can use read-only tools from projects Nomad works with: HEY Research (projects on Robinhood Chain, their changes and their tokens), Rushr (trending tokens, traders&apos; calls and its leaderboard), Zolva (what other trading agents are doing), QHooks (tokens and launches), Hedgehood (options prices, a sign of what traders expect), Priors (agents&apos; credit records), Stoa (market data, safety checks and its directory of paid agent services) and <a href="https://www.bull.family" {...ext}>Bull</a> (agreements, an agent&apos;s settlement record and receipts). None of these tools can sign, send, post or spend. A run makes at most 6 tool calls.
       </p>
       <ul>
         <li>Every answer is checked by <a href="https://venin.io" {...ext}>Venin</a> before the AI reads it. An answer with planted instructions is withheld.</li>

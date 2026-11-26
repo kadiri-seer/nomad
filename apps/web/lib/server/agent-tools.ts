@@ -34,7 +34,8 @@ export const TOOL_SERVERS: ToolServer[] = [
   { id: "zolva", name: "Zolva", url: "https://zolvaagent.app/mcp", tools: ["list_agents", "get_agent", "verify_agent", "list_markets", "get_market", "recent_activity", "get_consensus"] },
   // Reads earn no referral; when QHooks' referral lookup is down, its plain address still answers.
   { id: "qhooks", name: "QHooks", url: "https://qhooks.com/mcp?ref=nomad", fallbackUrl: "https://qhooks.com/mcp", tools: ["token_info", "list_launches", "agent_stats", "hooks_catalog", "list_callers", "caller_record", "compete_standings"] },
-  { id: "stoa", name: "Stoa", url: "https://stoadex.com/mcp", tools: ["market_context", "safety_check", "spotlight", "stock_tokens"] },
+  // agent_services reads Stoa's directory of paid services; buying one needs a wallet signature, so it is not here.
+  { id: "stoa", name: "Stoa", url: "https://stoadex.com/mcp", tools: ["market_context", "safety_check", "spotlight", "stock_tokens", "agent_services"] },
   { id: "rushr", name: "Rushr", url: RUSHR_API, rest: "rushr", tools: Object.values(RUSHR_TOOLS).map((t) => t.declaration.name) },
   // Read only: markets, marks, quotes and records. Nothing tied to one account, and agents never trade options.
   { id: "hedgehood", name: "Hedgehood", url: "https://mcp.hedgehood.io/mcp", tools: ["list_markets", "list_instruments", "get_mark", "get_quote", "get_leaderboard", "get_agent_record", "list_vaults", "vault_status"] },
