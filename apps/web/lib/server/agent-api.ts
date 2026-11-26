@@ -15,7 +15,7 @@ import { ODDSENGINE_DAILY_CAP, oddsEngine, type OddsVerdict } from "./oddsengine
 import { rushrSafety } from "./rushr";
 import { idlex } from "./idlex";
 import { idlexPayer, runnerSecret, sessionSigner } from "./runner-keys";
-import { buildCandidates, type RunnerDeps } from "./runner";
+import { buildCandidates, buildStockCandidates, type RunnerDeps } from "./runner";
 import { stoa } from "./stoa";
 import { bountyEnv } from "./bounty-env";
 
@@ -50,6 +50,7 @@ export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = 
   const s = stoa();
   const client = serverClient();
   const erc20 = parseAbi(["function balanceOf(address) view returns (uint256)"]);
+  const decimalsAbi = parseAbi(["function decimals() view returns (uint8)"]);
   const idlexOn = process.env.AGENT_IDLEX !== "off";
   const key = process.env.GEMINI_API_KEY?.trim();
   const g = key ? gemini(key, { model: process.env.GEMINI_MODEL?.trim() }) : null;
@@ -65,6 +66,7 @@ export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = 
     balanceOf: (token, holder) => client.readContract({ address: token, abi: erc20, functionName: "balanceOf", args: [holder] }),
     quote: s.quote,
     candidates: () => buildCandidates(s, env.store, (a) => rushrSafety(a)),
+    stockCandidates: () => buildStockCandidates(s, env.store, async (a) => Number(await client.readContract({ address: a, abi: decimalsAbi, functionName: "decimals" }))),
     sender: (agent) => agentSender(agent, env.secret, env.sponsor, env.bundlerUrl),
     // Each research question gets its own tool kit, so its sources are only the services that answered it.
     ai: g ? { name: g.name, ask: g.ask, ...(toolsOn ? { withTools: (prompt: string, system: string, limits?: ResearchLimits) => g.withTools(prompt, system, toolKit({ cache: env.store }), limits) } : {}) } : null,
@@ -107,6 +109,8 @@ export type Registration = {
   deferredAction: string;
   mintTx: string;
   signature: string;
+  /** Stocks agents: the creator confirmed STOCKS_NOTICE. */
+  stocksConfirmed?: boolean;
 };
 
 /**
@@ -150,7 +154,9 @@ export async function checkRegistration(env: NonNullable<ReturnType<typeof agent
   if (!name || name.length > 64) throw new AgentApiError(400, "The name must be 1 to 64 characters.");
   const template = b.template as Template;
   if (!TEMPLATES.includes(template)) throw new AgentApiError(400, "Unknown template.");
-  // Its own instructions: required for a custom agent, optional for a Researcher (which then follows DEFAULT_RESEARCH).
+  // A Stocks agent only after its creator confirmed they may hold stock tokens where they live.
+  if (template === "stocks" && b.stocksConfirmed !== true) throw new AgentApiError(400, "Confirm that you may hold stock tokens where you live.");
+  // Its own instructions: required for a custom agent, optional for a Researcher or a Stocks agent (which then follow DEFAULT_RESEARCH or DEFAULT_STOCKS).
   const instructions = template === "trader" ? undefined : String(b.instructions ?? "").trim() || undefined;
   if (template === "blank" && !instructions) throw new AgentApiError(400, "Instructions must be 1 to 4,000 characters.");
   if (instructions && instructions.length > 4000) throw new AgentApiError(400, "Instructions must be 1 to 4,000 characters.");
@@ -212,6 +218,7 @@ export async function checkRegistration(env: NonNullable<ReturnType<typeof agent
     sessionDeadline: b.sessionDeadline,
     packageHash: pkg.hash,
     mintTx: b.mintTx as Hex,
-    createdAt: now
+    createdAt: now,
+    ...(template === "stocks" ? { stocksConfirmedAt: now } : {})
   };
 }

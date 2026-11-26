@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MAX_PER_TRADE_USD, MAX_PRICE_IMPACT_PCT, MAX_TAX_PCT, MAX_TRADES_PER_DAY, MIN_LIQUIDITY_USD, MIN_VOLUME_24H_USD, STOP_LOSS_PCT, TAKE_PROFIT_PCT, MAX_HOLD_HOURS } from "@/lib/agents/shared";
+import { MAX_PER_TRADE_USD, MAX_PRICE_IMPACT_PCT, MAX_TAX_PCT, MAX_TRADES_PER_DAY, MIN_LIQUIDITY_USD, MIN_VOLUME_24H_USD, STOP_LOSS_PCT, TAKE_PROFIT_PCT, MAX_HOLD_HOURS, MAX_STOCK_GAP_PCT, MIN_STOCK_LIQUIDITY_USD, STOCK_STOP_LOSS_PCT, STOCK_TAKE_PROFIT_PCT } from "@/lib/agents/shared";
 
 export const metadata = {
   title: "Create an agent",
@@ -59,6 +59,9 @@ export default function CreateAgentDocs() {
       </p>
       <p>
         <strong>Researcher</strong> never trades. Each run it looks into projects and tokens on Robinhood Chain, following what you ask it to watch, and writes you a short report with where each fact came from.
+      </p>
+      <p>
+        <strong>Stocks</strong> trades Robinhood&apos;s stock tokens on Robinhood Chain, such as Nvidia or Tesla, around the clock. It buys one only when Stoa can trade it, Robinhood has not halted it, its on-chain price is within {MAX_STOCK_GAP_PCT}% of Robinhood&apos;s own price and it has at least {MIN_STOCK_LIQUIDITY_USD.toLocaleString("en-US")} USD of liquidity. It sells once a token is up {STOCK_TAKE_PROFIT_PCT}%, down {STOCK_STOP_LOSS_PCT}% or held 7 days. Stock tokens are issued by Robinhood Assets (Jersey) Limited, not by Nomad or Stoa, and are not offered in every country, so you confirm you may hold them before you create one.
       </p>
       <p>
         <strong>Its own instructions:</strong> you write what it should look for. Its AI can research first, then picks among the tokens that already passed every check, within your limits. The AI can rule a token out or choose between checked tokens; it can never change a limit.

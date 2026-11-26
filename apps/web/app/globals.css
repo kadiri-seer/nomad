@@ -2063,6 +2063,8 @@ html[data-theme="dark"] .acct-balance { background: #2a2925; color: #f3f2ee; }
 .acct-dot { flex: none; width: 22px; height: 22px; border-radius: 11px; box-sizing: border-box; border: 2px solid var(--line-strong); }
 .acct-option[aria-pressed="true"] .acct-dot { border: 7px solid var(--brand); background: #fff; }
 .acct-warn { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 10px; padding: 12px 14px; font-size: 15px; color: #5c3b07; margin: 0; }
+.acct-confirm { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; line-height: 1.45; color: var(--acct-soft); cursor: pointer; }
+.acct-confirm input { width: 18px; height: 18px; margin: 2px 0 0; flex: none; accent-color: var(--acct-ink); }
 .acct-ok { font-size: 15px; font-weight: 600; color: var(--ok); margin: 0; }
 .acct-error { color: var(--bad); font-size: 16px; margin: 0; }
 .acct-address { display: block; word-break: break-all; background: var(--paper-2); color: var(--acct-ink); border-radius: 10px; padding: 14px; font: 500 15px/1.5 var(--mono); }

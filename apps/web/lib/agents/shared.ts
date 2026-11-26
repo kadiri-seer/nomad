@@ -8,12 +8,31 @@
  */
 import { keccak256, toHex, type Address, type Hex } from "viem";
 
-/** trader: Nomad AI's rules plus research; blank: the creator's own instructions; researcher: reports, never trades. */
-export type Template = "trader" | "blank" | "researcher";
-export const TEMPLATES: readonly Template[] = ["trader", "blank", "researcher"];
+/**
+ * trader: Nomad AI's rules plus research; blank: the creator's own instructions; researcher: reports, never trades;
+ * stocks: trades Robinhood's stock tokens on Robinhood Chain, with its own checks and exits.
+ */
+export type Template = "trader" | "blank" | "researcher" | "stocks";
+export const TEMPLATES: readonly Template[] = ["trader", "blank", "researcher", "stocks"];
 
 /** What a Researcher looks into when its creator leaves the instructions empty. */
 export const DEFAULT_RESEARCH = "Follow the projects and tokens on Robinhood Chain that people are using most. Each run, report what changed since last time: new projects, big moves in trading, and anything that looks risky.";
+
+/** What a Stocks agent follows when its creator leaves the instructions empty. */
+export const DEFAULT_STOCKS = "Trade only the most liquid stock tokens, one at a time. Prefer companies with steady news over sudden moves, and hold when nothing stands out.";
+
+/**
+ * A Stocks agent's checks: a stock token is bought only when Stoa can route it, Robinhood has not halted it, Robinhood's
+ * own price for it is known, the on-chain price is within MAX_STOCK_GAP_PCT of that price (it drifts when the market
+ * is closed), there is real liquidity, and Stoa's safety check passes. Its exits are slower than a Trader's.
+ */
+export const MAX_STOCK_GAP_PCT = 2;
+export const MIN_STOCK_LIQUIDITY_USD = 20_000;
+export const STOCK_TAKE_PROFIT_PCT = 10;
+export const STOCK_STOP_LOSS_PCT = 8;
+export const STOCK_MAX_HOLD_HOURS = 7 * 24;
+/** What a creator confirms before a Stocks agent is created. */
+export const STOCKS_NOTICE = "Stock tokens are issued by Robinhood Assets (Jersey) Limited, not by Nomad or Stoa, and are not offered in every country. I confirm I may buy and hold them where I live.";
 
 /** How much an agent remembers: its last notes and moves, given to its AI each run. */
 export const NOTES_KEPT = 20;
@@ -128,6 +147,8 @@ export type AgentRecord = {
   pendingJob?: { id: string; kind: "check" | "decide"; token?: Address; symbol?: string; at: number };
   tradesDay?: string;
   tradesToday?: number;
+  /** When its creator confirmed STOCKS_NOTICE (Stocks agents only). */
+  stocksConfirmedAt?: number;
 };
 
 export function validLimits(l: Partial<AgentLimits>): AgentLimits {

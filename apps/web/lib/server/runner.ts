@@ -21,6 +21,12 @@ import {
   MOVES_SHOWN,
   NOTES_SHOWN,
   MAX_HOLD_HOURS,
+  DEFAULT_STOCKS,
+  MAX_STOCK_GAP_PCT,
+  MIN_STOCK_LIQUIDITY_USD,
+  STOCK_MAX_HOLD_HOURS,
+  STOCK_STOP_LOSS_PCT,
+  STOCK_TAKE_PROFIT_PCT,
   MAX_PRICE_IMPACT_PCT,
   MAX_TAX_PCT,
   MIN_LIQUIDITY_USD,
@@ -38,12 +44,16 @@ import type { ResearchLimits } from "./gemini";
 import type { AgentStore } from "./agents-store";
 import type { IdlexJob } from "./idlex";
 import { stoaSwap } from "./sponsor";
-import type { Quote, Safety, Stoa, TokenMarket } from "./stoa";
+import type { Quote, Safety, Stoa, StockToken, TokenMarket } from "./stoa";
 import type { OddsVerdict } from "./oddsengine";
 import type { RushrSafety } from "./rushr";
 
-/** A token an agent may consider: Stoa's market data and safety check, and Rushr's verdict when Rushr has one. */
-export type Candidate = TokenMarket & { decimals: number; safety: Safety; rushr?: RushrSafety | null; passes: boolean };
+/**
+ * A token an agent may consider: Stoa's market data and safety check, and Rushr's verdict when Rushr has one. A stock
+ * token (Stocks agents) also carries Robinhood's price for it, the gap to the on-chain price, and its halt state.
+ */
+export type StockFacts = { name: string; refPriceUsd: number | null; gapPct: number | null; halted: boolean };
+export type Candidate = TokenMarket & { decimals: number; safety: Safety; rushr?: RushrSafety | null; stock?: StockFacts; passes: boolean };
 type Call = { to: Address; data: Hex; value?: bigint };
 
 export type RunnerDeps = {
@@ -53,6 +63,8 @@ export type RunnerDeps = {
   balanceOf(token: Address, holder: Address): Promise<bigint>;
   quote: Stoa["quote"];
   candidates(): Promise<Candidate[]>;
+  /** Robinhood's stock tokens with their checks, for Stocks agents. */
+  stockCandidates?(): Promise<Candidate[]>;
   sender(agent: AgentRecord): Promise<{ send(calls: Call[]): Promise<Hex> }>;
   /**
    * An AI that answers within the run (Gemini); tried before Idlex. `withTools` lets it research with the read-only
@@ -161,8 +173,20 @@ export function reportOf(text: string): string {
 
 const sources = (used: string[] | undefined) => (used && used.length ? ` after research with ${used.join(", ")}` : "");
 
+const price = (n: number | null) => (n === null ? "?" : `$${n >= 100 ? n.toFixed(2) : n.toPrecision(4)}`);
+const gap = (g: number | null) => (g === null ? "gap unknown" : `${g >= 0 ? "+" : ""}${g.toFixed(2)}% from Robinhood's price`);
+
 const facts = (c: Candidate) =>
-  [
+  c.stock
+    ? [
+        `symbol: ${cleanSymbol(c.symbol)} (${c.stock.name})`,
+        `Robinhood's price: ${price(c.stock.refPriceUsd)}`,
+        `on-chain price: ${price(c.priceUsd)} (${gap(c.stock.gapPct)})`,
+        `liquidity: ${money(c.liquidityUsd)}`,
+        `24h volume: ${money(c.volume24hUsd)}`,
+        `24h price change: ${c.change24hPct === null ? "?" : c.change24hPct.toFixed(1)}%`
+      ].join("\n")
+    : [
     `symbol: ${cleanSymbol(c.symbol)}`,
     `safety: ${c.safety.verdict}, buy tax ${c.safety.buyTaxPct ?? "?"}%, sell tax ${c.safety.sellTaxPct ?? "?"}%`,
     `liquidity: ${money(c.liquidityUsd)}`,
@@ -222,7 +246,9 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
     if (!task) return;
     rec.bounty = task.id;
     const setup =
-      agent.template === "trader"
+      agent.template === "stocks"
+        ? `A Stocks agent. It trades only Robinhood's stock tokens that Stoa routes, that are not halted and whose on-chain price is within ${MAX_STOCK_GAP_PCT}% of Robinhood's price, and sells at up ${STOCK_TAKE_PROFIT_PCT}%, down ${STOCK_STOP_LOSS_PCT}% or after 7 days, within its limits (${agent.limits.perTradeUsd} USDG a trade, ${agent.limits.tradesPerDay} trades a day). What the owner wants:\n${(agent.instructions?.trim() || DEFAULT_STOCKS).slice(0, 2000)}`
+        : agent.template === "trader"
         ? `A Trader. It follows Nomad's trading rules: it buys only tokens that pass Stoa's, Rushr's and OddsEngine's checks, and sells at up 25%, down 20% or after 48 hours, within its limits (${agent.limits.perTradeUsd} USDG a trade, ${agent.limits.tradesPerDay} trades a day).`
         : agent.template === "researcher"
           ? `A Researcher. It never trades. What the owner wants it to look into:\n${(agent.instructions?.trim() || DEFAULT_RESEARCH).slice(0, 2000)}`
@@ -261,7 +287,9 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
   const limit = agent.limits.tradesPerDay;
   const traded = () => agent.tradesToday ?? 0;
 
-  // 1. Exits first.
+  // 1. Exits first: a Trader's (up 25%, down 20%, 48 hours) or, slower, a Stocks agent's (up 10%, down 8%, 7 days).
+  const stocks = agent.template === "stocks";
+  const exits = stocks ? { up: STOCK_TAKE_PROFIT_PCT, down: STOCK_STOP_LOSS_PCT, hours: STOCK_MAX_HOLD_HOURS } : { up: TAKE_PROFIT_PCT, down: STOP_LOSS_PCT, hours: MAX_HOLD_HOURS };
   const held: Position[] = [];
   for (const p of await d.store.positions(agent.id)) {
     const bal = await d.balanceOf(p.token, agent.account);
@@ -278,7 +306,7 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
     const cost = BigInt(p.costMicros);
     const pnl = cost > 0n ? (Number(q.amountOut - cost) * 100) / Number(cost) : 0;
     const hours = (now - p.boughtAt) / HOUR;
-    const why = pnl >= TAKE_PROFIT_PCT ? `up ${pnl.toFixed(0)}%` : pnl <= -STOP_LOSS_PCT ? `down ${Math.abs(pnl).toFixed(0)}%` : hours >= MAX_HOLD_HOURS ? "held 48 hours" : null;
+    const why = pnl >= exits.up ? `up ${pnl.toFixed(0)}%` : pnl <= -exits.down ? `down ${Math.abs(pnl).toFixed(0)}%` : hours >= exits.hours ? `held ${exits.hours > 48 ? `${exits.hours / 24} days` : `${exits.hours} hours`}` : null;
     if (!why) continue;
     if (q.priceImpactPct > MAX_PRICE_IMPACT_PCT) {
       await note(`Wanted to sell ${p.symbol} (${why}), but the price impact was ${q.priceImpactPct.toFixed(1)}%. Will try again next run.`);
@@ -334,8 +362,8 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
   const heldSet = new Set(held.map((p) => lc(p.token)));
   const canBuy = traded() < limit - (held.length ? 1 : 0);
   const per = parseUnits(agent.limits.perTradeUsd, 6);
-  const all = await d.candidates();
-  rec.calls.push({ service: "Stoa", tool: "market_context and safety_check", at: d.now(), ok: all.length > 0, ...(all.length ? { fingerprint: fingerprint(JSON.stringify(all.map((c) => [c.address, c.safety.verdict]))) } : {}) });
+  const all = stocks ? ((await d.stockCandidates?.().catch(() => [])) ?? []) : await d.candidates();
+  rec.calls.push({ service: "Stoa", tool: stocks ? "stock_tokens and safety_check" : "market_context and safety_check", at: d.now(), ok: all.length > 0, ...(all.length ? { fingerprint: fingerprint(JSON.stringify(all.map((c) => [c.address, c.safety.verdict]))) } : {}) });
   if (all.some((c) => c.rushr)) rec.calls.push({ service: "Rushr", tool: "safety", at: d.now(), ok: true, fingerprint: fingerprint(JSON.stringify(all.map((c) => [c.address, c.rushr?.riskLevel ?? null]))) });
   const passing = all.filter((c) => c.passes && !heldSet.has(lc(c.address)));
 
@@ -346,7 +374,9 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
     // OddsEngine's scan, just before buying. OddsEngine reports on-chain facts and never a verdict; when it finds any,
     // the agent's AI weighs them and a red flag stops the buy. No answer is noted and the other checks stand.
     let checked = "";
-    if (d.oddsEngine) {
+    // OddsEngine looks for launch-token risks (owner minting, bundles, removable liquidity), which do not apply to
+    // Robinhood's stock tokens, so a Stocks agent relies on Stoa's checks and Robinhood's own price instead.
+    if (d.oddsEngine && !c.stock) {
       const key = `odds2:${lc(c.address)}`;
       let v = await d.store.cacheGet<OddsVerdict>(key);
       const shared = !!v;
@@ -381,7 +411,9 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
     const got = await d.balanceOf(c.address, agent.account);
     await d.store.setPosition(agent.id, { token: getAddress(c.address), symbol: cleanSymbol(c.symbol), decimals: c.decimals, amount: (got || q.amountOut).toString(), costMicros: per.toString(), boughtAt: now });
     const rushrNote = c.rushr ? ` Rushr: ${c.rushr.riskLevel} risk.` : "";
-    await note(`Bought ${cleanSymbol(c.symbol)} with ${usdgText(per)} USDG: Stoa's check ok, taxes ${c.safety.buyTaxPct ?? 0}%/${c.safety.sellTaxPct ?? 0}%, ${money(c.volume24hUsd)} traded in 24h.${rushrNote}${checked} ${why}`.trim(), tx);
+    if (c.stock)
+      await note(`Bought ${cleanSymbol(c.symbol)} (${c.stock.name}) with ${usdgText(per)} USDG: Robinhood's price ${price(c.stock.refPriceUsd)}, on-chain ${price(c.priceUsd)} (${gap(c.stock.gapPct)}), ${money(c.liquidityUsd)} liquidity, not halted, Stoa's check ok. ${why}`.trim(), tx);
+    else await note(`Bought ${cleanSymbol(c.symbol)} with ${usdgText(per)} USDG: Stoa's check ok, taxes ${c.safety.buyTaxPct ?? 0}%/${c.safety.sellTaxPct ?? 0}%, ${money(c.volume24hUsd)} traded in 24h.${rushrNote}${checked} ${why}`.trim(), tx);
   };
 
   const pending = agent.pendingJob;
@@ -493,7 +525,15 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
     return finish();
   }
 
-  // An agent with its own instructions.
+  // An agent with its own instructions, or a Stocks agent (its creator's instructions, or DEFAULT_STOCKS).
+  if (stocks && !pending && !passing.length) {
+    await note(lines.length ? "No stock token passed every check for a buy this run." : "Held: no stock token passed every check this run (halted, too far from Robinhood's price, too little liquidity, or no route on Stoa).");
+    return finish();
+  }
+  if (stocks && !pending && !canBuy) {
+    if (!lines.length) await note("Nothing to sell, and today's trades are used up.");
+    return finish();
+  }
   if (!d.ai && !d.idlex) {
     await note("Waiting: the AI service for agents with their own instructions is not available right now.");
     return finish();
@@ -510,10 +550,12 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
   }
   const usdg = await d.balanceOf(USDG, agent.account);
   const prompt = [
-    `Owner's instructions:\n${(agent.instructions ?? "").slice(0, 2000)}`,
+    `Owner's instructions:\n${(stocks ? agent.instructions?.trim() || DEFAULT_STOCKS : (agent.instructions ?? "")).slice(0, 2000)}`,
     `Limits: at most ${agent.limits.perTradeUsd} USDG a trade, ${limit} trades a day (${traded()} used today). Wallet: ${usdgText(usdg)} USDG.`,
     `Holding: ${held.length ? held.map((p) => p.symbol).join(", ") : "nothing"}.`,
-    `Tokens that passed every safety check:\n${passing.slice(0, 6).map((c) => facts(c).replace(/\n/g, "; ")).join("\n") || "none"}`
+    stocks
+      ? `Robinhood stock tokens that passed every check (Stoa routes them, not halted, within ${MAX_STOCK_GAP_PCT}% of Robinhood's price, real liquidity):\n${passing.slice(0, 8).map((c) => facts(c).replace(/\n/g, "; ")).join("\n") || "none"}`
+      : `Tokens that passed every safety check:\n${passing.slice(0, 6).map((c) => facts(c).replace(/\n/g, "; ")).join("\n") || "none"}`
   ].join("\n\n");
   const r = await research("decide", `${prompt}\n\n${await memory()}`, DECIDE_TOOLS_SYSTEM, prompt, DECIDE_SYSTEM);
   if (r === "pending") await note("Asked Idlex what to do, following its instructions. It acts on the answer next run, within its limits.");
@@ -591,5 +633,65 @@ export async function buildCandidates(
     out.push({ ...c, passes: passesChecks(c) });
   }
   await store.cacheSet("agent-candidates", out, 900);
+  return out;
+}
+
+/** Whether a stock token passes a Stocks agent's checks (see MAX_STOCK_GAP_PCT in lib/agents/shared.ts). */
+export function stockPasses(t: StockToken, safety: Safety): boolean {
+  return (
+    t.route &&
+    !t.halted &&
+    t.refPriceUsd !== null &&
+    t.priceUsd !== null &&
+    t.gapPct !== null &&
+    Math.abs(t.gapPct) <= MAX_STOCK_GAP_PCT &&
+    (t.liquidityUsd ?? 0) >= MIN_STOCK_LIQUIDITY_USD &&
+    safety.verdict === "ok" &&
+    safety.buyOk &&
+    safety.sellOk &&
+    (safety.buyTaxPct ?? 100) <= MAX_TAX_PCT &&
+    (safety.sellTaxPct ?? 100) <= MAX_TAX_PCT
+  );
+}
+
+/**
+ * The stock tokens a Stocks agent may consider this run: Stoa's list of Robinhood stock tokens it routes, the most
+ * liquid that pass the price, halt and liquidity checks first, each then checked by Stoa's safety check.
+ */
+export async function buildStockCandidates(stoa: Pick<Stoa, "stockTokens" | "safetyCheck">, store: Pick<AgentStore, "cacheGet" | "cacheSet">, decimalsOf?: (token: Address) => Promise<number>): Promise<Candidate[]> {
+  const cached = await store.cacheGet<Candidate[]>("agent-stock-candidates");
+  if (cached) return cached;
+  const list = await stoa.stockTokens();
+  const near = list
+    .filter((t) => t.route && !t.halted && t.refPriceUsd !== null && t.gapPct !== null && Math.abs(t.gapPct) <= MAX_STOCK_GAP_PCT && (t.liquidityUsd ?? 0) >= MIN_STOCK_LIQUIDITY_USD)
+    .sort((a, b) => (b.liquidityUsd ?? 0) - (a.liquidityUsd ?? 0))
+    .slice(0, 8);
+  const out: Candidate[] = [];
+  for (const t of near) {
+    let safety = await store.cacheGet<Safety>(`safety:${lc(t.address)}`);
+    if (!safety) {
+      try {
+        safety = await stoa.safetyCheck(t.address);
+        await store.cacheSet(`safety:${lc(t.address)}`, safety, 3600);
+      } catch {
+        continue;
+      }
+    }
+    out.push({
+      address: t.address,
+      symbol: t.symbol,
+      priceUsd: t.priceUsd,
+      liquidityUsd: t.liquidityUsd,
+      volume24hUsd: t.volume24hUsd,
+      change24hPct: t.change24hPct,
+      riskLabel: null,
+      decimals: decimalsOf ? await decimalsOf(t.address).catch(() => 18) : 18,
+      safety,
+      stock: { name: t.name, refPriceUsd: t.refPriceUsd, gapPct: t.gapPct, halted: t.halted },
+      passes: stockPasses(t, safety)
+    });
+  }
+  // Prices move with the market: kept five minutes, not fifteen.
+  await store.cacheSet("agent-stock-candidates", out, 300);
   return out;
 }

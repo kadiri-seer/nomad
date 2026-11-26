@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { encodeFunctionData, erc20Abi, keccak256, parseUnits, toHex, type Address, type Hex } from "viem";
 import { USDG } from "@/lib/accounts/chain";
 import { accountClient, fmtUsdg, publicClient, rememberTokens, type Call } from "@/lib/accounts/client";
-import { DEFAULT_RESEARCH, ownerActionMessage, RUN_EVERY_HOURS, viewMessage, type Move, type Position } from "@/lib/agents/shared";
+import { DEFAULT_RESEARCH, DEFAULT_STOCKS, ownerActionMessage, RUN_EVERY_HOURS, viewMessage, type Move, type Position } from "@/lib/agents/shared";
 import { hostedEnterMessage, linkMessage } from "@/lib/bounties/shared";
 import { Sheet } from "./Sheet";
 import { writeSnapshot } from "./snapshot";
@@ -17,7 +17,7 @@ import type { Client, Confirm } from "./types";
 type AgentView = {
   id: string;
   name: string;
-  template: "trader" | "blank" | "researcher";
+  template: "trader" | "blank" | "researcher" | "stocks";
   status: "active" | "paused";
   account: Address;
   salt: string;
@@ -227,7 +227,7 @@ function AgentSheet({ client, agent, onClose, onConfirm, onChanged }: { client: 
       <p className="acct-small">
         {agent.template === "researcher"
           ? "Researcher · writes you a report each run, never trades"
-          : `${agent.template === "trader" ? "Trader" : "Its own instructions"} · up to ${agent.limits.perTradeUsd} USDG a trade, ${agent.limits.tradesPerDay} a day`}{" "}
+          : `${templateLabel(agent.template)} · up to ${agent.limits.perTradeUsd} USDG a trade, ${agent.limits.tradesPerDay} a day`}{" "}
         · {agent.status === "active" ? "Running" : "Paused"}
       </p>
       {agent.template !== "researcher" && (
@@ -284,6 +284,8 @@ function AgentSheet({ client, agent, onClose, onConfirm, onChanged }: { client: 
   );
 }
 
+const templateLabel = (t: string) => (t === "researcher" ? "Researcher" : t === "trader" ? "Trader" : t === "stocks" ? "Stocks" : "Its own instructions");
+
 /** Reading and changing an agent's instructions, both signed by its creator (nobody else can see them). */
 function Instructions({ client, agent }: { client: Client; agent: AgentView }) {
   const [text, setText] = useState<string | null>(null);
@@ -329,7 +331,7 @@ function Instructions({ client, agent }: { client: Client; agent: AgentView }) {
     <div className="acct-stack">
       <label className="acct-field">
         <span>Instructions</span>
-        <textarea value={text} rows={5} maxLength={4000} placeholder={agent.template === "researcher" ? DEFAULT_RESEARCH : undefined} onChange={(e) => (setText(e.target.value), setSaved(false))} />
+        <textarea value={text} rows={5} maxLength={4000} placeholder={agent.template === "researcher" ? DEFAULT_RESEARCH : agent.template === "stocks" ? DEFAULT_STOCKS : undefined} onChange={(e) => (setText(e.target.value), setSaved(false))} />
       </label>
       <p className="acct-small">Only you can see these. Venin checks them before they are saved, and they never change the agent&apos;s limits.</p>
       <button type="button" className="acct-primary" onClick={save} disabled={busy || saved}>
@@ -397,7 +399,7 @@ function EnterSheet({ client, bountyId, agents, onClose }: { client: Client; bou
                 <button key={a.id} type="button" className="acct-option" aria-pressed={pick === a.id} onClick={() => setPick(a.id)}>
                   <span>
                     <strong>{a.name}</strong>
-                    <span className="acct-small">{a.template === "researcher" ? "Researcher" : a.template === "trader" ? "Trader" : "Its own instructions"}</span>
+                    <span className="acct-small">{templateLabel(a.template)}</span>
                   </span>
                   <span className="acct-dot" aria-hidden="true" />
                 </button>

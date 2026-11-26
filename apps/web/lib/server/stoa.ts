@@ -19,6 +19,7 @@ export type TokenMarket = {
   riskLabel: string | null;
 };
 export type Safety = { verdict: "ok" | "caution" | "danger" | "unknown"; buyTaxPct: number | null; sellTaxPct: number | null; buyOk: boolean; sellOk: boolean; notes: string[] };
+export type StockToken = { address: Address; symbol: string; name: string; halted: boolean; refPriceUsd: number | null; priceUsd: number | null; liquidityUsd: number | null; volume24hUsd: number | null; change24hPct: number | null; gapPct: number | null; route: boolean };
 export type Market = { fearAndGreed: { value: number; label: string } | null; ethUsd: number | null };
 export type Quote = {
   amountOut: bigint;
@@ -85,6 +86,31 @@ export function stoa(fetchImpl: FetchLike = fetch) {
       };
     },
 
+    /**
+     * Robinhood's stock tokens on Robinhood Chain that Stoa routes right now: Robinhood's price for each (from the
+     * underlying shares), the on-chain price and market, the gap between them, and whether Robinhood halted it.
+     */
+    async stockTokens(): Promise<StockToken[]> {
+      const r = await call<{ stocks?: Record<string, unknown>[] }>("stock_tokens", { routableOnly: true });
+      return (r?.stocks ?? [])
+        .filter((t) => typeof t.address === "string" && /^0x[0-9a-fA-F]{40}$/.test(t.address as string) && typeof t.symbol === "string")
+        .map((t) => {
+          const oc = (t.onChain && typeof t.onChain === "object" ? t.onChain : null) as Record<string, unknown> | null;
+          return {
+            address: getAddress(t.address as string),
+            symbol: String(t.symbol).slice(0, 16),
+            name: String(t.name ?? t.symbol).slice(0, 80),
+            halted: t.halted === true,
+            refPriceUsd: num(t.robinhoodPriceUsd),
+            priceUsd: oc ? num(oc.priceUsd) : null,
+            liquidityUsd: oc ? num(oc.liquidityUsd) : null,
+            volume24hUsd: oc ? num(oc.volume24h) : null,
+            change24hPct: oc ? num(oc.change24h) : null,
+            gapPct: num(t.gapPct),
+            route: t.routeOnStoa === true
+          };
+        });
+    },
     async safetyCheck(token: Address): Promise<Safety> {
       const r = await call<Record<string, unknown>>("safety_check", { chain: "robinhood", token });
       const t = (r.test ?? {}) as Record<string, unknown>;

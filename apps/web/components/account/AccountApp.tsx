@@ -11,7 +11,7 @@ import { PrivyProvider, usePrivy, useWallets } from "@privy-io/react-auth";
 import { formatUnits, parseAbi, parseUnits, type Address } from "viem";
 import { MIN_TOPUP_USDG, PRIVY_APP_ID, PAYMASTER, NOMAD, USDG } from "@/lib/accounts/chain";
 import { AGENTS_CONTRACT } from "@/lib/economy";
-import { AGENT_FEE_BURN_BPS, AGENT_FEE_USD, DEFAULT_RESEARCH, DEFAULT_RUN_EVERY_HOURS, registerMessage, RUN_EVERY_HOURS, type Template } from "@/lib/agents/shared";
+import { AGENT_FEE_BURN_BPS, AGENT_FEE_USD, DEFAULT_RESEARCH, DEFAULT_RUN_EVERY_HOURS, DEFAULT_STOCKS, MAX_STOCK_GAP_PCT, registerMessage, RUN_EVERY_HOURS, STOCK_STOP_LOSS_PCT, STOCK_TAKE_PROFIT_PCT, STOCKS_NOTICE, type Template } from "@/lib/agents/shared";
 import { grantSession, newSalt } from "@/lib/agents/wallet";
 import { MyAgents } from "./MyAgents";
 import { BountyReview } from "./BountyReview";
@@ -156,6 +156,21 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
   const [credits, setCredits] = useState<string | null>(null);
   const [price, setPrice] = useState<number | null>(null); // dollars per 1 $NOMAD
   const [view, setView] = useState<"home" | "create">("home");
+  // A draft from `nomad deploy` (an agent from another app) opens Create agent filled in.
+  const [draft, setDraft] = useState<DeployDraft | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("deploy");
+    if (!id || !/^[A-Za-z0-9_-]{16,64}$/.test(id)) return;
+    fetch(`/api/agents/draft/${id}`, { cache: "no-store" })
+      .then(async (r) => {
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error ?? "This draft has expired. Run nomad deploy again.");
+        setDraft(j.draft as DeployDraft);
+        setView("create");
+      })
+      .catch((e) => window.dispatchEvent(new CustomEvent("nomad-account-error", { detail: (e as Error).message })))
+      .finally(() => window.history.replaceState(null, "", window.location.pathname));
+  }, []);
   const [sheet, setSheet] = useState<"funds" | "credits" | "buy" | "send" | "key" | null>(null);
   const [others, setOthers] = useState<Holding[]>([]);
   const [sendStart, setSendStart] = useState<Holding["token"] | undefined>(undefined);
@@ -232,7 +247,7 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
   return (
     <Shell right={<button type="button" className="acct-quiet" onClick={onSignOut}>Sign out</button>}>
       {view === "create" ? (
-        <Create client={client} bal={bal} usdOf={usdOf} onBack={() => setView("home")} onConfirm={setConfirm} />
+        <Create client={client} bal={bal} usdOf={usdOf} draft={draft} mintingOpen={mintingOpen} onBack={() => (setView("home"), setDraft(null))} onConfirm={setConfirm} />
       ) : (
         <div className="acct-stack">
           <section className="acct-balance" aria-label="Balance">
@@ -402,11 +417,15 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
   );
 }
 
-function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal: { nomad: bigint; usdg: bigint } | null; usdOf: (n: bigint) => string; onBack: () => void; onConfirm: (c: Confirm) => void }) {
-  const [name, setName] = useState("");
-  const [template, setTemplate] = useState<Template>("trader");
+type DeployDraft = { name: string; template: "blank" | "researcher"; instructions: string; trimmed: boolean; from: string; cloud: string[]; local: string[] };
+
+function Create({ client, bal, usdOf, draft, mintingOpen, onBack, onConfirm }: { client: Client; bal: { nomad: bigint; usdg: bigint } | null; usdOf: (n: bigint) => string; draft: DeployDraft | null; mintingOpen: boolean; onBack: () => void; onConfirm: (c: Confirm) => void }) {
+  const [name, setName] = useState(draft?.name ?? "");
+  const [template, setTemplate] = useState<Template>(draft?.template ?? "trader");
   const researcher = template === "researcher";
-  const [instructions, setInstructions] = useState("");
+  const stocks = template === "stocks";
+  const [stocksOk, setStocksOk] = useState(false);
+  const [instructions, setInstructions] = useState(draft?.instructions ?? "");
   const [perTrade, setPerTrade] = useState("0.30");
   const [perDay, setPerDay] = useState(3);
   const [every, setEvery] = useState<number>(DEFAULT_RUN_EVERY_HOURS);
@@ -439,7 +458,7 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
     };
   }, [agents]);
   const short = fee !== null && bal ? (bal.nomad >= fee ? 0n : fee - bal.nomad) : 0n;
-  const ok = name.trim().length > 0 && name.trim().length <= 64 && fee !== null && (template === "trader" || instructions.trim().length > 0);
+  const ok = mintingOpen && name.trim().length > 0 && name.trim().length <= 64 && fee !== null && (template !== "blank" || instructions.trim().length > 0) && (!stocks || stocksOk);
 
   const go = async () => {
     if (!fee || !bal || contractFee === null) return;
@@ -500,6 +519,7 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
             perTradeUsd: perTrade,
             tradesPerDay: perDay,
             ...(own ? { instructions: own } : {}),
+            ...(stocks ? { stocksConfirmed: true } : {}),
             runEveryHours: every,
             sessionEntityId: grant.entityId,
             sessionDeadline: grant.deadline,
@@ -529,6 +549,15 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
         </button>
         <h1 className="acct-h1" style={{ margin: 0 }}>Create agent</h1>
       </div>
+      {draft && (
+        <section className="acct-card">
+          <p className="acct-body">From your {draft.from} agent. Check its type and instructions, then set its limits.</p>
+          {draft.cloud.length > 0 && <p className="acct-small">It can still use {draft.cloud.join(", ")} here.</p>}
+          {draft.local.length > 0 && <p className="acct-small">Not in the cloud: {draft.local.join(", ")}. Those stay on your computer.</p>}
+          {draft.trimmed && <p className="acct-warn">Its instructions were shortened to fit 4,000 characters.</p>}
+        </section>
+      )}
+      {!mintingOpen && <p className="acct-warn">Creating agents is paused right now. {draft ? "This draft is kept for 24 hours." : ""}</p>}
       <label className="acct-field">
         <span>Name</span>
         <input value={name} onChange={(e) => setName(e.target.value)} maxLength={64} placeholder="Scout" />
@@ -538,6 +567,7 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
         {(
           [
             ["trader", "Trader, like Nomad AI", "Researches tokens, checks them for safety, makes small trades."],
+            ["stocks", "Stocks", "Trades Robinhood's stock tokens, like Nvidia or Tesla, around the clock, with its own checks."],
             ["researcher", "Researcher", "Looks into projects on Robinhood Chain and writes you a short report each run. Never trades."],
             ["blank", "Start from scratch", "Write its instructions yourself. It can research before it trades."]
           ] as const
@@ -553,9 +583,18 @@ function Create({ client, bal, usdOf, onBack, onConfirm }: { client: Client; bal
       </fieldset>
       {template !== "trader" && (
         <label className="acct-field">
-          <span>{researcher ? "What should it look into? (optional)" : "Instructions"}</span>
-          <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={4} maxLength={4000} placeholder={researcher ? DEFAULT_RESEARCH : undefined} />
+          <span>{researcher ? "What should it look into? (optional)" : stocks ? "How should it pick? (optional)" : "Instructions"}</span>
+          <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={4} maxLength={4000} placeholder={researcher ? DEFAULT_RESEARCH : stocks ? DEFAULT_STOCKS : undefined} />
         </label>
+      )}
+      {stocks && (
+        <>
+          <p className="acct-small">It buys a stock token only when Stoa can trade it, Robinhood has not halted it and its price is within {MAX_STOCK_GAP_PCT}% of Robinhood&apos;s own price, and sells at up {STOCK_TAKE_PROFIT_PCT}%, down {STOCK_STOP_LOSS_PCT}% or after 7 days. Fund its wallet with USDG.</p>
+          <label className="acct-confirm">
+            <input type="checkbox" checked={stocksOk} onChange={(e) => setStocksOk(e.target.checked)} />
+            <span>{STOCKS_NOTICE}</span>
+          </label>
+        </>
       )}
       {!researcher && (
       <div className="acct-grid2">
