@@ -258,3 +258,56 @@ describe("a server's plain address as a fallback", () => {
     expect(urls.at(-1)).toBe("https://qhooks.com/mcp");
   });
 });
+
+describe("Bull's tools", () => {
+  const BULL = TOOL_SERVERS.find((s) => s.id === "bull")!;
+  /** Bull's server as it lists itself (Nov 26, 2026): reading tools next to ones that build transactions or write. */
+  function fakeBull() {
+    let calls = 0;
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as Rpc;
+      const reply = (result: unknown) => new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }), { headers: { "content-type": "application/json" } });
+      if (body.method === "initialize") return reply({ protocolVersion: "2025-06-18" });
+      if (body.method === "notifications/initialized") return new Response(null, { status: 202 });
+      if (body.method === "tools/list")
+        return reply({
+          tools: ["bull_agent_reputation", "bull_agreement_status", "bull_stats", "bull_agreement_from_template", "bull_agreement_create", "bull_settle", "bull_feedback", "bull_create_rfq"].map((name) => ({
+            name,
+            description: name,
+            inputSchema: name === "bull_agent_reputation" ? { type: "object", properties: { wallet: { type: "string" } }, required: ["wallet"] } : { type: "object", properties: {} }
+          }))
+        });
+      if (body.method === "tools/call") {
+        calls++;
+        return reply({ content: [{ type: "text", text: `{"completed":3,"for":"${String(body.params?.arguments?.wallet ?? "")}"}` }] });
+      }
+      return new Response("{}", { status: 400 });
+    }) as unknown as typeof fetch;
+    return { fetchImpl, calls: () => calls };
+  }
+
+  it("offers only Bull's reading tools, under Bull's own names", async () => {
+    expect(BULL.url).toBe("https://www.bull.family/api/mcp");
+    const f = fakeBull();
+    const kit = toolKit({ cache: memCache(), fetchImpl: f.fetchImpl, servers: [BULL], venin: clean });
+    expect((await kit.declarations()).map((d) => d.name)).toEqual(["bull_agent_reputation", "bull_agreement_status", "bull_stats"]);
+    expect(await kit.call("bull_agreement_create", {})).toMatch(/^Not run/);
+    expect(await kit.call("bull_feedback", {})).toMatch(/^Not run/);
+  });
+
+  it("keeps each answer five minutes for every agent, since Bull limits lookups an hour", async () => {
+    const f = fakeBull();
+    const cache = memCache();
+    const one = toolKit({ cache, fetchImpl: f.fetchImpl, servers: [BULL], venin: clean });
+    await one.declarations();
+    expect(await one.call("bull_agent_reputation", { wallet: "0xabc" })).toContain('"completed":3');
+    const two = toolKit({ cache, fetchImpl: f.fetchImpl, servers: [BULL], venin: clean });
+    await two.declarations();
+    expect(await two.call("bull_agent_reputation", { wallet: "0xabc" })).toContain('"for":"0xabc"');
+    expect(f.calls()).toBe(1);
+    await two.call("bull_agent_reputation", { wallet: "0xdef" });
+    expect(f.calls()).toBe(2);
+    // Each run's record still lists the lookup, with the answer's fingerprint.
+    expect(two.calls!().map((c) => [c.service, c.tool, c.ok])).toEqual([["Bull", "bull_agent_reputation", true], ["Bull", "bull_agent_reputation", true]]);
+  });
+});

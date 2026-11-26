@@ -10,7 +10,17 @@ import { veninCheck, type VeninVerdict } from "./venin-check";
 import { fingerprint, type ToolCallRecord } from "../agents/shared";
 
 /** An MCP server, or Rushr's public REST API (`rest: "rushr"`), whose tools are defined in rushr.ts. */
-export type ToolServer = { id: string; name: string; url: string; headers?: Record<string, string>; tools: string[]; rest?: "rushr"; fallbackUrl?: string };
+export type ToolServer = {
+  id: string;
+  name: string;
+  url: string;
+  headers?: Record<string, string>;
+  tools: string[];
+  rest?: "rushr";
+  fallbackUrl?: string;
+  /** Keeps each answer this many seconds, shared by every agent, for a server with a tight hourly limit. */
+  cacheSeconds?: number;
+};
 
 /** The servers and their allowed tools. Addresses are exact; nothing else is ever called. */
 export const TOOL_SERVERS: ToolServer[] = [
@@ -29,7 +39,17 @@ export const TOOL_SERVERS: ToolServer[] = [
   // Read only: markets, marks, quotes and records. Nothing tied to one account, and agents never trade options.
   { id: "hedgehood", name: "Hedgehood", url: "https://mcp.hedgehood.io/mcp", tools: ["list_markets", "list_instruments", "get_mark", "get_quote", "get_leaderboard", "get_agent_record", "list_vaults", "vault_status"] },
   // Read only: agents' credit records and pools. No borrowing quotes or credit lines: agents never borrow.
-  { id: "priors", name: "Priors", url: "https://mcp.priors.trade/mcp", tools: ["agent_record", "score_of", "credit_history", "pool_stats", "stock_assets", "recent_activity", "desk_record", "find_agents", "agent_page"] }
+  { id: "priors", name: "Priors", url: "https://mcp.priors.trade/mcp", tools: ["agent_record", "score_of", "credit_history", "pool_stats", "stock_assets", "recent_activity", "desk_record", "find_agents", "agent_page"] },
+  // Read only: agreements and deals, reputation, receipts, open requests and stats. Nothing that builds a
+  // transaction, signs or leaves feedback. Bull allows about 60 lookups an hour from one address, so answers are kept
+  // five minutes for every agent.
+  {
+    id: "bull",
+    name: "Bull",
+    url: "https://www.bull.family/api/mcp",
+    cacheSeconds: 300,
+    tools: ["bull_info", "bull_stats", "bull_agreement_status", "bull_agreement_feed", "bull_agent_reputation", "bull_get_deal", "bull_get_receipt", "bull_list_rfqs", "bull_payout_prefs_get"]
+  }
 ];
 
 /** One tool answer, as much as an agent's AI reads of it. */
@@ -129,7 +149,8 @@ export function toolKit(deps: { cache: Cache; fetchImpl?: typeof fetch; servers?
       }
       for (const { s, t } of lists) {
         for (const tool of t) {
-          const name = `${s.id}_${tool.name}`.slice(0, 64);
+          // A tool already named for its service (bull_stats) keeps its name; others get the service's id in front.
+          const name = (tool.name.startsWith(`${s.id}_`) ? tool.name : `${s.id}_${tool.name}`).slice(0, 64);
           byName.set(name, { server: s, tool: tool.name });
           const params = geminiSchema(tool.inputSchema ?? { type: "object", properties: {} });
           const hasParams = Object.keys((params.properties as object) ?? {}).length > 0;
@@ -145,8 +166,11 @@ export function toolKit(deps: { cache: Cache; fetchImpl?: typeof fetch; servers?
       if (JSON.stringify(a).length > MAX_ARGS_CHARS) return "Not run: the request was too long.";
       let text: string;
       const at = Date.now();
+      const cacheKey = t.server.cacheSeconds ? `agent-tool-answer:${t.server.id}:${fingerprint(`${t.tool} ${JSON.stringify(a)}`)}` : null;
       try {
-        text = t.server.rest === "rushr" ? await runRushrTool(t.tool, a, deps.fetchImpl) : await client(t.server).call(t.tool, a);
+        const kept = cacheKey ? await deps.cache.cacheGet<string>(cacheKey).catch(() => null) : null;
+        text = kept ?? (t.server.rest === "rushr" ? await runRushrTool(t.tool, a, deps.fetchImpl) : await client(t.server).call(t.tool, a));
+        if (cacheKey && !kept) await deps.cache.cacheSet(cacheKey, text, t.server.cacheSeconds!).catch(() => undefined);
       } catch (e) {
         log.push({ service: t.server.name, tool: t.tool, at, ok: false });
         return `${t.server.name} did not answer: ${plain((e as Error).message, 120)}`;
