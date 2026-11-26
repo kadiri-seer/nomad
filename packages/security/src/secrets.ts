@@ -88,7 +88,10 @@ export const SENSITIVE_FILE_PATTERNS: RegExp[] = [
   /(^|\/)\.git-credentials$/,
   // Wallet files kept by agent tools.
   /(^|\/)\.agent001\/wallet\.(json|enc)$/i,
-  /(^|\/)\.config\/priors\/.+/i
+  /(^|\/)\.config\/priors\/.+/i,
+  // Virtuals' acp CLI keeps its account state here (config.json, config-testnet.json). Its sign-in tokens and
+  // signing keys are in the system keychain, or without one in keyring/secrets.json (matched above).
+  /(^|\/)\.config\/acp\/.+/i
 ];
 
 const SENSITIVE_ENV_KEY = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|PRIVATE|COOKIE|SESSION|BEARER|MNEMONIC|SEED|WALLET|PASSPHRASE|KEYSTORE)/i;

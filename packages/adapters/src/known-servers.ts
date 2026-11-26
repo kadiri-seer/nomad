@@ -514,6 +514,34 @@ const RUSHR: ServerProfile = {
 };
 
 /**
+ * Virtuals Protocol's skills (github.com/Virtual-Protocol/acp-cli and /openclaw-acp, read Nov 26, 2026).
+ * acp-cli (@virtuals-protocol/acp-cli) drives the `acp` command. Its sign-in tokens and P256 signing keys are in the
+ * system keychain (or keyring/secrets.json without one) and its account state in ~/.config/acp, none of which Nomad
+ * reads, so the skill moves alone. On the same computer the `acp` command is already signed in for the agent on the
+ * destination; elsewhere it needs `acp configure` and, to sign, `acp agent add-signer`. virtuals-protocol-acp is the
+ * deprecated skill it replaced, which kept LITE_AGENT_API_KEY and its session in config.json in its own folder:
+ * readSkillDir never copies that file (it holds the key named by metadata.openclaw.primaryEnv).
+ */
+function virtualsSkillNote(s: { name: string; frontmatter?: Record<string, unknown> }, platformName: string): Note | null {
+  const meta = s.frontmatter?.metadata as { acpCliVersion?: unknown; openclaw?: { primaryEnv?: unknown } } | undefined;
+  if (s.name === "acp-cli" && meta?.acpCliVersion !== undefined) {
+    return {
+      level: "warning",
+      category: "skills",
+      message: `The "acp-cli" skill runs Virtuals' acp command. Its sign-in and signing key stay in this computer's keychain and are never copied. On this computer the agent on ${platformName} can use them straight away, including sending from the agent's wallet, trading and paying with its card, within the signer's policy. On another computer, sign in there with acp configure, and add a signer with acp agent add-signer before anything that signs.`
+    };
+  }
+  if (s.name === "virtuals-protocol-acp" && meta?.openclaw?.primaryEnv === "LITE_AGENT_API_KEY") {
+    return {
+      level: "warning",
+      category: "skills",
+      message: `The "virtuals-protocol-acp" skill is deprecated: Virtuals asks everyone to use its acp-cli skill instead (npm i -g @virtuals-protocol/acp-cli). Its API key and session in config.json were not copied, so on ${platformName} it needs signing in again (acp setup) if you keep it.`
+    };
+  }
+  return null;
+}
+
+/**
  * Skills that only work with the setup they were written for. Nomad moves them like any skill and
  * says so in the preview instead of copying them silently.
  */
@@ -529,6 +557,8 @@ export function knownSkillNotes(skills: Array<{ name: string; frontmatter?: Reco
     }
   };
   for (const s of skills) {
+    const virtuals = virtualsSkillNote(s, platformName);
+    if (virtuals) notes.push(virtuals);
     if (!fromBrainChain(s)) continue;
     if (s.name === "brainchain-worker") {
       notes.push(
@@ -1281,7 +1311,39 @@ const ROBINHOOD_BANKING: ServerProfile = {
   }
 };
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE, ROBINHOOD_TRADING, ROBINHOOD_BANKING];
+/**
+ * Virtuals Protocol's hosted server for its agents, as documented with Base MCP (docs.base.org/agents/plugins/native/
+ * virtuals, read Nov 26, 2026): https://mcp.acp.virtuals.io/, added in Claude Code as `claude mcp add virtuals
+ * --transport http https://mcp.acp.virtuals.io/`. It manages Virtuals agents (create, list, prepare a launch), their
+ * email (inbox, compose, reply, codes and links) and their payment cards (sign up, issue, set limits, 3DS). Every tool
+ * takes a session token from a sign-in the agent does with a wallet signature, which lasts about an hour, so the
+ * configuration holds only the address.
+ */
+const VIRTUALS: ServerProfile = {
+  id: "virtuals",
+  vendor: "Virtuals",
+  label: "Virtuals (agents, their email and payment cards; sign in again in each app)",
+  matches: (t) => !!t.mcp && t.mcp.transport !== "stdio" && isExactHost(t.mcp.url, "mcp.acp.virtuals.io", ""),
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [],
+  looserDefaults: {},
+  apply(t, out, platform) {
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: `"${t.name}" is Virtuals' hosted server for its agents. Nomad copies only its address. Its sign-in is a short-lived session token the agent gets by signing in with a wallet, so there is nothing to copy.`
+    });
+    out.notes.push({
+      level: "warning",
+      category: "tools",
+      message: `"${t.name}" lets the agent issue payment cards and set their limits, and read and send its email. Check this agent's instructions on ${platform} before it signs in.`
+    });
+    out.manualSteps.push(`Sign in to Virtuals again for "${t.name}" on ${platform}: ask the agent to log in, and approve the wallet signature it asks for.`);
+  }
+};
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE, ROBINHOOD_TRADING, ROBINHOOD_BANKING, VIRTUALS];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {

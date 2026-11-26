@@ -38,6 +38,11 @@ export async function readSkillDir(dir: string, platform: string, notes: Note[])
   delete rest["allowed-tools"];
   delete rest.allowed_tools;
   const files: Skill["files"] = [];
+  // An OpenClaw skill names the variable its key goes in (metadata.openclaw.primaryEnv). A file in the skill that
+  // sets that variable is where the skill keeps its key (Virtuals' virtuals-protocol-acp skill writes
+  // LITE_AGENT_API_KEY and its session token to config.json in its own folder), so it is never copied.
+  const keyEnv = (metadata as { openclaw?: { primaryEnv?: unknown } } | undefined)?.openclaw?.primaryEnv;
+  const holdsKey = typeof keyEnv === "string" && /^[A-Za-z_][A-Za-z0-9_]{2,63}$/.test(keyEnv) ? new RegExp(`(^|[^A-Za-z0-9_])${keyEnv}["']?\\s*[:=]`) : null;
   for (const rel of await walkFiles(dir, { maxFiles: 300, skip: (r) => r === "SKILL.md" || r.split("/").some((p) => p === "node_modules" || p === ".git" || p === "__pycache__") })) {
     if (isSensitiveFile(rel)) {
       notes.push({ level: "warning", category: "skills", message: `Skipped credential file ${rel} in skill ${basename(dir)}` });
@@ -52,6 +57,10 @@ export async function readSkillDir(dir: string, platform: string, notes: Note[])
     const data = new Uint8Array(await fsp.readFile(abs));
     const executable = EXECUTABLE_EXTENSIONS.has(extensionOf(rel)) || (st.mode & 0o111) !== 0;
     const decoded = TEXT_EXT.test(rel) ? new TextDecoder().decode(data) : null;
+    if (holdsKey && decoded !== null && holdsKey.test(decoded)) {
+      notes.push({ level: "warning", category: "skills", message: `Skipped ${rel} in skill ${basename(dir)}: it holds the skill's key (${keyEnv as string}). Keys are never copied.` });
+      continue;
+    }
     if (decoded !== null && !decoded.includes("�")) files.push({ path: rel, encoding: "utf8", content: decoded, executable });
     else files.push({ path: rel, encoding: "base64", content: base64Encode(data), executable });
   }
