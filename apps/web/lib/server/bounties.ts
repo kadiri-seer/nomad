@@ -366,6 +366,76 @@ export function bounties(d: BountyDeps) {
     },
 
     /**
+     * Locking a picked winner's prize in Bull's escrow, from the treasury's own wallet (on a phone, inside the wallet's
+     * browser, where there is no Nomad sign-in). Nothing here needs a signature: Bull's plan is checked field by field
+     * and can only be sent by the treasury, and a lock is recorded only after Nomad reads on chain that the treasury
+     * made it for the winner. The arbiter is always the first reviewer's Nomad account.
+     */
+    async lockList() {
+      const out = [];
+      for (const b of d.list) {
+        const result = await d.store.result(b.id);
+        if (!result || result.paidTx) continue;
+        const live = result.escrow && result.escrow.expiresAt > d.now() ? result.escrow : null;
+        out.push({ id: b.id, title: b.title, prize: b.prize, winner: result.winner, ...(live ? { lockedUntil: live.expiresAt, agreement: live.id } : {}) });
+      }
+      return { treasury: TREASURY, bounties: out };
+    },
+
+    async lockPlan(id: string) {
+      const b = byId(id);
+      const result = await d.store.result(b.id);
+      if (!result) throw new BountyError(409, "No winner is picked for this bounty yet.");
+      if (result.paidTx) throw new BountyError(409, "This bounty is already paid.");
+      if (result.escrow && result.escrow.expiresAt > d.now()) throw new BountyError(409, "The prize is already locked with Bull.");
+      const arbiter = d.reviewers[0];
+      if (!arbiter) throw new BountyError(503, "No reviewer is set up to confirm the payment.");
+      const token = b.prize.token === "USDG" ? USDG : NOMAD;
+      const args = {
+        template: "arbiter_escrow",
+        chain: "robinhood",
+        payer: TREASURY,
+        payee: result.winner,
+        arbiter,
+        amount: b.prize.amount,
+        asset: b.prize.token === "USDG" ? "usdg" : NOMAD,
+        expiryHours: ESCROW_HOURS,
+        terms: `Nomad agent bounty "${b.title}" (${b.id}): the prize for the winning entry, released when Nomad's reviewer confirms.`
+      };
+      let plan;
+      try {
+        plan = checkEscrowPlan(await d.bullPlan(args), { winner: result.winner, arbiter, token, amount: prizeUnits(b), nowSec: Math.floor(d.now() / 1000) });
+      } catch (e) {
+        throw new BountyError(502, `Bull's plan was not used: ${(e as Error).message}`);
+      }
+      return {
+        treasury: TREASURY,
+        winner: result.winner,
+        arbiter,
+        feeWei: plan.feeWei.toString(),
+        feeUsd: plan.feeUsd,
+        expiresAt: plan.expiresAt,
+        calls: plan.calls.map((c) => ({ to: c.to, data: c.data, value: c.value.toString() }))
+      };
+    },
+
+    async lockRecord(id: string, tx: unknown) {
+      const b = byId(id);
+      if (!isHash(tx)) throw new BountyError(400, "tx is not a transaction hash.");
+      const result = await d.store.result(b.id);
+      if (!result) throw new BountyError(409, "No winner is picked for this bounty yet.");
+      if (result.paidTx) throw new BountyError(409, "This bounty is already paid.");
+      if (result.escrow?.tx && lc(result.escrow.tx) === lc(tx)) return { ok: true, escrow: result.escrow.id };
+      if (result.escrow && result.escrow.expiresAt > d.now()) throw new BountyError(409, "The prize is already locked with Bull.");
+      const token = b.prize.token === "USDG" ? USDG : NOMAD;
+      const a = await d.escrowCreated(tx).catch(() => null);
+      if (!a || lc(a.payer) !== lc(TREASURY) || lc(a.payee) !== lc(result.winner) || lc(a.asset) !== lc(token) || a.amount < prizeUnits(b) || a.expiresAt <= d.now())
+        throw new BountyError(400, `That transaction did not lock ${b.prize.amount} ${b.prize.token} from the treasury for the winner with Bull. If it was just sent, wait a moment and try again.`);
+      await d.store.setResult(b.id, { ...result, escrow: { id: a.id, tx, expiresAt: a.expiresAt } });
+      return { ok: true, escrow: a.id };
+    },
+
+    /**
      * The team's review, each step signed by a reviewer's Google wallet: list closed bounties with their handed-in
      * entries, pick a winner after the close date, and record the payout once its transaction is on chain.
      */
@@ -380,13 +450,9 @@ export function bounties(d: BountyDeps) {
             ? "list"
             : body.action === "pick" && typeof body.winner === "string" && isAddress(body.winner, { strict: false })
               ? `pick ${String(body.bounty)} ${lc(body.winner)}`
-              : body.action === "escrow-plan"
-                ? `escrow-plan ${String(body.bounty)}`
-                : body.action === "escrow" && isHash(body.tx)
-                  ? `escrow ${String(body.bounty)} ${lc(body.tx)}`
-                  : body.action === "paid" && isHash(body.tx)
-                    ? `paid ${String(body.bounty)} ${lc(body.tx)}`
-                    : null;
+              : body.action === "paid" && isHash(body.tx)
+                ? `paid ${String(body.bounty)} ${lc(body.tx)}`
+                : null;
       if (!action) throw new BountyError(400, "Unknown review step.");
       if (!(await d.verify(signer, reviewMessage(action, at), sig(body.signature)).catch(() => false))) throw new BountyError(403, "The signature does not match.");
       // Whether a wallet reviews is told only to that wallet, so nobody can look up who the reviewers are.
@@ -418,50 +484,7 @@ export function bounties(d: BountyDeps) {
       }
       if (!result) throw new BountyError(409, "Pick a winner first.");
       if (result.paidTx) throw new BountyError(409, "This bounty is already paid.");
-      const token = b.prize.token === "USDG" ? USDG : NOMAD;
-      const live = result.escrow && result.escrow.expiresAt > d.now() ? result.escrow : null;
-
-      // The prize goes into Bull's arbiter escrow: Bull plans it, Nomad checks every field, the treasury's wallet sends it.
-      if (body.action === "escrow-plan") {
-        if (live) throw new BountyError(409, "The prize is already locked with Bull.");
-        // The arbiter is the reviewer's Nomad account, which confirms from this page.
-        const arbiter = getAddress(await d.mainAccountOf(signer));
-        const args = {
-          template: "arbiter_escrow",
-          chain: "robinhood",
-          payer: TREASURY,
-          payee: result.winner,
-          arbiter,
-          amount: b.prize.amount,
-          asset: b.prize.token === "USDG" ? "usdg" : NOMAD,
-          expiryHours: ESCROW_HOURS,
-          terms: `Nomad agent bounty "${b.title}" (${b.id}): the prize for the winning entry, released when Nomad's reviewer confirms.`
-        };
-        let plan;
-        try {
-          plan = checkEscrowPlan(await d.bullPlan(args), { winner: result.winner, arbiter, token, amount: prizeUnits(b), nowSec: Math.floor(d.now() / 1000) });
-        } catch (e) {
-          throw new BountyError(502, `Bull's plan was not used: ${(e as Error).message}`);
-        }
-        return {
-          treasury: TREASURY,
-          arbiter,
-          feeWei: plan.feeWei.toString(),
-          feeUsd: plan.feeUsd,
-          expiresAt: plan.expiresAt,
-          quoteExpiresAt: plan.quoteExpiresAt,
-          calls: plan.calls.map((c) => ({ to: c.to, data: c.data, value: c.value.toString() }))
-        };
-      }
       const tx = body.tx as Hex;
-      if (body.action === "escrow") {
-        if (live) throw new BountyError(409, "The prize is already locked with Bull.");
-        const a = await d.escrowCreated(tx).catch(() => null);
-        if (!a || lc(a.payer) !== lc(TREASURY) || lc(a.payee) !== lc(result.winner) || lc(a.asset) !== lc(token) || a.amount < prizeUnits(b) || a.expiresAt <= d.now())
-          throw new BountyError(400, `That transaction did not lock ${b.prize.amount} ${b.prize.token} from the treasury for the winner with Bull. If it was just sent, wait a moment and try again.`);
-        await d.store.setResult(b.id, { ...result, escrow: { id: a.id, tx, expiresAt: a.expiresAt } });
-        return { ok: true, escrow: a.id };
-      }
       // Paid: released from Bull's escrow (the usual way), or sent straight from the treasury.
       const from = result.escrow ? BULL_AGREEMENTS : undefined;
       if (!(await d.paid(b.prize.token, result.winner, prizeUnits(b), tx, from).catch(() => false)))

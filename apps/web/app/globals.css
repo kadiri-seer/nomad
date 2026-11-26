@@ -2121,6 +2121,36 @@ html[data-theme="dark"] .acct-balance { background: #2a2925; color: #f3f2ee; }
 .bounty-page {
   max-width: 760px;
 }
+.bounty-locks {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.bounty-lock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 18px 2px;
+  border-bottom: 1px solid var(--line);
+}
+.bounty-lock p {
+  margin: 0;
+}
+.bounty-lock-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+.bounty-lock-row span {
+  font-family: var(--mono);
+}
+.bounty-error {
+  color: #b3261e;
+  margin: 0;
+}
 .bounty-list {
   list-style: none;
   margin: 8px 0 0;

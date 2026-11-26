@@ -78,15 +78,13 @@ function setup(opts: { list?: Bounty[]; balance?: bigint; now?: number; bullPlan
   const s = bounties(d);
   const enter = async (agentId: string, signer = creator, bountyId = "fees", at = now) =>
     s.enterHosted({ bounty: bountyId, agentId, at, signature: await signer.signMessage({ message: hostedEnterMessage(bountyId, agentId, at) }) });
-  const review = async (action: "check" | "list" | "pick" | "paid" | "escrow-plan" | "escrow", extra: { bounty?: string; winner?: Address; tx?: Hex } = {}, who = reviewer) => {
+  const review = async (action: "check" | "list" | "pick" | "paid", extra: { bounty?: string; winner?: Address; tx?: Hex } = {}, who = reviewer) => {
     const label =
       action === "check" || action === "list"
         ? action
         : action === "pick"
           ? `pick ${extra.bounty} ${extra.winner!.toLowerCase()}`
-          : action === "escrow-plan"
-            ? `escrow-plan ${extra.bounty}`
-            : `${action} ${extra.bounty} ${extra.tx!.toLowerCase()}`;
+          : `paid ${extra.bounty} ${extra.tx!.toLowerCase()}`;
     return s.review({ signer: who.address, action, ...extra, at: now, signature: await who.signMessage({ message: reviewMessage(label, now) }) });
   };
   return { s, d, agents, paidTxs, enter, review, setNow: (t: number) => (now = t) };
@@ -280,7 +278,7 @@ describe("bounties: paying through Bull's escrow", () => {
       expect(() => checkEscrowPlan(planOf(bad as never), want), Object.keys(bad).join()).toThrow(why);
   });
 
-  it("locks the prize from the treasury for the winner, then pays it when the reviewer's account releases it", async () => {
+  it("locks the prize from the treasury for the winner (no sign-in needed), then pays it when the reviewer's account releases it", async () => {
     let asked: Record<string, unknown> | null = null;
     const lockTx = `0xdd${"0".repeat(62)}` as Hex;
     const t = setup({
@@ -293,14 +291,18 @@ describe("bounties: paying through Bull's escrow", () => {
     await t.s.submitHosted(t.agents.get("1")!, "fees", LONG, run());
     t.setNow(NOW + 6 * DAY);
     await t.review("pick", { bounty: "fees", winner });
-    const plan = (await t.review("escrow-plan", { bounty: "fees" })) as { arbiter: string; calls: unknown[] };
+    const plan = (await t.s.lockPlan("fees")) as { arbiter: string; calls: unknown[] };
     expect(asked).toMatchObject({ template: "arbiter_escrow", payer: TREASURY, payee: winner, arbiter, amount: "25", asset: "usdg", expiryHours: 72 });
     expect(plan.arbiter).toBe(arbiter);
     expect(plan.calls).toHaveLength(2);
     // Another transaction is not taken as the lock.
-    await expect(t.review("escrow", { bounty: "fees", tx: `0xee${"0".repeat(62)}` as Hex })).rejects.toThrow(/did not lock 25 USDG/);
-    expect(await t.review("escrow", { bounty: "fees", tx: lockTx })).toEqual({ ok: true, escrow: "12" });
-    await expect(t.review("escrow-plan", { bounty: "fees" })).rejects.toThrow(/already locked/);
+    await expect(t.s.lockRecord("fees", `0xee${"0".repeat(62)}`)).rejects.toThrow(/did not lock 25 USDG/);
+    await expect(t.s.lockRecord("fees", "not a hash")).rejects.toThrow(/not a transaction hash/);
+    expect(await t.s.lockRecord("fees", lockTx)).toEqual({ ok: true, escrow: "12" });
+    // Recording the same lock again is fine (a retry); a new plan is not.
+    expect(await t.s.lockRecord("fees", lockTx)).toEqual({ ok: true, escrow: "12" });
+    await expect(t.s.lockPlan("fees")).rejects.toThrow(/already locked/);
+    expect((await t.s.lockList()).bounties).toEqual([{ id: "fees", title: "Fee research", prize: { amount: "25", token: "USDG" }, winner, lockedUntil: NOW + 9 * DAY, agreement: "12" }]);
     // While it is locked, the winner cannot be changed, and the public page shows the lock.
     await expect(t.review("pick", { bounty: "fees", winner: ACCOUNT(other.address) })).rejects.toThrow(/already locked/);
     expect((await t.s.publicOne("fees")).winner).toMatchObject({ escrow: { id: "12" }, paidTx: null });
@@ -317,11 +319,13 @@ describe("bounties: paying through Bull's escrow", () => {
     const t = setup({ now: NOW, bullPlan: async () => planOf({ payee: arbiter }) });
     await t.enter("1");
     await t.s.submitHosted(t.agents.get("1")!, "fees", LONG, run());
+    await expect(t.s.lockPlan("other")).rejects.toThrow(/no bounty by that name/);
+    await expect(t.s.lockPlan("fees")).rejects.toThrow(/No winner is picked/);
     t.setNow(NOW + 6 * DAY);
     await t.review("pick", { bounty: "fees", winner });
-    await expect(t.review("escrow-plan", { bounty: "fees" })).rejects.toThrow(/Bull's plan was not used: Bull's agreement does not pay the winner/);
+    await expect(t.s.lockPlan("fees")).rejects.toThrow(/Bull's plan was not used: Bull's agreement does not pay the winner/);
     await t.d.store.setResult("fees", { winner, pickedAt: NOW, escrow: { id: "3", tx: `0x${"1".repeat(64)}`, expiresAt: NOW + 6 * DAY - 1 } });
-    await expect(t.review("escrow-plan", { bounty: "fees" })).rejects.toThrow(/not used/);
+    await expect(t.s.lockPlan("fees")).rejects.toThrow(/not used/);
   });
 
   it("a locked prize no longer counts against the treasury's balance for other bounties", async () => {
