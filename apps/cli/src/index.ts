@@ -39,6 +39,7 @@ Start here:
   ${pad(`${CMD} move openclaw codex`)}the same in one line, with a short preview first
   ${pad(`${CMD} move openclaw ./me.nomad`)}save to a file you can share or keep
   ${pad(`${CMD} move ./me.nomad claude-code`)}open that file somewhere else
+  ${pad(`${CMD} deploy claude-code`)}run it on Nomad's cloud, around the clock
   ${pad(`${CMD} ui`)}the dashboard, in your browser`;
   }
 );
@@ -252,6 +253,44 @@ program
       if (o.includeSecrets && !out().json) process.stderr.write(yellow("Warning: secret values will be stored in the package. Share it only with people who may see them.\n"));
       const r = await nomad.exportAgent(spec, { outPath: resolve(o.out), includeSecrets: o.includeSecrets, includeFiles: o.includeFiles, includeSensitiveFiles: o.includeSensitiveFiles, components: components(o.components), format: o.format === "jetpack" ? "interchange" : "nomad", sign: o.sign });
       print(out(), () => [green("Exported") + `  ${r.path}`, ...(r.receipt.signedBy ? [`Signed with your key ${r.receipt.signedBy}`] : []), ...(r.receipt.notIncluded.length ? [yellow(`Not representable in this format: ${r.receipt.notIncluded.join(", ")}`)] : []), `${r.files.size} files, ${r.bytes.length} bytes`, ...(r.sanitize.redactedText || r.sanitize.strippedEnvValues.length ? [yellow(`${r.sanitize.redactedText} secret(s) redacted, ${r.sanitize.strippedEnvValues.length} credential(s) replaced by references`)] : []), ...(r.sanitize.removedFiles.length ? [yellow(`Left out credential files: ${r.sanitize.removedFiles.join(", ")}`)] : []), ...(r.sanitize.walletKeysKept ? [yellow(`Left out ${r.sanitize.walletKeysKept} wallet key(s) or recovery phrase(s): Nomad never stores them as values, even with --include-secrets.`)] : [])], r.receipt);
+    })
+  );
+
+/* ------------------------------ deploy ------------------------------ */
+
+program
+  .command("deploy <source>")
+  .description("run an agent you have on Nomad's cloud, around the clock, with its own wallet and limits")
+  .option("--source-dir <dir>", "platform directory")
+  .option("--agent <id>", "agent inside the platform")
+  .option("--dry-run", "only show what would be sent")
+  .option("--no-open", "do not open a browser")
+  .addOption(new Option("--site <url>").hideHelp())
+  .action((source, o) =>
+    run(async (nomad) => {
+      const { deployDraft, uploadDraft, DEFAULT_SITE } = await import("./deploy");
+      const spec = await parseSource(nomad, source, { sourceDir: o.sourceDir, agent: o.agent });
+      const loaded = await nomad.loadSource(spec);
+      const from = loaded.sourceAdapter?.info.displayName ?? "your agent";
+      const draft = deployDraft(loaded.doc, from);
+      const site = typeof o.site === "string" && /^https?:\/\/[^\s/]+$/.test(o.site) ? o.site : process.env.NOMAD_SITE?.trim() || DEFAULT_SITE;
+      const lines = () => [
+        `${bold(draft.name)} from ${from}, as ${draft.template === "researcher" ? "a Researcher (writes you reports, never trades)" : "an agent with its own instructions (it can trade, within the limits you set)"}. You can change this before creating it.`,
+        `Instructions: ${draft.instructions.length} characters${draft.trimmed ? yellow(" (shortened to fit; edit them on the next page)") : ""}.`,
+        ...(draft.cloud.length ? [`Tools it keeps in the cloud: ${draft.cloud.join(", ")}.`] : []),
+        ...(draft.local.length ? [dim(`Stay on this computer: ${draft.local.join(", ")}. Keys, sign-ins and local programs are never sent.`)] : []),
+        ...(loaded.scan.findings.length ? [dim(`${loaded.scan.findings.length} secret(s) were removed before anything was prepared.`)] : [])
+      ];
+      if (o.dryRun) {
+        print(out(), () => [...lines(), "", dim("Preview only. Run again without --dry-run to continue on your Nomad account.")], { draft });
+        return;
+      }
+      const { url } = await uploadDraft(draft, site);
+      print(out(), () => [...lines(), "", `${green("Ready.")} Finish on your Nomad account: choose its type and limits, then create it.`, url, dim("The draft is kept for 24 hours.")], { draft, url });
+      if (o.open && !out().json && process.stdout.isTTY) {
+        const [cmd, args] = process.platform === "darwin" ? ["open", [url]] : process.platform === "win32" ? ["cmd", ["/c", "start", "", url]] : ["xdg-open", [url]];
+        spawn(cmd as string, args as string[], { stdio: "ignore", detached: true }).on("error", () => undefined).unref();
+      }
     })
   );
 
