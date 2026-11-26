@@ -4,7 +4,7 @@
  * A bounty describes the result it wants, never the kind of agent. Any agent may enter: one hosted on Nomad (it does
  * the work on its next run and submits by itself) or one running anywhere else (linked to a Nomad account, it enters
  * and submits with its own wallet's signature). One entry per Nomad account per bounty. After the close date the
- * Nomad team picks the best entry, and the prize is paid from the treasury to the winner's Nomad account.
+ * Nomad team picks the best entry, and the treasury pays the prize to the winner's Nomad account through Bull's escrow.
  */
 import { keccak256, toHex, type Address, type Hex } from "viem";
 import type { RunRecord } from "../agents/shared";
@@ -58,7 +58,16 @@ export type Entry = {
   submission?: Submission;
 };
 
-export type BountyResult = { winner: Address; pickedAt: number; paidTx?: Hex; paidAt?: number };
+export type BountyResult = {
+  winner: Address;
+  pickedAt: number;
+  /** The prize locked in Bull's arbiter escrow for the winner (lib/bounties/bull.ts), until the reviewer confirms. */
+  escrow?: { id: string; tx: Hex; expiresAt: number };
+  paidTx?: Hex;
+  paidAt?: number;
+  /** "bull" when the prize was released from Bull's escrow; otherwise it was sent from the treasury. */
+  paidVia?: "bull";
+};
 
 export type BountyState = "upcoming" | "open" | "judging" | "decided" | "paid";
 

@@ -9,6 +9,8 @@ import { agentStore } from "./agents-store";
 import { mainAccountOf, serverClient } from "./agent-exec";
 import { bounties, bountyStore } from "./bounties";
 import { veninCheck } from "./venin-check";
+import { parseMcpAnswer } from "./mcp";
+import { BULL_MCP, createdAgreement } from "../bounties/bull";
 
 const ERC20 = parseAbi(["function balanceOf(address) view returns (uint256)"]);
 const TRANSFER = parseAbi(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
@@ -55,7 +57,7 @@ export function bountyEnv() {
         }
       });
     },
-    async paid(token, to, amount, tx) {
+    async paid(token, to, amount, tx, from = TREASURY) {
       const r = await client.getTransactionReceipt({ hash: tx as Hex });
       if (r.status !== "success") return false;
       let sent = 0n;
@@ -63,12 +65,32 @@ export function bountyEnv() {
         if (lc(l.address) !== lc(TOKEN[token])) continue;
         try {
           const ev = decodeEventLog({ abi: TRANSFER, data: l.data, topics: l.topics });
-          if (lc(ev.args.from) === lc(TREASURY) && lc(ev.args.to) === lc(to)) sent += ev.args.value;
+          if (lc(ev.args.from) === lc(from) && lc(ev.args.to) === lc(to)) sent += ev.args.value;
         } catch {
           /* another event */
         }
       }
       return sent >= amount;
+    },
+    async escrowCreated(tx) {
+      const r = await client.getTransactionReceipt({ hash: tx });
+      return r.status === "success" ? createdAgreement(r.logs) : null;
+    },
+    async bullPlan(args) {
+      const r = await fetch(BULL_MCP, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "bull_agreement_from_template", arguments: args } }),
+        signal: AbortSignal.timeout(20_000),
+        cache: "no-store"
+      });
+      const j = parseMcpAnswer(await r.text());
+      const res = j.result as { structuredContent?: unknown; isError?: boolean; content?: { text?: string }[] } | undefined;
+      if (!res || res.isError) throw new Error(j.error?.message ?? "Bull did not answer.");
+      const plan = (res.structuredContent ?? JSON.parse(res.content?.[0]?.text ?? "null")) as Record<string, unknown> | null;
+      const err = plan?.error as { message?: string } | undefined;
+      if (!plan || err) throw new Error(err?.message ?? "Bull gave no plan.");
+      return plan;
     },
     venin: async (path, text) => (await veninCheck(path, text)).planted,
     secrets: (text) => scanText(text, "submission.md").length

@@ -4,6 +4,8 @@
  * written against injected dependencies (chain reads, signatures, Venin) so the tests run without a network.
  */
 import { getAddress, isAddress, parseUnits, type Address, type Hex } from "viem";
+import { NOMAD, TREASURY, USDG } from "../accounts/chain";
+import { BULL_AGREEMENTS, checkEscrowPlan, ESCROW_HOURS, type createdAgreement } from "../bounties/bull";
 import type { AgentRecord, RunRecord } from "../agents/shared";
 import {
   bountyState,
@@ -100,8 +102,12 @@ export type BountyDeps = {
   agent(id: string): Promise<AgentRecord | null>;
   /** True when `tx` succeeded, was made by `wallet` (directly or as a smart account), and after `sinceMs`. */
   txBy(wallet: Address, tx: Hex, sinceMs: number): Promise<boolean>;
-  /** True when `tx` moved at least `amount` of `token` from the treasury to `to`. */
-  paid(token: PrizeToken, to: Address, amount: bigint, tx: Hex): Promise<boolean>;
+  /** True when `tx` moved at least `amount` of `token` to `to`, from the treasury or (`from`) Bull's agreements contract. */
+  paid(token: PrizeToken, to: Address, amount: bigint, tx: Hex, from?: Address): Promise<boolean>;
+  /** Bull's plan for a prize escrow (bull_agreement_from_template), as Bull answered. */
+  bullPlan(args: Record<string, unknown>): Promise<unknown>;
+  /** The Bull agreement a successful transaction created, from its receipt. */
+  escrowCreated(tx: Hex): Promise<ReturnType<typeof createdAgreement>>;
   /** Venin's count of planted instructions in a text. */
   venin(path: string, text: string): Promise<number>;
   /** How many secrets (keys, seed phrases, tokens) a text contains. */
@@ -136,7 +142,7 @@ export function bounties(d: BountyDeps) {
    */
   async function funded(): Promise<Set<string>> {
     const out = new Set<string>();
-    const unpaid = (await Promise.all(d.list.map(async (b) => ({ b, r: await d.store.result(b.id) })))).filter((x) => !x.r?.paidTx).sort((x, y) => closesAt(x.b) - closesAt(y.b));
+    const unpaid = (await Promise.all(d.list.map(async (b) => ({ b, r: await d.store.result(b.id) })))).filter((x) => !x.r?.paidTx && !(x.r?.escrow && x.r.escrow.expiresAt > d.now())).sort((x, y) => closesAt(x.b) - closesAt(y.b));
     for (const token of ["USDG", "NOMAD"] as PrizeToken[]) {
       const these = unpaid.filter((x) => x.b.prize.token === token);
       if (!these.length) continue;
@@ -241,7 +247,7 @@ export function bounties(d: BountyDeps) {
       let winner = null;
       if (result) {
         const e = await d.store.entry(b.id, result.winner);
-        if (e?.submission) winner = { agentName: e.agentName, ...(e.agentId ? { agentId: e.agentId } : {}), ...(e.wallet ? { wallet: e.wallet } : {}), submission: e.submission, paidTx: result.paidTx ?? null };
+        if (e?.submission) winner = { agentName: e.agentName, ...(e.agentId ? { agentId: e.agentId } : {}), ...(e.wallet ? { wallet: e.wallet } : {}), submission: e.submission, paidTx: result.paidTx ?? null, ...(result.paidVia ? { paidVia: result.paidVia } : {}), ...(result.escrow ? { escrow: { id: result.escrow.id, expiresAt: result.escrow.expiresAt } } : {}) };
       }
       return { ...b, state, entries: (await d.store.entries(b.id)).length, winner };
     },
@@ -368,7 +374,19 @@ export function bounties(d: BountyDeps) {
       const signer = getAddress(body.signer);
       const at = fresh(body.at);
       const action =
-        body.action === "check" ? "check" : body.action === "list" ? "list" : body.action === "pick" && typeof body.winner === "string" && isAddress(body.winner, { strict: false }) ? `pick ${String(body.bounty)} ${lc(body.winner)}` : body.action === "paid" && isHash(body.tx) ? `paid ${String(body.bounty)} ${lc(body.tx)}` : null;
+        body.action === "check"
+          ? "check"
+          : body.action === "list"
+            ? "list"
+            : body.action === "pick" && typeof body.winner === "string" && isAddress(body.winner, { strict: false })
+              ? `pick ${String(body.bounty)} ${lc(body.winner)}`
+              : body.action === "escrow-plan"
+                ? `escrow-plan ${String(body.bounty)}`
+                : body.action === "escrow" && isHash(body.tx)
+                  ? `escrow ${String(body.bounty)} ${lc(body.tx)}`
+                  : body.action === "paid" && isHash(body.tx)
+                    ? `paid ${String(body.bounty)} ${lc(body.tx)}`
+                    : null;
       if (!action) throw new BountyError(400, "Unknown review step.");
       if (!(await d.verify(signer, reviewMessage(action, at), sig(body.signature)).catch(() => false))) throw new BountyError(403, "The signature does not match.");
       // Whether a wallet reviews is told only to that wallet, so nobody can look up who the reviewers are.
@@ -391,6 +409,7 @@ export function bounties(d: BountyDeps) {
       if (body.action === "pick") {
         if (d.now() < closesAt(b)) throw new BountyError(409, "Pick the winner after the bounty closes.");
         if (result?.paidTx) throw new BountyError(409, "This bounty is already paid.");
+        if (result?.escrow && result.escrow.expiresAt > d.now()) throw new BountyError(409, "The prize is already locked for the winner picked before.");
         const winner = getAddress(body.winner as string);
         const e = await d.store.entry(b.id, winner);
         if (!e?.submission) throw new BountyError(404, "That account has no handed-in entry here.");
@@ -399,10 +418,60 @@ export function bounties(d: BountyDeps) {
       }
       if (!result) throw new BountyError(409, "Pick a winner first.");
       if (result.paidTx) throw new BountyError(409, "This bounty is already paid.");
+      const token = b.prize.token === "USDG" ? USDG : NOMAD;
+      const live = result.escrow && result.escrow.expiresAt > d.now() ? result.escrow : null;
+
+      // The prize goes into Bull's arbiter escrow: Bull plans it, Nomad checks every field, the treasury's wallet sends it.
+      if (body.action === "escrow-plan") {
+        if (live) throw new BountyError(409, "The prize is already locked with Bull.");
+        // The arbiter is the reviewer's Nomad account, which confirms from this page.
+        const arbiter = getAddress(await d.mainAccountOf(signer));
+        const args = {
+          template: "arbiter_escrow",
+          chain: "robinhood",
+          payer: TREASURY,
+          payee: result.winner,
+          arbiter,
+          amount: b.prize.amount,
+          asset: b.prize.token === "USDG" ? "usdg" : NOMAD,
+          expiryHours: ESCROW_HOURS,
+          terms: `Nomad agent bounty "${b.title}" (${b.id}): the prize for the winning entry, released when Nomad's reviewer confirms.`
+        };
+        let plan;
+        try {
+          plan = checkEscrowPlan(await d.bullPlan(args), { winner: result.winner, arbiter, token, amount: prizeUnits(b), nowSec: Math.floor(d.now() / 1000) });
+        } catch (e) {
+          throw new BountyError(502, `Bull's plan was not used: ${(e as Error).message}`);
+        }
+        return {
+          treasury: TREASURY,
+          arbiter,
+          feeWei: plan.feeWei.toString(),
+          feeUsd: plan.feeUsd,
+          expiresAt: plan.expiresAt,
+          quoteExpiresAt: plan.quoteExpiresAt,
+          calls: plan.calls.map((c) => ({ to: c.to, data: c.data, value: c.value.toString() }))
+        };
+      }
       const tx = body.tx as Hex;
-      if (!(await d.paid(b.prize.token, result.winner, prizeUnits(b), tx).catch(() => false)))
-        throw new BountyError(400, `That transaction did not send ${b.prize.amount} ${b.prize.token} from the treasury to the winner's account. If it was just sent, wait a moment and try again.`);
-      await d.store.setResult(b.id, { ...result, paidTx: tx, paidAt: d.now() });
+      if (body.action === "escrow") {
+        if (live) throw new BountyError(409, "The prize is already locked with Bull.");
+        const a = await d.escrowCreated(tx).catch(() => null);
+        if (!a || lc(a.payer) !== lc(TREASURY) || lc(a.payee) !== lc(result.winner) || lc(a.asset) !== lc(token) || a.amount < prizeUnits(b) || a.expiresAt <= d.now())
+          throw new BountyError(400, `That transaction did not lock ${b.prize.amount} ${b.prize.token} from the treasury for the winner with Bull. If it was just sent, wait a moment and try again.`);
+        await d.store.setResult(b.id, { ...result, escrow: { id: a.id, tx, expiresAt: a.expiresAt } });
+        return { ok: true, escrow: a.id };
+      }
+      // Paid: released from Bull's escrow (the usual way), or sent straight from the treasury.
+      const from = result.escrow ? BULL_AGREEMENTS : undefined;
+      if (!(await d.paid(b.prize.token, result.winner, prizeUnits(b), tx, from).catch(() => false)))
+        throw new BountyError(
+          400,
+          result.escrow
+            ? `That transaction did not release ${b.prize.amount} ${b.prize.token} from Bull's escrow to the winner's account. If it was just sent, wait a moment and try again.`
+            : `That transaction did not send ${b.prize.amount} ${b.prize.token} from the treasury to the winner's account. If it was just sent, wait a moment and try again.`
+        );
+      await d.store.setResult(b.id, { ...result, paidTx: tx, paidAt: d.now(), ...(result.escrow ? { paidVia: "bull" as const } : {}) });
       return { ok: true };
     }
   };

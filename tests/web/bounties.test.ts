@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { verifyMessage, type Address, type Hex } from "viem";
+import { getAddress, verifyMessage, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { hostedEnterMessage, linkMessage, outsideEnterMessage, reviewMessage, similarity, submitMessage, type Bounty } from "../../apps/web/lib/bounties/shared";
 import { bounties, bountyStore, type BountyDeps } from "../../apps/web/lib/server/bounties";
+import { encodeFunctionData, erc20Abi } from "viem";
+import { TREASURY, USDG } from "../../apps/web/lib/accounts/chain";
+import { BULL_ABI, BULL_AGREEMENTS, checkEscrowPlan, confirmAndReleaseCalls } from "../../apps/web/lib/bounties/bull";
 import type { AgentRecord, RunRecord } from "../../apps/web/lib/agents/shared";
 import { MemoryRedis } from "../../apps/web/lib/redis";
 
@@ -12,7 +15,7 @@ const creator = privateKeyToAccount(`0x${"11".repeat(32)}`);
 const other = privateKeyToAccount(`0x${"22".repeat(32)}`);
 const outside = privateKeyToAccount(`0x${"33".repeat(32)}`);
 const reviewer = privateKeyToAccount(`0x${"44".repeat(32)}`);
-const ACCOUNT = (signer: Address) => `0x${signer.slice(2, 10)}${"0".repeat(32)}` as Address;
+const ACCOUNT = (signer: Address) => getAddress(`0x${signer.slice(2, 10).toLowerCase()}${"0".repeat(32)}`);
 
 const bounty = (over: Partial<Bounty> = {}): Bounty => ({
   id: "fees",
@@ -48,7 +51,7 @@ const agentRec = (id: string, signer: Address): AgentRecord => ({
 const LONG = "Stoa charges 0.30% per swap, taken from the pool (Stoa market_context). Rushr charges 1% on buys (Rushr docs).";
 const run = (over: Partial<RunRecord> = {}): RunRecord => ({ id: "r", agentId: "1", startedAt: NOW, endedAt: NOW, calls: [{ service: "HEY Research", tool: "x", at: NOW, ok: true }], lines: [], txs: [], ...over });
 
-function setup(opts: { list?: Bounty[]; balance?: bigint; now?: number } = {}) {
+function setup(opts: { list?: Bounty[]; balance?: bigint; now?: number; bullPlan?: BountyDeps["bullPlan"]; escrowCreated?: BountyDeps["escrowCreated"] } = {}) {
   let now = opts.now ?? NOW;
   const agents = new Map([
     ["1", agentRec("1", creator.address)],
@@ -66,15 +69,24 @@ function setup(opts: { list?: Bounty[]; balance?: bigint; now?: number } = {}) {
     mainAccountOf: async (s) => ACCOUNT(s),
     agent: async (id) => agents.get(id) ?? null,
     txBy: async (_w, tx) => tx.startsWith("0xaa"),
-    paid: async (_t, _to, _a, tx) => paidTxs.has(tx),
+    paid: async (_t, _to, _a, tx, from) => paidTxs.has(`${tx}:${(from ?? "treasury").toLowerCase()}`) || (!from && paidTxs.has(tx)),
+    bullPlan: opts.bullPlan ?? (async () => Promise.reject(new Error("no Bull here"))),
+    escrowCreated: opts.escrowCreated ?? (async () => null),
     venin: async (_p, t) => (/ignore previous/i.test(t) ? 1 : 0),
     secrets: (t) => (/0x[0-9a-f]{64}/i.test(t) ? 1 : 0)
   };
   const s = bounties(d);
   const enter = async (agentId: string, signer = creator, bountyId = "fees", at = now) =>
     s.enterHosted({ bounty: bountyId, agentId, at, signature: await signer.signMessage({ message: hostedEnterMessage(bountyId, agentId, at) }) });
-  const review = async (action: "check" | "list" | "pick" | "paid", extra: { bounty?: string; winner?: Address; tx?: Hex } = {}, who = reviewer) => {
-    const label = action === "check" || action === "list" ? action : action === "pick" ? `pick ${extra.bounty} ${extra.winner!.toLowerCase()}` : `paid ${extra.bounty} ${extra.tx!.toLowerCase()}`;
+  const review = async (action: "check" | "list" | "pick" | "paid" | "escrow-plan" | "escrow", extra: { bounty?: string; winner?: Address; tx?: Hex } = {}, who = reviewer) => {
+    const label =
+      action === "check" || action === "list"
+        ? action
+        : action === "pick"
+          ? `pick ${extra.bounty} ${extra.winner!.toLowerCase()}`
+          : action === "escrow-plan"
+            ? `escrow-plan ${extra.bounty}`
+            : `${action} ${extra.bounty} ${extra.tx!.toLowerCase()}`;
     return s.review({ signer: who.address, action, ...extra, at: now, signature: await who.signMessage({ message: reviewMessage(label, now) }) });
   };
   return { s, d, agents, paidTxs, enter, review, setNow: (t: number) => (now = t) };
@@ -211,5 +223,118 @@ describe("bounties: review and payout", () => {
     expect(await t.review("paid", { bounty: "fees", tx })).toEqual({ ok: true });
     expect((await t.s.publicOne("fees")).state).toBe("paid");
     expect((await t.s.statusOf(winner))[0].status).toBe("Won Fee research, paid");
+  });
+});
+
+describe("bounties: paying through Bull's escrow", () => {
+  const winner = ACCOUNT(creator.address);
+  const arbiter = ACCOUNT(reviewer.address);
+  const units = 25_000_000n;
+  const nowSec = Math.floor((NOW + 6 * DAY) / 1000);
+  /** A plan shaped like Bull's answer to bull_agreement_from_template (Nov 26, 2026), with changes for the bad cases. */
+  const planOf = (o: { spender?: Address; approve?: bigint; payee?: Address; amount?: bigint; target?: Address; kind?: number; extra?: boolean; expiry?: number; value?: bigint; to?: Address } = {}) => {
+    const fee = 147_000_000_000_000n;
+    const conditions = [{ kind: o.kind ?? 1, target: o.target ?? arbiter, data: "0x" as Hex, value: 0n }];
+    if (o.extra) conditions.push({ kind: 0, target: winner, data: "0x", value: 0n });
+    return {
+      feeUsd: 0.25,
+      quoteExpiresAt: nowSec + 3600,
+      steps: [
+        { name: "approve", transaction: { to: USDG, value: "0", data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [o.spender ?? BULL_AGREEMENTS, o.approve ?? units] }) } },
+        {
+          name: "createAgreement",
+          transaction: {
+            to: o.to ?? BULL_AGREEMENTS,
+            value: (o.value ?? fee).toString(),
+            data: encodeFunctionData({
+              abi: BULL_ABI,
+              functionName: "createAgreement",
+              args: [
+                { payee: o.payee ?? winner, asset: USDG, amount: o.amount ?? units, expiry: BigInt(o.expiry ?? nowSec + 72 * 3600), termsHash: `0x${"ab".repeat(32)}`, conditions },
+                { feeWei: fee, expiry: BigInt(nowSec + 3600), sig: "0x1234" }
+              ]
+            })
+          }
+        }
+      ]
+    };
+  };
+  const want = { winner, arbiter, token: USDG, amount: units, nowSec };
+
+  it("uses Bull's plan only when every field is what Nomad asked for", () => {
+    const ok = checkEscrowPlan(planOf(), want);
+    expect(ok.calls.map((c) => c.to)).toEqual([USDG, BULL_AGREEMENTS]);
+    expect(ok.feeWei).toBe(147_000_000_000_000n);
+    for (const [bad, why] of [
+      [{ spender: winner }, /approve exactly the prize/],
+      [{ approve: units * 2n }, /approve exactly the prize/],
+      [{ payee: arbiter }, /does not pay the winner/],
+      [{ amount: units - 1n }, /exactly the prize/],
+      [{ target: winner }, /confirmation alone/],
+      [{ kind: 0 }, /confirmation alone/],
+      [{ extra: true }, /confirmation alone/],
+      [{ expiry: nowSec + 3600 }, /expires too soon/],
+      [{ value: 10n ** 18n }, /fee/],
+      [{ to: winner }, /Bull's agreements contract/]
+    ] as const)
+      expect(() => checkEscrowPlan(planOf(bad as never), want), Object.keys(bad).join()).toThrow(why);
+  });
+
+  it("locks the prize from the treasury for the winner, then pays it when the reviewer's account releases it", async () => {
+    let asked: Record<string, unknown> | null = null;
+    const lockTx = `0xdd${"0".repeat(62)}` as Hex;
+    const t = setup({
+      now: NOW + 6 * DAY,
+      bullPlan: async (args) => ((asked = args), planOf()),
+      escrowCreated: async (tx) => (tx === lockTx ? { id: "12", payer: TREASURY, payee: winner, asset: USDG, amount: units, expiresAt: NOW + 9 * DAY } : null)
+    });
+    t.setNow(NOW);
+    await t.enter("1");
+    await t.s.submitHosted(t.agents.get("1")!, "fees", LONG, run());
+    t.setNow(NOW + 6 * DAY);
+    await t.review("pick", { bounty: "fees", winner });
+    const plan = (await t.review("escrow-plan", { bounty: "fees" })) as { arbiter: string; calls: unknown[] };
+    expect(asked).toMatchObject({ template: "arbiter_escrow", payer: TREASURY, payee: winner, arbiter, amount: "25", asset: "usdg", expiryHours: 72 });
+    expect(plan.arbiter).toBe(arbiter);
+    expect(plan.calls).toHaveLength(2);
+    // Another transaction is not taken as the lock.
+    await expect(t.review("escrow", { bounty: "fees", tx: `0xee${"0".repeat(62)}` as Hex })).rejects.toThrow(/did not lock 25 USDG/);
+    expect(await t.review("escrow", { bounty: "fees", tx: lockTx })).toEqual({ ok: true, escrow: "12" });
+    await expect(t.review("escrow-plan", { bounty: "fees" })).rejects.toThrow(/already locked/);
+    // While it is locked, the winner cannot be changed, and the public page shows the lock.
+    await expect(t.review("pick", { bounty: "fees", winner: ACCOUNT(other.address) })).rejects.toThrow(/already locked/);
+    expect((await t.s.publicOne("fees")).winner).toMatchObject({ escrow: { id: "12" }, paidTx: null });
+    // Paid only by a transfer out of Bull's contract, not from the treasury straight.
+    const releaseTx = `0xff${"0".repeat(62)}` as Hex;
+    t.paidTxs.add(releaseTx);
+    await expect(t.review("paid", { bounty: "fees", tx: releaseTx })).rejects.toThrow(/did not release 25 USDG from Bull's escrow/);
+    t.paidTxs.add(`${releaseTx}:${BULL_AGREEMENTS.toLowerCase()}`);
+    expect(await t.review("paid", { bounty: "fees", tx: releaseTx })).toEqual({ ok: true });
+    expect((await t.s.publicOne("fees")).winner).toMatchObject({ paidTx: releaseTx, paidVia: "bull", escrow: { id: "12" } });
+  });
+
+  it("says why when Bull's plan is not used, and a lock that expired can be made again", async () => {
+    const t = setup({ now: NOW, bullPlan: async () => planOf({ payee: arbiter }) });
+    await t.enter("1");
+    await t.s.submitHosted(t.agents.get("1")!, "fees", LONG, run());
+    t.setNow(NOW + 6 * DAY);
+    await t.review("pick", { bounty: "fees", winner });
+    await expect(t.review("escrow-plan", { bounty: "fees" })).rejects.toThrow(/Bull's plan was not used: Bull's agreement does not pay the winner/);
+    await t.d.store.setResult("fees", { winner, pickedAt: NOW, escrow: { id: "3", tx: `0x${"1".repeat(64)}`, expiresAt: NOW + 6 * DAY - 1 } });
+    await expect(t.review("escrow-plan", { bounty: "fees" })).rejects.toThrow(/not used/);
+  });
+
+  it("a locked prize no longer counts against the treasury's balance for other bounties", async () => {
+    const later = bounty({ id: "next", opens: "2026-12-05T00:00:00Z", closes: "2026-12-20T00:00:00Z" });
+    const t = setup({ list: [bounty(), later], balance: 25_000_000n, now: NOW + 6 * DAY });
+    await t.d.store.setResult("fees", { winner, pickedAt: NOW, escrow: { id: "12", tx: `0x${"1".repeat(64)}`, expiresAt: NOW + 9 * DAY } });
+    expect((await t.s.publicList()).map((b: { id: string }) => b.id)).toContain("next");
+  });
+
+  it("the reviewer's account confirms and releases in one operation", () => {
+    const [attest, release] = confirmAndReleaseCalls("12");
+    expect(attest.to).toBe(BULL_AGREEMENTS);
+    expect(attest.data.slice(0, 10)).toBe(encodeFunctionData({ abi: BULL_ABI, functionName: "attest", args: [12n, 0n] }).slice(0, 10));
+    expect(release.data).toBe(encodeFunctionData({ abi: BULL_ABI, functionName: "release", args: [12n] }));
   });
 });

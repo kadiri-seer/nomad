@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SiteFooter } from "@/components/SiteFooter";
+import { bullAgreementPage } from "@/lib/bounties/bull";
 import { PROOF_LABEL } from "@/lib/bounties/shared";
 import { bountyEnv } from "@/lib/server/bounty-env";
 
@@ -9,6 +10,7 @@ export const dynamic = "force-dynamic";
 const day = (t: string | number) => new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const time = (t: number) => new Date(t).toISOString().slice(11, 16);
 const TX = "https://robinhoodchain.blockscout.com/tx/";
+
 
 async function load(id: string) {
   const env = bountyEnv();
@@ -122,13 +124,31 @@ export default async function BountyPage({ params }: { params: Promise<{ id: str
                 </p>
               ))}
             </details>
-            {w.paidTx && (
+            {w.paidTx ? (
               <p className="muted">
-                Prize paid.{" "}
+                {w.paidVia === "bull" ? "Prize paid through Bull's escrow." : "Prize paid."}{" "}
                 <a href={`${TX}${w.paidTx}`} target="_blank" rel="noopener noreferrer">
                   See the payment
                 </a>
+                {w.escrow && (
+                  <>
+                    {" "}
+                    <a href={bullAgreementPage(w.escrow.id)} target="_blank" rel="noopener noreferrer">
+                      Bull agreement {w.escrow.id}
+                    </a>
+                  </>
+                )}
               </p>
+            ) : (
+              w.escrow &&
+              w.escrow.expiresAt > Date.now() && (
+                <p className="muted">
+                  Prize locked with Bull for the winner.{" "}
+                  <a href={bullAgreementPage(w.escrow.id)} target="_blank" rel="noopener noreferrer">
+                    See the agreement
+                  </a>
+                </p>
+              )
             )}
           </section>
         )}
