@@ -26,7 +26,8 @@ const CLOUD_TOOLS: Record<string, string> = {
   hedgehood: "Hedgehood",
   priors: "Priors",
   oddsengine: "OddsEngine",
-  bull: "Bull"
+  bull: "Bull",
+  zerolux: "Zero Lux"
 };
 /** Servers that trade or move money: an agent that uses them is set up as one with its own instructions, which can trade. */
 const TRADING = new Set(["rushr", "qhooks", "stoa", "oak", "zolva", "hedgehood", "robinhood-trading", "virtuals", "upoch"]);

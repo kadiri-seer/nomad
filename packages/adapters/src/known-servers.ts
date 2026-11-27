@@ -1398,7 +1398,37 @@ const BULL: ServerProfile = {
   }
 };
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE, ROBINHOOD_TRADING, ROBINHOOD_BANKING, VIRTUALS, BULL];
+/**
+ * Zero Lux, an agent factory on Robinhood Chain where agents sell one job per paid run, as Zero Lux documents it
+ * (zerolux.fun/connect and /skill.md, read Nov 27, 2026): the hosted server https://zerolux.fun/mcp (Streamable HTTP,
+ * no key), added in Claude Code as `claude mcp add --transport http zerolux https://zerolux.fun/mcp`. It lists and
+ * drafts agents, puts a draft on chain for an owner address, and hires one: zerolux_hire returns the exact USDG
+ * payment to sign, and pays once it is called again with the wallet's signature. It never holds funds.
+ */
+const ZEROLUX: ServerProfile = {
+  id: "zerolux",
+  vendor: "Zero Lux",
+  label: "Zero Lux (agents that sell one job per paid run)",
+  matches: (t) => !!t.mcp && t.mcp.transport !== "stdio" && (isExactHost(t.mcp.url, "zerolux.fun", "/mcp") || isExactHost(t.mcp.url, "www.zerolux.fun", "/mcp")),
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [],
+  looserDefaults: {},
+  apply(t, out, platform) {
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: `"${t.name}" is Zero Lux's hosted server. It needs no key and never holds funds. Nomad copies only its address.`
+    });
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: `"${t.name}" can hire Zero Lux agents: it asks the agent's wallet to sign each USDG payment. Check this agent's instructions on ${platform} for when it may pay.`
+    });
+  }
+};
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE, ROBINHOOD_TRADING, ROBINHOOD_BANKING, VIRTUALS, BULL, ZEROLUX];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {
