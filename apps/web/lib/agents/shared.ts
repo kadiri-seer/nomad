@@ -135,6 +135,8 @@ export type RunRecord = {
   txs: Hex[];
   /** The bounty this run worked on, if any. */
   bounty?: string;
+  /** What the AI's answers cost this run, charged to the creator's credits (micro-USD). */
+  aiCostMicros?: number;
 };
 export const RUNS_KEPT = 50;
 

@@ -693,3 +693,31 @@ describe("who sees an agent's moves", () => {
     expect(ownerAgent(a).waitingFor).toBe("a second opinion on HOOKR");
   });
 });
+
+describe("paying for the AI", () => {
+  it("prices an answer at Google's paid rate, thinking counted as output", async () => {
+    const { answerCostMicros } = await import("../../apps/web/lib/server/gemini");
+    // 20,000 tokens in at $0.25 per million and 1,000 out at $1.50 per million: half a cent plus $0.0015.
+    expect(answerCostMicros("gemini-3.1-flash-lite", { promptTokenCount: 20_000, candidatesTokenCount: 600, thoughtsTokenCount: 400 })).toBe(6_500);
+    expect(answerCostMicros("gemini-flash-latest", { promptTokenCount: 1_000, candidatesTokenCount: 100 })).toBe(2_400);
+    expect(answerCostMicros("gemini-3.1-flash-lite", undefined)).toBe(0);
+  });
+
+  it("the Gemini client adds up what its answers cost", async () => {
+    const fetchImpl = (async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "RED FLAG: no" }] } }], usageMetadata: { promptTokenCount: 4_000, candidatesTokenCount: 100 } }))) as unknown as typeof fetch;
+    const g = gemini("k", { fetchImpl });
+    await g.ask("p", "s");
+    await g.ask("p", "s");
+    expect(g.spentMicros()).toBe(2 * (4_000 * 0.25 + 100 * 1.5));
+  });
+
+  it("each run charges its creator for its own AI answers, and records it", async () => {
+    let spent = 0;
+    const ai: RunnerDeps["ai"] = { name: "Gemini", ask: async () => ((spent += 1234.2), "RED FLAG: no\nfine"), spentMicros: () => spent };
+    const h = harness({ ai });
+    spent = 50_000; // earlier runs' answers are not this run's
+    await runAgent(h.d, agent());
+    expect(h.charges).toContain(1235n);
+    expect((await h.store.runs("7", 1))[0].aiCostMicros).toBe(1235);
+  });
+});

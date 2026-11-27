@@ -18,10 +18,28 @@ type Content = { role: string; parts: Part[] };
 export type ResearchLimits = { maxCalls: number; maxRounds: number; maxMs: number; maxTokens: number };
 export const RESEARCH_LIMITS: ResearchLimits = { maxCalls: 6, maxRounds: 4, maxMs: 100_000, maxTokens: 900 };
 
+/**
+ * Google's paid-tier prices in micro-USD per token (a dollar per million tokens is one micro-USD per token): the
+ * Flash-Lite models agents use, and the larger Flash for any other model, so a fallback is never undercharged.
+ */
+export const GEMINI_PRICES = { lite: { input: 0.25, output: 1.5 }, other: { input: 1.5, output: 9 } };
+type Usage = { promptTokenCount?: number; toolUsePromptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
+
+/** What one answer cost at Google's price, in micro-USD (thinking counts as output). */
+export function answerCostMicros(model: string, u: Usage | undefined): number {
+  if (!u) return 0;
+  const p = /lite/.test(model) ? GEMINI_PRICES.lite : GEMINI_PRICES.other;
+  const input = (u.promptTokenCount ?? 0) + (u.toolUsePromptTokenCount ?? 0);
+  const output = (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0);
+  return input * p.input + output * p.output;
+}
+
 export function gemini(apiKey: string, opts: { model?: string; fetchImpl?: typeof fetch; now?: () => number; onError?: (detail: string) => void } = {}) {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const models = [...new Set([opts.model, ...MODELS].filter((m): m is string => !!m && /^[a-z0-9.-]{3,60}$/.test(m)))];
   let working: string | null = null;
+  /** Everything this client's answers have cost so far, in micro-USD: the runner charges each run's share. */
+  let spent = 0;
   const now = opts.now ?? (() => Date.now());
 
   /** One request; tries the models in order until one answers, then keeps to it for the rest of the run. */
@@ -41,13 +59,16 @@ export function gemini(apiKey: string, opts: { model?: string; fetchImpl?: typeo
       if (tryNext(r.status) && !pinned) continue;
       if (!r.ok) return null;
       working = model;
-      return { model, j: await r.json().catch(() => ({})) };
+      const j = (await r.json().catch(() => ({}))) as { candidates?: { content?: Content }[]; usageMetadata?: Usage };
+      spent += answerCostMicros(model, j.usageMetadata);
+      return { model, j };
     }
     return null;
   }
 
   return {
     name: "Gemini",
+    spentMicros: () => spent,
     /** One small test question: which model answered, or why none did (Google's error text holds no key). */
     async probe(): Promise<{ ok: boolean; model?: string; detail: string }> {
       let last: { ok: boolean; model?: string; detail: string } | null = null;
@@ -129,8 +150,9 @@ export function gemini(apiKey: string, opts: { model?: string; fetchImpl?: typeo
         });
         if (tryNext(r.status)) continue; // not offered, busy or over its limit: try the next model
         if (!r.ok) return null; // a bad key or request: the run goes on without it
-        const j = (await r.json().catch(() => ({}))) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+        const j = (await r.json().catch(() => ({}))) as { candidates?: { content?: { parts?: { text?: string }[] } }[]; usageMetadata?: Usage };
         working = model;
+        spent += answerCostMicros(model, j.usageMetadata);
         const text = (j.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
         return text ? text.slice(0, 1000) : null;
       }

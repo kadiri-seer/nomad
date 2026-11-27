@@ -78,6 +78,8 @@ export type RunnerDeps = {
   ai: null | {
     name: string;
     ask(prompt: string, system: string): Promise<string | null>;
+    /** What its answers have cost so far, in micro-USD; each run is charged its own share. */
+    spentMicros?(): number;
     withTools?(prompt: string, system: string, limits?: ResearchLimits, extra?: ExtraTool[]): Promise<{ text: string; used: string[]; calls?: ToolCallRecord[]; model?: string | null } | null>;
   };
   /**
@@ -214,6 +216,7 @@ export function parseDecision(text: string): { action: "buy" | "sell" | "hold"; 
 export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<string[]> {
   const now = d.now();
   const lines: string[] = [];
+  const aiAtStart = d.ai?.spentMicros?.() ?? 0;
   const rec: RunRecord = { id: `${agent.id}-${now}`, agentId: agent.id, startedAt: now, endedAt: now, calls: [], lines, txs: [] };
   const note = async (text: string, tx?: Hex) => {
     lines.push(text);
@@ -302,6 +305,12 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
 
   const finish = async (work = true) => {
     if (work) await bountyWork().catch(() => undefined);
+    // The AI's answers this run are charged to the creator's credits, at Google's price.
+    const aiCost = Math.ceil((d.ai?.spentMicros?.() ?? 0) - aiAtStart);
+    if (aiCost > 0) {
+      rec.aiCostMicros = aiCost;
+      await d.credits.charge(agent.owner, BigInt(aiCost)).catch(() => false);
+    }
     rec.endedAt = Math.max(now, d.now());
     await d.store.addRun(agent.id, rec).catch(() => undefined);
     agent.lastRunAt = now;

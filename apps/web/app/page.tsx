@@ -21,7 +21,7 @@ const HOME = [
 const AGENT_STEPS = [
   { t: "Sign in", d: "Sign in with Google. Privy makes the key that owns your account and keeps it for your sign-in; Nomad never holds it, and you can export it. No wallet app, no ETH." },
   { t: "Create", d: "A Trader, a Stocks agent, a Researcher, or your own instructions. A one-time fee of $5 in $NOMAD: $1 is burned, the rest goes to Nomad's treasury." },
-  { t: "Fund", d: "Give it USDG to trade with and credits for its network fees. Take everything back whenever you like." },
+  { t: "Fund", d: "Give it USDG to trade with and credits for its AI and network fees. Take everything back whenever you like." },
   { t: "Watch", d: "Every move it makes is listed with its transaction, on your account page and on-chain." }
 ];
 

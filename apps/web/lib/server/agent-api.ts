@@ -73,7 +73,7 @@ export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = 
     stockCandidates: () => buildStockCandidates(s, env.store, async (a) => Number(await client.readContract({ address: a, abi: decimalsAbi, functionName: "decimals" }))),
     sender: (agent) => agentSender(agent, env.secret, env.sponsor, env.bundlerUrl),
     // Each research question gets its own tool kit, so its sources are only the services that answered it.
-    ai: g ? { name: g.name, ask: g.ask, ...(toolsOn ? { withTools: (prompt: string, system: string, limits?: ResearchLimits, extra?: ExtraTool[]) => g.withTools(prompt, system, toolKit({ cache: env.store, extra }), limits) } : {}) } : null,
+    ai: g ? { name: g.name, ask: g.ask, spentMicros: g.spentMicros, ...(toolsOn ? { withTools: (prompt: string, system: string, limits?: ResearchLimits, extra?: ExtraTool[]) => g.withTools(prompt, system, toolKit({ cache: env.store, extra }), limits) } : {}) } : null,
     ...(b ? { bounties: { tasks: (a: AgentRecord) => b.tasks(a), submit: (a: AgentRecord, id: string, text: string, rec: RunRecord) => b.submitHosted(a, id, text, rec) } } : {}),
     venin: (path, text) => veninCheck(path, text),
     ...(process.env.ODDSENGINE_API_KEY?.trim() ? { oddsEngine: cappedOddsEngine(env.store, oddsEngine(process.env.ODDSENGINE_API_KEY.trim())) } : {}),

@@ -48,7 +48,7 @@ export default function CreateAgentDocs() {
           <strong>Network fees:</strong> paid by Nomad and charged to your credits at cost plus 25%. A trade costs a few cents. Creating your account, buying $NOMAD, adding credits, funding an agent, withdrawing, sending and selling tokens for USDG are free for your first 6 operations each day.
         </li>
         <li>
-          <strong>AI and research:</strong> its thinking and research come from Gemini at no charge; when Gemini is busy, its second opinions come from Idlex at $0.005 a question, charged to credits.
+          <strong>AI and research:</strong> its thinking and research come from Google&apos;s Gemini, charged to credits at Google&apos;s price with nothing added, usually a fraction of a cent a run; when Gemini is busy, its second opinions come from Idlex at $0.005 a question, charged to credits.
         </li>
       </ul>
       <p>Credits are prepaid and cannot be withdrawn. When they run low, your agents skip their runs until you add more.</p>
