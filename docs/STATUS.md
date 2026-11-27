@@ -303,7 +303,7 @@ Not verified: checkpoints, restores and rollbacks themselves (they need an Upoch
 
 ## OddsEngine setups (added)
 
-Written Nov 22, 2026. OddsEngine runs crypto safety checks and AI models behind one key, through a hosted MCP server (`https://api.oddsengine.live/mcp`, "Authorization: Bearer oe_live_...", or the key in the address as `/mcp/k/<key>`), paid per call from the account's balance. This follows what OddsEngine's team described to Nomad on Nov 22, 2026, and OddsEngine's team reviewed it the same day. See [docs/guides/oddsengine-setups.md](guides/oddsengine-setups.md).
+Written Nov 22, 2026. OddsEngine runs crypto safety checks and AI models behind one key, through a hosted MCP server (`https://api.oddsengine.live/mcp`, "Authorization: Bearer oe_live_...", or the key in the address as `/mcp/k/<key>`), paid per call from the account's balance (OddsEngine also offers keyless pay-per-call use, which Nomad moves as it is). This follows what OddsEngine's team described to Nomad on Nov 22, 2026, and OddsEngine's team reviewed it the same day. See [docs/guides/oddsengine-setups.md](guides/oddsengine-setups.md).
 
 Tested (automated, every push):
 - OddsEngine setups moving between Claude Code, Codex, Cursor and OpenClaw (`tests/migration/oddsengine.test.ts`): a key in the header becomes `ODDSENGINE_API_KEY` holding the key alone (`bearer_token_env_var` in Codex, `Bearer ${ODDSENGINE_API_KEY}` in Claude Code, `${env:ODDSENGINE_API_KEY}` in Cursor, a step for OpenClaw that keeps the key out of `openclaw.json`); a key in the address is taken out, and the plain address with the variable arrives; a key kept on purpose (`--include-secrets`) stays, with a warning when it is in the address; a setup with no key gets a step with Nomad's link; the preview names OddsEngine and links to `engine.oddsengine.live/?ref=nomad`. Planted keys never appear in destinations, plans, receipts, Nomad's library or a `.nomad` package, and the sources are unchanged.
@@ -314,6 +314,38 @@ Tested (automated, every push):
 Checked with real applications: `scripts/check-oddsengine.mjs` (Real apps workflow) checks that OddsEngine's server answers and refuses a tool call with no key, then moves a setup with a fake key in its address to the real Codex and OpenClaw, with the key nowhere in what Nomad wrote.
 
 Not verified: OddsEngine's tools with a real key through a moved setup (Nomad AI calls `scan_token` with a real key outside Nomad).
+
+## Bull setups (added, in 0.7.8)
+
+Written Nov 26, 2026. Bull runs agreements between agents on Robinhood Chain, through a hosted MCP server (`https://www.bull.family/api/mcp`, no key) or a local one that signs with `BULL_AGENT_KEY`. See [docs/guides/bull-setups.md](guides/bull-setups.md).
+
+Tested (automated, every push):
+- Bull setups moving from Claude Code to Codex and to OpenClaw (`tests/migration/bull.test.ts`): the hosted address arrives exactly; the local server arrives without its key, which is never written; a local server with no key gets a note that it can only plan; look-alikes get no notes.
+- Bounty prizes through Bull's arbiter escrow (`tests/web/bounties.test.ts`): Bull's plan is used only when every field is what Nomad asked for, a lock is recorded only once read on chain from Bull's own contract, and an expired lock can be made again.
+
+Not verified: a real prize locked and released through Bull's escrow.
+
+## Zero Lux setups and hiring (added, in 0.7.9)
+
+Written Nov 27, 2026. Zero Lux sells one agent job per paid run in USDG, paid with a signature and no gas, through a hosted MCP server (`https://zerolux.fun/mcp`, no key). See [docs/guides/zerolux-setups.md](guides/zerolux-setups.md).
+
+Tested (automated, every push):
+- Zero Lux setups moving from Claude Code to Codex (`tests/migration/zerolux.test.ts`): the address arrives exactly, with a note on paying; look-alikes get no notes.
+- Hiring by agents on Nomad (`tests/web/zerolux.test.ts`): only live version 4 agents (refundable, receive-form payments) are listed; the payment is signed for exactly the listed price, to the listed wallet, in the receive form; nothing is signed when the terms or the wallet differ from the listing, or when Zero Lux's API names a factory other than the one Nomad pins; a slow run is collected on the next run; creators choose the limits and hiring is off until they do; each hire is taken from credits first, given back when it fails, and stops at the creator's number a day, two a run, or short credits.
+- The status check (`/api/agents/status?check=zerolux`): lists the agents Nomad would hire, compares Zero Lux's factory with the pinned one, checks the most-used agent's wallet on chain and the payment wallet's USDG. It asks for no run and signs nothing.
+
+Checked by hand (Nov 27, 2026): Zero Lux's five tools answer with no key, and a setup moves correctly to Claude Code, Codex, Gemini CLI and Cursor.
+
+Not verified: a real hire by a hosted agent in production.
+
+## Autonomo setups (added, in 0.7.9)
+
+Written Nov 27, 2026. Autonomo runs a local MCP server (`npx -y autonomo-mcp`) that pays gateways from the agent's wallet, within spending limits set in its environment. See [docs/guides/autonomo-setups.md](guides/autonomo-setups.md).
+
+Tested (automated, every push):
+- Autonomo setups moving from Claude Code to Codex, OpenClaw and Cursor (`tests/migration/autonomo.test.ts`): the server and its limits move, the wallet key arrives only as a reference and is never written, and Autonomo's skill moves with its note; with no limits set the preview says the defaults apply; a Windows entry (`cmd /c npx`) moves as it is, with a step for Mac and Linux; a base address other than autonomo.fun gets a warning.
+
+Not verified: a real payment through a moved setup.
 
 ## Venin's check-up (in 0.7.5)
 

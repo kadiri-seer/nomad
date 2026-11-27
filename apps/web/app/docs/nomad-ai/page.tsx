@@ -24,7 +24,7 @@ export default function NomadAIDocs() {
         <li><strong>Check in.</strong> It recalls its recent runs from its memory on Memoria.</li>
         <li><strong>Look around.</strong> It reads its wallets, the market (Stoa and HEY Research) and what other traders and agents are doing (Rushr and Zolva), then checks its two or three best candidates with Rushr and OddsEngine. A warning from either rules a token out.</li>
         <li><strong>Decide.</strong> It sells a token it holds once it is up 25%, down 20% or held for 48 hours. It buys only a token that passed both checks, with taxes of 3% or less and at least 1,000 USD traded in the last day. When nothing qualifies, it does nothing and says why.</li>
-        <li><strong>Act.</strong> Before signing, OddsEngine checks the exact trade. Then it follows one fixed path: a fresh safety check, a fresh quote for exactly that amount, then the trade.</li>
+        <li><strong>Act.</strong> Its instructions have it ask OddsEngine, just before signing, to check the token and where the trade goes, and to stop if OddsEngine warns. The guard does not require that step: what it requires is one fixed path, a fresh safety check, a fresh quote for exactly that amount, then the trade.</li>
         <li><strong>Record.</strong> It saves what it did and why to its memory and publishes a few plain lines about the run.</li>
       </ol>
 

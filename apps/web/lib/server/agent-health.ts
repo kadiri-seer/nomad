@@ -128,3 +128,53 @@ export async function agentHealth(cache: Cache, fetchImpl: typeof fetch = fetch)
   await cache.cacheSet("agents-health", out, 600);
   return { ...out, lastRun: await cache.cacheGet<Health["lastRun"]>("agents-last-run") };
 }
+
+/**
+ * Whether hosted agents can hire on Zero Lux right now, without paying anything: Zero Lux's list of agents Nomad would
+ * hire, its factory for them against the one Nomad pins, the most-used agent's wallet checked on chain with that
+ * factory, and whether Nomad's payment wallet holds enough USDG for the cheapest hire. No run is asked for and nothing
+ * is signed. Cached for ten minutes.
+ */
+export async function zeroluxCheck(
+  cache: Cache,
+  d: {
+    enabled: boolean;
+    payer: string;
+    agents: () => Promise<{ id: number; name: string; price: bigint; version: number; wallet: string }[]>;
+    factories: () => Promise<Record<string, string | null>>;
+    pinned: Record<number, string>;
+    isAgentWallet: (factory: `0x${string}`, wallet: `0x${string}`) => Promise<boolean>;
+    payerUsdg: () => Promise<bigint>;
+  }
+) {
+  const hit = await cache.cacheGet<Record<string, unknown>>("agents-zerolux-check");
+  if (hit) return hit;
+  const lc = (a: string) => a.toLowerCase();
+  const out: Record<string, unknown> = { enabled: d.enabled, checkedAt: new Date().toISOString(), payer: d.payer, spends: "nothing" };
+  if (!d.enabled) return out;
+  try {
+    const list = await d.agents();
+    out.hireable = list.length;
+    const top = list[0] ?? null;
+    const cheapest = list.reduce<bigint | null>((m, a) => (m === null || a.price < m ? a.price : m), null);
+    out.cheapestUsdg = cheapest === null ? null : Number(cheapest) / 1e6;
+    const named = await d.factories();
+    const versions = [...new Set(list.map((a) => a.version))];
+    out.factories = Object.fromEntries(versions.map((v) => [v, { named: named[String(v)] ?? null, pinned: d.pinned[v] ?? null, matches: !!named[String(v)] && !!d.pinned[v] && lc(String(named[String(v)])) === lc(d.pinned[v]) }]));
+    if (top) {
+      const pinned = d.pinned[top.version];
+      out.walletCheck = { agent: top.id, name: top.name, version: top.version, isAgentWallet: pinned ? await d.isAgentWallet(pinned as `0x${string}`, top.wallet as `0x${string}`).catch(() => null) : null };
+    }
+    const bal = await d.payerUsdg().catch(() => null);
+    out.payerUsdg = bal === null ? null : Number(bal) / 1e6;
+    const wc = out.walletCheck as { isAgentWallet?: boolean | null } | undefined;
+    const fac = Object.values(out.factories as Record<string, { matches: boolean }>);
+    out.ok = !!top && fac.length > 0 && fac.every((f) => f.matches) && wc?.isAgentWallet === true && bal !== null && cheapest !== null && bal >= cheapest;
+    if (!out.ok) out.detail = !top ? "Zero Lux lists no agent Nomad would hire." : !fac.every((f) => f.matches) ? "Zero Lux names a factory Nomad does not pin." : wc?.isAgentWallet !== true ? "The wallet check on chain did not pass." : "Nomad's payment wallet has less USDG than the cheapest hire.";
+  } catch (e) {
+    out.ok = false;
+    out.detail = `Zero Lux did not answer: ${String((e as Error).message).slice(0, 120)}`;
+  }
+  await cache.cacheSet("agents-zerolux-check", out, 600);
+  return out;
+}

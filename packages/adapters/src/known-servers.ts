@@ -1202,14 +1202,14 @@ const ODDSENGINE: ServerProfile = {
       message: `When this agent's skills or instructions move too, Nomad adds a short "${ODDSENGINE_CREDIT_SKILL}" note at OddsEngine's request: the agent ends the results of OddsEngine's scan_token and check_before_sign with "Checked by OddsEngine." Delete it any time.`
     });
     if (fromAddress) {
-      out.notes.push({ level: "info", category: "tools", message: `The OddsEngine key was part of "${t.name}"'s address. Nomad writes the plain address and sends the key as a header instead, so the key stays out of ${platform}'s settings.` });
+      out.notes.push({ level: "info", category: "tools", brief: true, message: `The OddsEngine key was part of "${t.name}"'s address. Nomad writes the plain address and sends the key as a header instead, so the key stays out of ${platform}'s settings.` });
     }
     if (typeof keyRef === "string") {
       out.manualSteps.push(
-        `The "${t.name}" key is your OddsEngine API key (oe_live_..., under API keys at ${ODDSENGINE_CONNECT_URL}); keys are never copied. OddsEngine refuses calls without it, so the server does not work on ${platform} until ${keyRef} is set.`
+        `The "${t.name}" key is your OddsEngine API key (oe_live_..., under API keys at ${ODDSENGINE_CONNECT_URL}); keys are never copied. The server connects and lists its tools without it, but OddsEngine refuses each call on ${platform} until ${keyRef} is set (or the call is paid per call).`
       );
     } else if (!keptKey) {
-      out.manualSteps.push(`"${t.name}" has no OddsEngine API key here, and OddsEngine refuses calls without one. Create a key under API keys at ${ODDSENGINE_CONNECT_URL}, then add an Authorization header: "Bearer " followed by the key (oe_live_...).`);
+      out.manualSteps.push(`"${t.name}" has no OddsEngine API key here: the server connects and lists its tools, but OddsEngine refuses each call without a key unless it is paid per call. Create a key under API keys at ${ODDSENGINE_CONNECT_URL}, then add an Authorization header: "Bearer " followed by the key (oe_live_...).`);
     }
   }
 };

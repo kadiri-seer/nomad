@@ -16,6 +16,12 @@ export const MIN_HIRE_VERSION = 4;
 /** How long one hire waits for its answer inside a run; a slower one is collected on the agent's next run. */
 export const HIRE_WAIT_MS = 90_000;
 export const MAX_HIRE_INPUT = 4000;
+/**
+ * Zero Lux's own agent factories, by version, as deployed on Robinhood Chain (read Nov 27, 2026). A wallet is hired only
+ * if the factory Zero Lux names is this one and it says the wallet is its own, so a changed answer from Zero Lux's
+ * API cannot vouch for a wallet of its own choosing. A new version is hired once its factory is added here.
+ */
+export const ZEROLUX_FACTORIES: Record<number, Address> = { 4: "0xe645344552bd46BF170D55819850612D22349c0A" };
 
 export type ZeroLuxAgent = { id: number; name: string; tagline: string; price: bigint; version: number; wallet: Address; runs: number; model: string | null; tools: string[] };
 export type HireResult =
@@ -164,7 +170,8 @@ export function zerolux(payer: LocalAccount, deps: { fetchImpl?: Fetch; isAgentW
       try {
         factories ??= ((await getJson("/api/config")).factoryByVersion ?? {}) as Record<string, string | null>;
         const factory = factories[String(agent.version)];
-        if (!factory || !isAddress(factory, { strict: false }) || !(await deps.isAgentWallet(getAddress(factory), agent.wallet)))
+        const pinned = ZEROLUX_FACTORIES[agent.version];
+        if (!factory || !pinned || !isAddress(factory, { strict: false }) || lc(factory) !== lc(pinned) || !(await deps.isAgentWallet(pinned, agent.wallet)))
           return { status: "failed", reason: "Its wallet is not one of Zero Lux's own, so nothing was paid.", paid: false };
       } catch {
         return { status: "failed", reason: "Its wallet could not be checked, so nothing was paid.", paid: false };
@@ -180,6 +187,12 @@ export function zerolux(payer: LocalAccount, deps: { fetchImpl?: Fetch; isAgentW
       };
       const ticket = Buffer.from(JSON.stringify(payload)).toString("base64");
       return present(agent.id, text, ticket, agent.price, waitMs);
+    },
+
+    /** Zero Lux's factory for each agent version, as its API names them (for the status check; reads only). */
+    async factories(): Promise<Record<string, string | null>> {
+      factories ??= ((await getJson("/api/config")).factoryByVersion ?? {}) as Record<string, string | null>;
+      return factories;
     },
 
     /** Collects a hire that was still working when its run ended. */

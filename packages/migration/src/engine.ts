@@ -272,9 +272,9 @@ export class Nomad {
     return listAdapters().map((a) => a.info);
   }
 
-  async scan(extra: Array<{ adapter: string; root: string }> = []) {
+  async scan(extra: Array<{ adapter: string; root: string }> = [], projectDir?: string) {
     const saved = this.store.getSetting<Array<{ adapter: string; root: string }>>("extraRoots", []);
-    const found = await scanPlatforms([...saved.filter((r) => findAdapter(r.adapter)), ...extra]);
+    const found = await scanPlatforms([...saved.filter((r) => findAdapter(r.adapter)), ...extra], projectDir);
     return found.map((p) => ({
       ...p,
       agents: p.agents.map((a) => ({ ...a, agentId: this.store.findByLocation(p.adapter, p.root, a.nativeId)?.agentId ?? null }))

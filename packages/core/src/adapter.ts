@@ -64,6 +64,8 @@ export interface Note {
   category?: ComponentCategory;
   message: string;
   detail?: string;
+  /** Shown in the short preview too, not only with --details (for an info note the person should not miss). */
+  brief?: boolean;
 }
 
 export interface ReadOptions {

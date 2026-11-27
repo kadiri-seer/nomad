@@ -7,7 +7,11 @@ import { agentEnv } from "@/lib/server/agent-api";
 import { gemini } from "@/lib/server/gemini";
 import { idlexPayer } from "@/lib/server/runner-keys";
 import { privyKeysReady } from "@/lib/server/privy-auth";
-import { agentHealth, oddsCheck, researchCheck } from "@/lib/server/agent-health";
+import { agentHealth, oddsCheck, researchCheck, zeroluxCheck } from "@/lib/server/agent-health";
+import { zerolux, ZEROLUX_FACTORIES, ZEROLUX_FACTORY_ABI } from "@/lib/server/zerolux";
+import { serverClient } from "@/lib/server/agent-exec";
+import { erc20Abi } from "viem";
+import { USDG } from "@/lib/accounts/chain";
 import { buildCandidates } from "@/lib/server/runner";
 import { stoa } from "@/lib/server/stoa";
 import { rushrSafety } from "@/lib/server/rushr";
@@ -26,6 +30,26 @@ export async function GET(req: Request) {
     const candidates = await buildCandidates(stoa(), env.store, (a) => rushrSafety(a)).catch(() => []);
     const token = (candidates.find((c) => c.passes) ?? candidates[0])?.address ?? null;
     return json(await oddsCheck(env.store, token));
+  }
+  if (check === "zerolux") {
+    // Whether hosted agents can hire on Zero Lux, without asking for a run or signing anything.
+    const env = agentEnv();
+    if (!env) return json({ ready: false });
+    const payer = idlexPayer(env.secret);
+    const client = serverClient();
+    const isAgentWallet = (factory: `0x${string}`, wallet: `0x${string}`) => client.readContract({ address: factory, abi: ZEROLUX_FACTORY_ABI, functionName: "isAgentWallet", args: [wallet] });
+    const zl = zerolux(payer, { isAgentWallet });
+    return json(
+      await zeroluxCheck(env.store, {
+        enabled: process.env.AGENT_ZEROLUX !== "off",
+        payer: payer.address,
+        agents: () => zl.agents(),
+        factories: () => zl.factories(),
+        pinned: ZEROLUX_FACTORIES,
+        isAgentWallet,
+        payerUsdg: () => client.readContract({ address: USDG, abi: erc20Abi, functionName: "balanceOf", args: [payer.address] })
+      })
+    );
   }
   if (check === "research") {
     const env = agentEnv();

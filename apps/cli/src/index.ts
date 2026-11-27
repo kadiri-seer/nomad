@@ -177,12 +177,20 @@ program
   );
 
 program
-  .command("scan")
-  .description("find supported platforms and agents on this machine")
-  .action(() =>
+  .command("scan [project]")
+  .description("find supported platforms and agents on this machine, and project setups (Cursor, Windsurf, Cline...) in a project folder (default: this folder)")
+  .action((project?: string) =>
     run(async (nomad) => {
-      const found = await nomad.scan();
-      print(out(), () => (found.length ? found.flatMap((p) => [bold(`${p.displayName}`) + dim(`  ${displayPath(p.root)}`), ...p.agents.map((a) => `  ${p.adapter}:${displayPath(p.root)}#${a.nativeId}  ${a.name}${a.agentId ? dim("  in library") : ""}`)]) : "No supported platforms were found at their default locations."), found);
+      const dir = resolve(project ?? process.cwd());
+      const found = await nomad.scan([], dir);
+      print(
+        out(),
+        () =>
+          found.length
+            ? found.flatMap((p) => [bold(`${p.displayName}`) + dim(`  ${displayPath(p.root)}`), ...p.agents.map((a) => `  ${p.adapter}:${displayPath(p.root)}#${a.nativeId}  ${a.name}${a.agentId ? dim("  in library") : ""}`)])
+            : `No supported platforms were found at their default locations or in ${displayPath(dir)}. Cursor, Windsurf and other project apps keep their setup inside each project: run nomad scan <project folder>.`,
+        found
+      );
     })
   );
 

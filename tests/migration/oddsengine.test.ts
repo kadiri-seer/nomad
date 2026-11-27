@@ -7,6 +7,7 @@ import { packAgent, unpackAgent } from "@nomad/archive";
 import { scanText } from "@nomad/security";
 import type { Tool } from "@nomad/schema";
 import { emptyDir, read, setup, treeHash, type Env } from "../helpers";
+import { planText, summaryText } from "../../apps/cli/src/format";
 import { FAKE_ODDSENGINE_KEY, FAKE_ODDSENGINE_SECRETS, ODDSENGINE_KEY_URL, ODDSENGINE_URL, buildClaudeCodeOddsEngine, buildCursorOddsEngineKeyInAddress } from "../fixtures/oddsengine";
 
 /**
@@ -68,7 +69,7 @@ describe("OddsEngine setups", () => {
     expect(notes(plan)).toContain(ABOUT);
     expect(notes(plan)).toContain("only read and never move funds");
     expect(notes(plan)).toContain(`Nomad adds a short "oddsengine-credit" note at OddsEngine's request: the agent ends the results of OddsEngine's scan_token and check_before_sign with "Checked by OddsEngine." Delete it any time.`);
-    expect(steps(plan)).toContain(`The "oddsengine" key is your OddsEngine API key (oe_live_..., under API keys at ${ODDSENGINE_CONNECT_URL}); keys are never copied. OddsEngine refuses calls without it, so the server does not work on Codex until ODDSENGINE_API_KEY is set.`);
+    expect(steps(plan)).toContain(`The "oddsengine" key is your OddsEngine API key (oe_live_..., under API keys at ${ODDSENGINE_CONNECT_URL}); keys are never copied. The server connects and lists its tools without it, but OddsEngine refuses each call on Codex until ODDSENGINE_API_KEY is set (or the call is paid per call).`);
     expect(warnings(plan)).not.toContain("OddsEngine");
     const skill = read(join(dest, "skills/oddsengine-credit/SKILL.md"));
     expect(skill).toContain("scan_token or check_before_sign");
@@ -87,6 +88,9 @@ describe("OddsEngine setups", () => {
     const { plan, receipt } = await migrate({ adapter: "cursor", root: cur, nativeId: "main" }, { adapter: "claude-code", root: cc });
     expect(JSON.parse(read(join(ccHome, ".claude.json"))).mcpServers.oddsengine).toEqual({ type: "http", url: ODDSENGINE_URL, headers: { Authorization: "Bearer ${ODDSENGINE_API_KEY}" } });
     expect(notes(plan)).toContain(`The OddsEngine key was part of "oddsengine"'s address. Nomad writes the plain address and sends the key as a header instead`);
+    // The short preview says so too, not only the detailed plan.
+    expect(summaryText(plan).join("\n")).toContain(`The OddsEngine key was part of "oddsengine"'s address.`);
+    expect(planText(plan, false).join("\n")).toContain(`The OddsEngine key was part of "oddsengine"'s address.`);
     expect(steps(plan)).toContain("ODDSENGINE_API_KEY is set");
     expect(skillDirs(join(cc, "skills"))).toEqual(["oddsengine-credit"]);
     expectNoLeak(allText(cc), read(join(ccHome, ".claude.json")), JSON.stringify(plan), JSON.stringify(receipt), allText(env.nomadHome));
@@ -169,7 +173,7 @@ describe("OddsEngine recognition", () => {
 
   it("a setup with no key gets a step with Nomad's link", () => {
     const out = applyKnownServerProfile(remote(ODDSENGINE_URL), "Codex");
-    expect(out.manualSteps.join("\n")).toContain(`"x" has no OddsEngine API key here, and OddsEngine refuses calls without one. Create a key under API keys at ${ODDSENGINE_CONNECT_URL}`);
+    expect(out.manualSteps.join("\n")).toContain(`"x" has no OddsEngine API key here: the server connects and lists its tools, but OddsEngine refuses each call without a key unless it is paid per call. Create a key under API keys at ${ODDSENGINE_CONNECT_URL}`);
   });
 
   it("the credit note is added once, only for an enabled OddsEngine server", () => {

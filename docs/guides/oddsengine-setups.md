@@ -14,6 +14,8 @@ Powered by OddsEngine. Three steps, on [engine.oddsengine.live/?ref=nomad](https
 
 Through that link, OddsEngine gives MCP access without holding $ODDS. Safety checks cost $0.02 per call. Holders pay a lower fee on the AI models. OddsEngine says the first 100 wallets that come through Nomad get $1 of starter credit from them.
 
+**Without a key: pay per call.** OddsEngine also offers keyless use, where each call is paid on its own instead of from a balance: as OddsEngine listed it on Nov 27, 2026, $0.02 a scan and $0.015 a check. How an app pays this way is set up with OddsEngine, on [engine.oddsengine.live](https://engine.oddsengine.live/?ref=nomad). Nomad moves a keyless setup as it is: there is no key to keep out, and the destination gets the same address. Nomad's own hosted agents use a key.
+
 ## What moves
 
 - The hosted server, `https://api.oddsengine.live/mcp`, in each destination's own format.
@@ -34,7 +36,7 @@ If the source already kept the key alone in a variable of its own (`Bearer ${MY_
 ## Worth a look
 
 - **Calls cost money.** Every call, the safety checks included, is paid from your OddsEngine balance, and the AI tools cost more per call. Give an agent the key only if you are fine with it spending that balance.
-- **Set the key before you start the app.** OddsEngine refuses calls without a valid key, so the server does not work until `ODDSENGINE_API_KEY` is set. A setup with no key gets a step with the link above.
+- **The key is needed to run a tool, not to connect.** Without a key the server still connects and lists its 11 tools, but OddsEngine refuses each call until `ODDSENGINE_API_KEY` is set (or the call is paid per call, below). A setup with no key gets a step with the link above.
 - **Keys in text.** An OddsEngine key pasted into instructions or notes is removed, like any other secret.
 - **Look-alikes.** Only OddsEngine's own address counts as OddsEngine: `https://api.oddsengine.live/mcp` (or `/mcp/k/...`) over https on the standard port, with no user name in it. Anything else moves as an ordinary server, without OddsEngine's notes.
 

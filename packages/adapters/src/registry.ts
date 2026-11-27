@@ -46,10 +46,15 @@ export interface DetectedPlatform {
 }
 
 /** Look for supported platforms at their default locations (and any extra roots). */
-export async function scanPlatforms(extraRoots: Array<{ adapter: string; root: string }> = []): Promise<DetectedPlatform[]> {
+/**
+ * Finds platforms at their default locations, at any extra roots, and, when `projectDir` is given, the apps whose
+ * setups live inside each project (Cursor, Windsurf, Cline and the like, which have no default location) in that folder.
+ */
+export async function scanPlatforms(extraRoots: Array<{ adapter: string; root: string }> = [], projectDir?: string): Promise<DetectedPlatform[]> {
   const out: DetectedPlatform[] = [];
   const candidates: Array<{ adapter: Adapter; root: string }> = [];
   for (const a of listAdapters()) for (const loc of a.info.defaultLocations) candidates.push({ adapter: a, root: expandHome(loc) });
+  if (projectDir) for (const a of listAdapters()) if (!a.info.defaultLocations.length && a.read) candidates.push({ adapter: a, root: expandHome(projectDir) });
   for (const e of extraRoots) candidates.push({ adapter: getAdapter(e.adapter), root: expandHome(e.root) });
   // Platforms that let users move their state directory with an environment variable.
   if (process.env.OPENCLAW_STATE_DIR) candidates.push({ adapter: getAdapter("openclaw"), root: expandHome(process.env.OPENCLAW_STATE_DIR) });

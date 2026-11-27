@@ -6,18 +6,20 @@ import type { AgentRecord } from "../../apps/web/lib/agents/shared";
 import { validHires } from "../../apps/web/lib/agents/shared";
 import { agentStore } from "../../apps/web/lib/server/agents-store";
 import { runAgent, type RunnerDeps } from "../../apps/web/lib/server/runner";
-import { readAgent, zerolux, type HireResult, type ZeroLuxAgent } from "../../apps/web/lib/server/zerolux";
+import { readAgent, zerolux, ZEROLUX_FACTORIES, type HireResult, type ZeroLuxAgent } from "../../apps/web/lib/server/zerolux";
+import { zeroluxCheck } from "../../apps/web/lib/server/agent-health";
 import { MemoryRedis } from "../../apps/web/lib/redis";
 
 const payer = privateKeyToAccount(`0x${"55".repeat(32)}`);
 const WALLET = getAddress("0x1111111111111111111111111111111111111111");
-const FACTORY4 = getAddress("0x4444444444444444444444444444444444444444");
+// Zero Lux's real v4 factory, which Nomad pins.
+const FACTORY4 = getAddress("0xe645344552bd46BF170D55819850612D22349c0A");
 const OWNER = getAddress("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
 const DOMAIN = { name: "Global Dollar", version: "1", chainId: 4663, verifyingContract: USDG };
 const RECEIVE = { ReceiveWithAuthorization: ["from", "to", "value", "validAfter", "validBefore", "nonce"].map((name, i) => ({ name, type: i < 2 ? "address" : i === 5 ? "bytes32" : "uint256" })) };
 
 /** Zero Lux's API as its source answers (Nov 27, 2026): /api/agents, /api/config and /a/{id}/run. */
-function fakeZeroLux(o: { terms?: (t: Record<string, any>) => Record<string, any>; again?: number; fail?: string; version?: number } = {}) {
+function fakeZeroLux(o: { factory?: string; terms?: (t: Record<string, any>) => Record<string, any>; again?: number; fail?: string; version?: number } = {}) {
   const seen: { path: string; payment: string | null }[] = [];
   let again = o.again ?? 0;
   const agents = [
@@ -30,7 +32,7 @@ function fakeZeroLux(o: { terms?: (t: Record<string, any>) => Record<string, any
     const payment = new Headers(init.headers).get("x-payment");
     seen.push({ path, payment });
     if (path === "/api/agents") return Response.json({ agents });
-    if (path === "/api/config") return Response.json({ factoryByVersion: { 2: null, 3: null, 4: FACTORY4 } });
+    if (path === "/api/config") return Response.json({ factoryByVersion: { 2: null, 3: null, 4: o.factory ?? FACTORY4 } });
     if (path === "/a/15/run") {
       if (!payment) {
         const t = {
@@ -106,6 +108,14 @@ describe("Zero Lux: hiring", () => {
     const g = fakeZeroLux();
     const zl = client(g);
     expect(await zl.hire((await zl.agents())[0], "x", 50_000n)).toMatchObject({ status: "failed", reason: expect.stringMatching(/above this agent's limit/) });
+  });
+
+  it("pays nothing when Zero Lux's API names another factory, even one that vouches for the wallet", async () => {
+    const OTHER = getAddress("0x4444444444444444444444444444444444444444");
+    const f = fakeZeroLux({ factory: OTHER });
+    const zl = zerolux(payer, { fetchImpl: f.fetchImpl, isAgentWallet: async () => true, sleep: async () => undefined });
+    expect(await zl.hire((await zl.agents())[0], "x", 250_000n)).toMatchObject({ status: "failed", reason: expect.stringMatching(/not one of Zero Lux's own/), paid: false });
+    expect(f.seen.some((s) => s.payment)).toBe(false);
   });
 
   it("hands back a slow run as pending, and says when Zero Lux charged nothing", async () => {
@@ -239,5 +249,33 @@ describe("Zero Lux: an agent's run", () => {
     expect(notes.join("\n")).toMatch(/Zero Lux agent Token Brief answered the hire from its last run/);
     expect((await h.store.get("4"))!.pendingHire).toBeUndefined();
     expect((await h.store.notes("4")).map((n) => n.text).join("\n")).toContain("Late answer.");
+  });
+});
+
+describe("Zero Lux: the status check", () => {
+  const cache = () => {
+    const m = new Map<string, unknown>();
+    return { cacheGet: async <T,>(k: string) => (m.get(k) as T) ?? null, cacheSet: async (k: string, v: unknown) => void m.set(k, v) };
+  };
+  const base = (over: Record<string, unknown> = {}) => {
+    const f = fakeZeroLux();
+    const zl = client(f);
+    return {
+      f,
+      d: { enabled: true, payer: payer.address, agents: () => zl.agents(), factories: () => zl.factories(), pinned: ZEROLUX_FACTORIES, isAgentWallet: async (fac: string, w: string) => fac === FACTORY4 && w === WALLET, payerUsdg: async () => 1_000_000n, ...over }
+    };
+  };
+
+  it("says hiring is ready without asking for a run or signing anything", async () => {
+    const { f, d } = base();
+    const r = await zeroluxCheck(cache(), d);
+    expect(r).toMatchObject({ ok: true, spends: "nothing", hireable: 2, walletCheck: { agent: 15, isAgentWallet: true } });
+    expect(f.seen.every((s) => !s.path.startsWith("/a/") && !s.payment)).toBe(true);
+  });
+
+  it("says why when it is not ready: an empty wallet, or a factory Nomad does not pin", async () => {
+    expect(await zeroluxCheck(cache(), base({ payerUsdg: async () => 1_000n }).d)).toMatchObject({ ok: false, detail: expect.stringMatching(/less USDG/) });
+    expect(await zeroluxCheck(cache(), base({ pinned: { 4: getAddress("0x4444444444444444444444444444444444444444") } }).d)).toMatchObject({ ok: false, detail: expect.stringMatching(/does not pin/) });
+    expect(await zeroluxCheck(cache(), { ...base().d, enabled: false })).toMatchObject({ enabled: false });
   });
 });

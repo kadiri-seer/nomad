@@ -82,7 +82,7 @@ export function planText(p: MigrationPlan, verbose: boolean): string[] {
     if (!verbose && p.venin.findings.length > 8) lines.push(dim(`  and ${p.venin.findings.length - 8} more (use --details)`));
   }
   if (p.manualSteps.length) lines.push("", bold("After migration"), ...p.manualSteps.map((s, i) => `  ${i + 1}. ${s}`));
-  const notes = p.notes.filter((n) => verbose || n.level !== "info");
+  const notes = p.notes.filter((n) => verbose || n.level !== "info" || n.brief);
   if (notes.length) lines.push("", bold("Notes"), ...notes.map((n) => `  ${n.level === "error" ? red("x") : n.level === "warning" ? yellow("!") : "-"} ${n.message}`));
   if (p.approvalsRequired.length) lines.push("", red("Approval required: ") + p.approvalsRequired.join(", "));
   if (p.blocked.length) lines.push("", red("Blocked"), ...p.blocked.map((b) => `  ${b}`));
@@ -164,6 +164,8 @@ export function summaryText(p: MigrationPlan): string[] {
   const warns = p.notes.filter((n) => n.level === "warning" && !/cannot tell who made it/.test(n.message));
   for (const n of warns.slice(0, 6)) lines.push(yellow(`Warning: ${n.message}`));
   if (warns.length > 6) lines.push(dim(`  and ${warns.length - 6} more warning${warns.length - 6 === 1 ? "" : "s"} (use --details)`));
+  // Info notes marked brief, such as a key Nomad took out of an address.
+  for (const n of p.notes.filter((n) => n.brief && n.level === "info").slice(0, 4)) lines.push(n.message);
   if (p.source.signer === "unsigned" || p.source.signer === "unknown") lines.push(yellow(p.source.signer === "unsigned" ? "Not signed: Nomad cannot tell who made this package. Move it only if you trust where it came from." : "Signed by a key you have not trusted: Nomad cannot tell who made this package."));
   for (const c of p.commands ?? []) lines.push(yellow(`Starts by itself on ${p.destination.displayName}: "${c.tool}" runs ${c.command}`) + (c.env.length ? dim(` (with ${c.env.join(", ")} set)`) : ""));
   if (p.secrets.findings || p.secrets.strippedEnv.length) {

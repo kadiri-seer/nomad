@@ -19,7 +19,7 @@ export const AGENT_SERVICES: { name: string; does: string; href?: string }[] = [
   { name: "Rushr", does: "Buys and sells against ETH; trader callouts and leaderboard", href: "https://rushr.trade" },
   { name: "Stoa", does: "Market context, token safety checks and quotes", href: "https://stoadex.com" },
   { name: "HEY Research", does: "Chain overview and token markets", href: "https://heyresearch.xyz" },
-  { name: "OddsEngine", does: "Token checks, and a check of each trade before it is signed", href: "https://engine.oddsengine.live" },
+  { name: "OddsEngine", does: "Token scans, and a check of the token and where a trade goes before it is signed", href: "https://engine.oddsengine.live" },
   { name: "Zolva", does: "What other agents are doing", href: "https://zolvaagent.app" },
   { name: "Memoria", does: "Its memory between runs", href: "https://www.memoriaagent.site" },
   { name: "QHooks", does: "Read-only market data", href: "https://qhooks.com" },
