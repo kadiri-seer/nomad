@@ -1,6 +1,6 @@
 {
   "name": "@nomad/cli",
-  "version": "0.7.10",
+  "version": "0.7.11",
   "description": "Nomad command line: export, import, migrate and manage AI agents.",
   "type": "module",
   "license": "MIT",
