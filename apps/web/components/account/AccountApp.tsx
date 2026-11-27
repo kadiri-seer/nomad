@@ -13,6 +13,7 @@ import { MIN_TOPUP_USDG, PRIVY_APP_ID, PAYMASTER, NOMAD, USDG } from "@/lib/acco
 import { AGENTS_CONTRACT } from "@/lib/economy";
 import { AGENT_FEE_BURN_BPS, AGENT_FEE_USD, DEFAULT_RESEARCH, DEFAULT_RUN_EVERY_HOURS, DEFAULT_STOCKS, MAX_STOCK_GAP_PCT, registerMessage, RUN_EVERY_HOURS, STOCK_STOP_LOSS_PCT, STOCK_TAKE_PROFIT_PCT, STOCKS_NOTICE, type Template } from "@/lib/agents/shared";
 import { grantSession, newSalt } from "@/lib/agents/wallet";
+import { betaMessage, CREATE_BETA_ONLY } from "@/lib/agents/beta";
 import { MyAgents } from "./MyAgents";
 import { BountyReview } from "./BountyReview";
 import { CopyButton } from "../CopyButton";
@@ -186,6 +187,18 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
       .then(setMintingOpen)
       .catch(() => setMintingOpen(false));
   }, []);
+  // In the closed beta, only beta testers can create agents while minting is open (lib/agents/beta.ts).
+  const [beta, setBeta] = useState(false);
+  useEffect(() => {
+    if (!CREATE_BETA_ONLY) return;
+    (async () => {
+      const at = Date.now();
+      const signature = await client.owner.signMessage({ message: betaMessage(at) });
+      const r = await fetch("/api/agents/beta", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ signer: client.signer, at, signature }) });
+      if (r.ok) setBeta(!!(await r.json()).beta);
+    })().catch(() => undefined);
+  }, [client]);
+  const canCreate = mintingOpen && (!CREATE_BETA_ONLY || beta);
 
   useEffect(() => {
     retryPendingRegistrations().then((n) => n && setVersion((v) => v + 1));
@@ -247,7 +260,7 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
   return (
     <Shell right={<button type="button" className="acct-quiet" onClick={onSignOut}>Sign out</button>}>
       {view === "create" ? (
-        <Create client={client} bal={bal} usdOf={usdOf} draft={draft} mintingOpen={mintingOpen} onBack={() => (setView("home"), setDraft(null))} onConfirm={setConfirm} />
+        <Create client={client} bal={bal} usdOf={usdOf} draft={draft} mintingOpen={canCreate} onBack={() => (setView("home"), setDraft(null))} onConfirm={setConfirm} />
       ) : (
         <div className="acct-stack">
           <section className="acct-balance" aria-label="Balance">
@@ -282,8 +295,8 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
             <span className="acct-chip">Next step</span>
             <h2 className="acct-h2">Create your first agent</h2>
             <p className="acct-body">Name it, pick what it does and set its limits. It runs by itself in Nomad&apos;s cloud.</p>
-            <button type="button" className="acct-primary" onClick={() => setView("create")} disabled={!mintingOpen}>
-              {mintingOpen ? "Create agent" : "Creating agents opens soon"}
+            <button type="button" className="acct-primary" onClick={() => setView("create")} disabled={!canCreate}>
+              {canCreate ? "Create agent" : "Creating agents opens soon"}
             </button>
           </section>
 

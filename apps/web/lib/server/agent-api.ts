@@ -18,6 +18,8 @@ import { idlexPayer, runnerSecret, sessionSigner } from "./runner-keys";
 import { buildCandidates, buildStockCandidates, type RunnerDeps } from "./runner";
 import { stoa } from "./stoa";
 import { zerolux, ZEROLUX_FACTORY_ABI } from "./zerolux";
+import { isBetaTester } from "./beta";
+import { CREATE_BETA_ONLY } from "../agents/beta";
 import { bountyEnv } from "./bounty-env";
 
 export class AgentApiError extends Error {
@@ -180,6 +182,8 @@ export async function checkRegistration(env: NonNullable<ReturnType<typeof agent
   const signed = typeof b.signature === "string" && (await verifyMessage({ address: signer, message: registerMessage(b.mintTx, BigInt(b.salt).toString()), signature: b.signature as Hex }).catch(() => false));
   if (!signed) throw new AgentApiError(403, "Only the agent's creator can register it.");
   const owner = await mainAccountOf(signer);
+  // In the closed beta the site lets only beta testers create agents; this refuses anyone who went around it.
+  if (CREATE_BETA_ONLY && !isBetaTester([signer, owner])) throw new AgentApiError(403, "Creating agents is in a closed beta right now.");
   const { address: account } = await expectedAgentWallet(signer, BigInt(b.salt));
   const pkg = agentPackage({ name, template, perTradeUsd: String(b.perTradeUsd), tradesPerDay: Number(b.tradesPerDay), ...(instructions ? { instructions } : {}), wallet: account });
 
