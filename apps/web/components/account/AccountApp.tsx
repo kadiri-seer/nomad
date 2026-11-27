@@ -325,7 +325,7 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
 
           <section className="acct-card">
             <h2 className="acct-h3">Your account</h2>
-            <p className="acct-body">Only you control it, through the key Privy keeps for your Google sign-in. Nomad cannot take your funds: its runner can only trade inside your agents&apos; wallets, within their limits.</p>
+            <p className="acct-body">Only you control it, through the key Privy keeps for your Google sign-in. Nomad&apos;s runner has no key to it: its keys reach only your agents&apos; wallets, where it trades within your limits.</p>
             <button type="button" className="acct-secondary" onClick={() => setSheet("key")}>Back up your key</button>
           </section>
         </div>
@@ -513,8 +513,8 @@ function Create({ client, bal, usdOf, draft, mintingOpen, onBack, onConfirm }: {
         ["Network fee", "Included"]
       ],
       note: researcher
-        ? "It never trades: each run it researches and writes you a report. Like every agent it has its own wallet with Nomad's limited runner key (Stoa swaps only), which a Researcher never uses. Pause it any time."
-        : "Nomad's runner gets a key that can only approve tokens and swap on Stoa from this agent's wallet, within its limits. You stay its owner: withdraw or pause any time.",
+        ? "It never trades: each run it researches and writes you a report. Like every agent it has its own wallet with Nomad's runner key (token approvals and Stoa swaps only), which a Researcher never uses. Pause it any time."
+        : "Nomad's runner gets a key for this agent's wallet that can only approve tokens and call Stoa's swap, and its code keeps every trade within your limits. Keep in it only what it should trade. You stay its owner: withdraw or pause any time.",
       build: async () => {
         const agentClient = await accountClient(client.owner, salt, client.getToken);
         if (agentClient.account.address.toLowerCase() !== sj.account!.toLowerCase()) throw new Error("The agent's wallet did not match. Nothing was sent.");
@@ -823,7 +823,7 @@ function Approve({ client, confirm, onClose, onHome }: { client: Client; confirm
                 {state === "sending" ? "Approving" : state === "error" ? "Try again" : "Approve"}
               </button>
             </div>
-            <p className="acct-small" style={{ textAlign: "center" }}>Signed in with Google · your key never leaves your account</p>
+            <p className="acct-small" style={{ textAlign: "center" }}>Signed in with Google · Privy keeps your key, Nomad never sees it</p>
           </>
         )}
       </section>

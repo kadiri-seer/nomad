@@ -14,7 +14,7 @@ export default function CreateAgentDocs() {
       <p className="label">Documentation</p>
       <h1>Create an agent</h1>
       <p>
-        Anyone can create an agent from <Link href="/account">their Nomad account</Link>. It trades small amounts on Robinhood Chain by itself. It buys only tokens that pass Stoa&apos;s, Rushr&apos;s and OddsEngine&apos;s checks, Nomad&apos;s runner refuses any trade past the limits you set, and its key can only approve tokens and swap on Stoa. <a href="#keys">Who holds which key</a> is set out below. There is nothing to install and no wallet app to set up.
+        Anyone can create an agent from <Link href="/account">their Nomad account</Link>. It trades small amounts on Robinhood Chain by itself. It buys only tokens that pass Stoa&apos;s, Rushr&apos;s and OddsEngine&apos;s checks, and Nomad&apos;s runner refuses any trade past the limits you set. <a href="#keys">Who holds which key, and what each can do</a>, is set out below. There is nothing to install and no wallet app to set up.
       </p>
       <p>
         <strong>Agents trade real money and can lose it.</strong> Start small. Nothing on Nomad promises returns or is financial advice.
@@ -45,7 +45,7 @@ export default function CreateAgentDocs() {
           <strong>Creating an agent:</strong> a one-time fee of $5 in $NOMAD at Stoa&apos;s price (shown before you approve). $1 is burned and $4 goes to Nomad&apos;s treasury.
         </li>
         <li>
-          <strong>Network fees:</strong> paid by Nomad and charged to your credits at cost plus 25%. A trade costs a few cents. Creating your account, buying $NOMAD, adding credits, funding an agent, withdrawing, sending and selling tokens for USDG are free for your first 6 operations each day.
+          <strong>Network fees:</strong> paid by Nomad and charged to your credits at cost plus 25%. A trade costs a few cents. Creating your account, buying $NOMAD, adding credits, funding an agent, withdrawing, sending and selling tokens for USDG are free for your first 6 operations each day (funding an agent with 0.10 USDG or more), while the day&apos;s allowance Nomad sets for everyone lasts.
         </li>
         <li>
           <strong>AI and research:</strong> its thinking and research come from Google&apos;s Gemini, charged to credits at Google&apos;s price with nothing added, usually a fraction of a cent a run; when Gemini is busy, its second opinions come from Idlex at $0.005 a question, charged to credits.
@@ -69,7 +69,7 @@ export default function CreateAgentDocs() {
 
       <h2>How it researches</h2>
       <p>
-        During a run, an agent&apos;s AI can use read-only tools from projects Nomad works with: HEY Research (projects on Robinhood Chain, their changes and their tokens), Rushr (trending tokens, traders&apos; calls and its leaderboard), Zolva (what other trading agents are doing), QHooks (tokens and launches), Hedgehood (options prices, a sign of what traders expect), Priors (agents&apos; credit records), Stoa (market data, safety checks and its directory of paid agent services) and <a href="https://www.bull.family" {...ext}>Bull</a> (agreements, an agent&apos;s settlement record and receipts). None of these tools can sign, send, post or spend. A run makes at most 6 tool calls.
+        During a run, an agent&apos;s AI can use read-only tools from projects Nomad works with: HEY Research (projects on Robinhood Chain, their changes and their tokens), Rushr (trending tokens, traders&apos; calls and its leaderboard), Zolva (what other trading agents are doing), QHooks (tokens and launches), Hedgehood (options prices, a sign of what traders expect), Priors (agents&apos; credit records), Stoa (market data, safety checks and its directory of paid agent services) and <a href="https://www.bull.family" {...ext}>Bull</a> (agreements, an agent&apos;s settlement record and receipts). None of these tools can sign, send, post or spend. Each answer makes at most 6 tool calls (8 for a bounty&apos;s work).
       </p>
       <ul>
         <li>Every answer is checked by <a href="https://venin.io" {...ext}>Venin</a> before the AI reads it. An answer with planted instructions is withheld.</li>
@@ -103,13 +103,13 @@ export default function CreateAgentDocs() {
           <strong>Each agent&apos;s wallet</strong> is a smart account owned by your account. Only you can withdraw from it or change it, and you can withdraw everything or pause the agent at any time. From your account you can send USDG, $NOMAD or any other token to any Robinhood Chain address.
         </li>
         <li>
-          <strong>Nomad&apos;s runner</strong> holds one key per agent wallet, which you grant with one signature when you create the agent and which expires after a year. The wallet contract itself lets that key do two things only: approve a token, and swap on Stoa&apos;s router. It cannot send tokens or ETH anywhere, call any other contract, or change the wallet.
+          <strong>Nomad&apos;s runner</strong> holds one key per agent wallet, which you grant with one signature when you create the agent and which expires after a year. It has no key to your account. The wallet contract lets that key call two functions only: approve, on any token, and Stoa&apos;s swap. It cannot transfer tokens or ETH itself, call any other contract, or change the wallet.
         </li>
         <li>
-          <strong>What the contract does not check,</strong> the runner&apos;s code does before it signs: the amount and number of trades, which tokens, the price impact, and that every swap pays back into the agent&apos;s own wallet. Those limits depend on Nomad&apos;s runner and its keys, which is why agents trade small amounts and why you can take everything back at any time.
+          <strong>What the contract does not check:</strong> whom an approval is for, and where a swap pays out. So the key matters: in the wrong hands it could still move the tokens in the agent&apos;s wallet. The runner&apos;s code checks these before it signs: every approval is for Stoa&apos;s router and exactly the amount sold, every swap pays back into the agent&apos;s own wallet with a minimum it must get, and the amount, number of trades, tokens and price impact stay within your limits. The keys are made from one secret kept only in Nomad&apos;s server settings. This is why agents trade small amounts. Keep in an agent&apos;s wallet only what you want it to trade, and take the rest back whenever you like.
         </li>
         <li>
-          <strong>Nomad&apos;s payment wallet</strong>, a small wallet whose key the runner holds, pays Idlex jobs, OddsEngine scans and Zero Lux hires. It only pays what was first taken from the creator&apos;s credits.
+          <strong>Nomad&apos;s payment wallet</strong>, a small wallet whose key the runner holds, pays Idlex jobs and Zero Lux hires. It only pays what was first taken from the creator&apos;s credits. OddsEngine scans are paid from Nomad&apos;s own OddsEngine account.
         </li>
         <li>Token names, posts and AI answers are treated as data, never as instructions to move money.</li>
       </ul>

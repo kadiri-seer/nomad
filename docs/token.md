@@ -1,20 +1,20 @@
 # Token and builder bounties
 
-$NOMAD funds Nomad's development: the reward wallet pays the builders who add new integrations, and the token pays for minting agents.
+$NOMAD funds Nomad's development: the treasury pays the builders who add new integrations, and the token pays for minting agents.
 
 ## Token details
 
 - **Ticker:** $NOMAD
 - **Network:** Robinhood Chain
 - **Contract address:** `0x14c0a77e792f6c9818888630e95c50cf3b48c979` ([explorer](https://robinhoodchain.blockscout.com/token/0x14c0a77e792f6c9818888630e95c50cf3b48c979), [chart](https://dexscreener.com/robinhood/0x14c0a77e792f6c9818888630e95c50cf3b48c979))
-- **Reward wallet:** `0xe4862B7605f0CD66796F5d1A9cC936462642b515` ([explorer](https://robinhoodchain.blockscout.com/address/0xe4862B7605f0CD66796F5d1A9cC936462642b515))
+- **Treasury:** `0xe4862B7605f0CD66796F5d1A9cC936462642b515` ([explorer](https://robinhoodchain.blockscout.com/address/0xe4862B7605f0CD66796F5d1A9cC936462642b515))
 
 Check the contract address against this page before you buy. Tokens with the same name and a different address are not Nomad's.
 
 ## How it works
 
 1. **Integration suggestions.** Anyone can suggest a new agent platform or tool for Nomad to support.
-2. **Builder bounties.** Nomad picks the integrations it wants next and posts a bounty for each, paid in $NOMAD from the reward wallet.
+2. **Builder bounties.** Nomad picks the integrations it wants next and posts a bounty for each, paid in $NOMAD from the treasury.
 3. **Verification.** Builders submit the integration as a pull request. It is reviewed and must pass Nomad's adapter contract tests and security checks before it is merged.
 4. **Payout.** Once the integration is merged and verified, the builder receives the bounty.
 5. **Ecosystem expansion.** Each completed integration makes Nomad useful to more agent builders and users, which brings more suggestions and more work for the community.
@@ -23,7 +23,7 @@ Check the contract address against this page before you buy. Tokens with the sam
 
 1. The community suggests integrations.
 2. Nomad picks the next one.
-3. The reward wallet funds a builder bounty for it.
+3. The treasury funds a builder bounty for it.
 4. Builders develop the integration and pass the tests.
 5. Verified integrations expand what Nomad can move.
 6. More integrations bring more users, more builders and more suggestions.
@@ -36,17 +36,17 @@ Use the [suggestion form](https://github.com/kadiri-seer/nomad/issues/new?templa
 
 ### Check the payouts
 
-Every bounty payment is sent from the reward wallet and linked on its [bounty issue](https://github.com/kadiri-seer/nomad/issues?q=is%3Aissue+in%3Atitle+%22%5BBounty%5D%22), so anyone can confirm who was paid and how much. The [holders list](https://robinhoodchain.blockscout.com/token/0x14c0a77e792f6c9818888630e95c50cf3b48c979?tab=holders) is public on the explorer too.
+Every bounty payment comes from the treasury, directly or through Bull's escrow, and is linked on its [bounty issue](https://github.com/kadiri-seer/nomad/issues?q=is%3Aissue+in%3Atitle+%22%5BBounty%5D%22), so anyone can confirm who was paid and how much. The [holders list](https://robinhoodchain.blockscout.com/token/0x14c0a77e792f6c9818888630e95c50cf3b48c979?tab=holders) is public on the explorer too.
 
-## The reward wallet
+## The treasury
 
-Bounties are paid from a Safe multisig on Robinhood Chain. Sending from it needs two approvals, so no single key can move the funds. Each bounty is funded when it is posted: its amount is moved into the reward wallet and the deposit is linked on the bounty issue. The amount of every bounty is stated when it is posted.
+Bounties are paid from Nomad's treasury on Robinhood Chain: one wallet with one key, not a multisig. It also receives mint fees and credit top-ups, and anyone can see its balance and every payment on the explorer. The amount of every bounty is stated when it is posted.
 
 ## Fees, buybacks and burns
 
 $NOMAD also pays for [minting an agent](https://www.thenomad.website/agents) and for copies of minted agents (see [the economy](economy.md)). Part of each mint fee, and part of Nomad's share of each copy, is burned: sent to the dead address, `0x000000000000000000000000000000000000dEaD`, where no one can move it again. The rest goes to the treasury, and a copy's price minus Nomad's share goes to the agent's owner.
 
-When finances permit, the treasury may buy $NOMAD and burn it. Each buyback and burn is sent from the Safe and shown with its transaction on the [economy page](https://www.thenomad.website/economy), together with the treasury, revenue and Nomad AI's running costs.
+When finances permit, the treasury may buy $NOMAD and burn it. Each buyback and burn is sent from the treasury and shown with its transaction on the [economy page](https://www.thenomad.website/economy), together with the treasury, revenue and Nomad AI's running costs.
 
 ## What the token does not include
 

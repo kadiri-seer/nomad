@@ -8,9 +8,9 @@ export default function Security() {
       <h1>Security model</h1>
       <p>Nomad touches the most sensitive parts of an agent: its credentials, its permissions and files you have tuned by hand. These are the rules it follows.</p>
 
-      <h2>Local first</h2>
+      <h2>The app is local first</h2>
       <p>
-        All reading, writing, packaging, backups and history happen on your machine. There is no account and no server. The web interface runs on <code>127.0.0.1</code>, requires a session token issued by <code>nomad ui</code>, rejects requests whose Host or Origin is not local (which blocks DNS rebinding and cross site requests), and is not reachable from other machines. The public website exposes no file access at all; its inspector reads packages inside your browser.
+        When you move agents between apps, all reading, writing, packaging, backups and history happen on your machine. The Nomad app needs no account and sends nothing to a server. The web interface runs on <code>127.0.0.1</code>, requires a session token issued by <code>nomad ui</code>, rejects requests whose Host or Origin is not local (which blocks DNS rebinding and cross site requests), and is not reachable from other machines. The public website exposes no file access at all; its inspector reads packages inside your browser. Agents you create on the website are different: they run on Nomad&apos;s servers, and <a href="/docs/agents#keys">who holds which key</a> is set out in their docs.
       </p>
 
       <h2>Secrets</h2>

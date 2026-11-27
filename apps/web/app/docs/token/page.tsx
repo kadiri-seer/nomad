@@ -13,7 +13,7 @@ const BOUNTIES_URL = `${REPO_URL}/issues?q=is%3Aissue+in%3Atitle+%22%5BBounty%5D
 const FLYWHEEL = [
   "The community suggests integrations.",
   "Nomad picks the next one.",
-  "The reward wallet funds a builder bounty for it.",
+  "The treasury funds a builder bounty for it.",
   "Builders develop the integration and pass the tests.",
   "Verified integrations expand what Nomad can move.",
   "More integrations bring more users, more builders and more suggestions."
@@ -25,7 +25,7 @@ export default function Token() {
       <p className="label">Documentation</p>
       <h1>Token and builder bounties</h1>
       <p>
-        {TOKEN_TICKER} funds Nomad&apos;s development: the reward wallet pays the builders who add new integrations, and the token pays for minting agents.
+        {TOKEN_TICKER} funds Nomad&apos;s development: the treasury pays the builders who add new integrations, and the token pays for minting agents.
       </p>
 
       <h2>Token details</h2>
@@ -40,7 +40,7 @@ export default function Token() {
           <strong>Contract address:</strong> <code className="break">{TOKEN_CA}</code> (<a href={TOKEN_EXPLORER_URL}>explorer</a>, <a href={TOKEN_CHART_URL}>chart</a>)
         </li>
         <li>
-          <strong>Reward wallet:</strong> <code className="break">{REWARD_SAFE}</code> (<a href={REWARD_SAFE_URL}>explorer</a>)
+          <strong>Treasury:</strong> <code className="break">{REWARD_SAFE}</code> (<a href={REWARD_SAFE_URL}>explorer</a>)
         </li>
       </ul>
       <p>Check the contract address against this page before you buy. Tokens with the same name and a different address are not Nomad&apos;s.</p>
@@ -51,7 +51,7 @@ export default function Token() {
           <strong>Integration suggestions.</strong> Anyone can suggest a new agent platform or tool for Nomad to support.
         </li>
         <li>
-          <strong>Builder bounties.</strong> Nomad picks the integrations it wants next and posts a bounty for each, paid in {TOKEN_TICKER} from the reward wallet.
+          <strong>Builder bounties.</strong> Nomad picks the integrations it wants next and posts a bounty for each, paid in {TOKEN_TICKER} from the treasury.
         </li>
         <li>
           <strong>Verification.</strong> Builders submit the integration as a pull request. It is reviewed and must pass Nomad&apos;s adapter contract tests and security checks before it is merged.
@@ -79,12 +79,12 @@ export default function Token() {
       </p>
       <h3>Check the payouts</h3>
       <p>
-        Every bounty payment is sent from the <a href={REWARD_SAFE_URL}>reward wallet</a> and linked on its <a href={BOUNTIES_URL}>bounty issue</a>, so anyone can confirm who was paid and how much. The <a href={TOKEN_HOLDERS_URL}>holders list</a> is public on the explorer too.
+        Every bounty payment comes from the <a href={REWARD_SAFE_URL}>treasury</a>, directly or through Bull&apos;s escrow, and is linked on its <a href={BOUNTIES_URL}>bounty issue</a>, so anyone can confirm who was paid and how much. The <a href={TOKEN_HOLDERS_URL}>holders list</a> is public on the explorer too.
       </p>
 
-      <h2>The reward wallet</h2>
+      <h2>The treasury</h2>
       <p>
-        Bounties are paid from a Safe multisig on {TOKEN_CHAIN}. Sending from it needs two approvals, so no single key can move the funds. Each bounty is funded when it is posted: its amount is moved into the reward wallet and the deposit is linked on the bounty issue. The amount of every bounty is stated when it is posted.
+        Bounties are paid from Nomad&apos;s treasury on {TOKEN_CHAIN}: one wallet with one key, not a multisig. It also receives mint fees and credit top-ups, and anyone can see its balance and every payment on the explorer. The amount of every bounty is stated when it is posted.
       </p>
 
       <h2>Fees, buybacks and burns</h2>
@@ -92,7 +92,7 @@ export default function Token() {
         {TOKEN_TICKER} also pays for <Link href="/agents">minting an agent</Link> and for copies of minted agents. Part of each mint fee, and part of Nomad&apos;s share of each copy, is burned: sent to the dead address, where no one can move it again. The rest goes to the treasury, and a copy&apos;s price minus Nomad&apos;s share goes to the agent&apos;s owner.
       </p>
       <p>
-        When finances permit, the treasury may buy {TOKEN_TICKER} and burn it. Each buyback and burn is sent from the Safe and shown with its transaction on the <Link href="/economy">economy page</Link>, together with the treasury, revenue and Nomad AI&apos;s running costs.
+        When finances permit, the treasury may buy {TOKEN_TICKER} and burn it. Each buyback and burn is sent from the treasury and shown with its transaction on the <Link href="/economy">economy page</Link>, together with the treasury, revenue and Nomad AI&apos;s running costs.
       </p>
 
       <h2>What the token does not include</h2>

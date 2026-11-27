@@ -27,8 +27,10 @@ How money moves around Nomad, and where each part can be checked. The live numbe
 
 ## Treasury actions
 
-Nothing is sent from a script. `scripts/economy/safe-batch.mjs` writes a batch file for the Safe's Transaction
-Builder; you load it in the Safe, check it and sign it with two approvals.
+Nothing is sent from a script. The treasury (`0xe4862B7605f0CD66796F5d1A9cC936462642b515`) is one wallet with one
+key, not a Safe: treasury actions are sent from that wallet, for example from Blockscout's Write contract tab or the
+bounty lock page. `scripts/economy/safe-batch.mjs` writes batch files for a Safe's Transaction Builder and only
+applies if the treasury moves to a Safe.
 
 | Action | Command |
 | --- | --- |
@@ -39,8 +41,7 @@ Builder; you load it in the Safe, check it and sign it with two approvals.
 | Change the copy share | `node scripts/economy/safe-batch.mjs platform 0xNomadAgents 10 50` |
 | Record a buyback | `node scripts/economy/safe-batch.mjs record-buyback --date 2026-12-01 --spent "500 USDG" --bought "1200000 $NOMAD" --tx 0x... --burn-tx 0x...` |
 
-A buyback is two steps from the Safe: buy $NOMAD (with the Safe's swap feature, or a swap app connected to the Safe),
-then burn what was bought with a burn batch. Then record it with `record-buyback`, commit `governance/economy.json`
+A buyback is two steps from the treasury: buy $NOMAD with a swap app, then send what was bought to the burn address. Then record it with `record-buyback`, commit `governance/economy.json`
 and push: the economy page lists only buybacks that link their own transaction.
 
 ## Where to check

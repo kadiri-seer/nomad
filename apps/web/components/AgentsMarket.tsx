@@ -279,7 +279,7 @@ function MintForm({ account, contract, settings, onDone }: { account: string | n
               <input type="radio" name="delivery" checked={delivery === "encrypted"} onChange={() => setDelivery("encrypted")} />
               <span>
                 Encrypted, only for wallets with a copy
-                <span className="muted"> The file is encrypted on this computer and stored on IPFS. Only you, the agent&apos;s owner and wallets with a copy can download and open it. Up to 4 MB.</span>
+                <span className="muted"> The file is encrypted on this computer and stored on IPFS. Nomad keeps its key and gives it only to you, the agent&apos;s owner and wallets with a copy. Up to 4 MB.</span>
               </span>
             </label>
             <label className="mint-radio">

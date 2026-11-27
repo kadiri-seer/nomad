@@ -10,7 +10,7 @@ The contract behind minted Nomad agents on Robinhood Chain (`src/NomadAgents.sol
   and treasury. The contract records who has a copy.
 - **No funds held.** Every payment goes straight from the payer to its destination. The contract never holds
   tokens or ETH.
-- **Limits fixed at deployment.** The owner (Nomad's Safe) can change the mint fee only up to `maxMintFee`, set at
+- **Limits fixed at deployment.** The owner (Nomad's treasury wallet) can change the mint fee only up to `maxMintFee`, set at
   deployment, and the platform share only up to 20%. It can open or close minting and change the treasury address.
   It cannot change, move or remove anyone's agent or take anyone's tokens. Ownership moves in two steps and cannot
   be given up.
@@ -23,13 +23,13 @@ The contract has not had an outside audit.
 
 | Setting | Default | Can change later |
 | --- | --- | --- |
-| Owner and treasury | Nomad's Safe, `0xe4862B7605f0CD66796F5d1A9cC936462642b515` | Treasury: yes. Owner: two-step transfer |
+| Owner and treasury | Nomad's treasury wallet (one key), `0xe4862B7605f0CD66796F5d1A9cC936462642b515` | Treasury: yes. Owner: two-step transfer |
 | Mint fee | 142,000 $NOMAD ($4.98 on Nov 23, 2026) | Yes, up to the maximum |
 | Maximum mint fee | 10,000,000 $NOMAD | No |
 | Share of the mint fee burned | 50% | Yes |
 | Platform share of a copy's price | 10% | Yes, up to 20% |
 | Share of the platform share burned | 50% | Yes |
-| Minting | Closed | The Safe opens it |
+| Minting | Closed at deployment (open now) | The owner opens it |
 
 ## Build and test
 
@@ -54,19 +54,19 @@ node nomad/contracts/deploy.mjs
 ```
 
 1. The script makes a fresh deployer wallet (kept in `~/.nomad-deploy`, outside the repo) and asks for 0.0055 ETH on
-   Robinhood Chain. It deploys both contracts, owned by Nomad's Safe; minting starts closed. It makes the paymaster's
+   Robinhood Chain. It deploys both contracts, owned by Nomad's treasury wallet; minting starts closed. It makes the paymaster's
    signer key and sends it to Vercel (`vercel env add`, sensitive) together with `NEXT_PUBLIC_AGENTS_CONTRACT`,
    `NEXT_PUBLIC_NOMAD_PAYMASTER`, `NEXT_PUBLIC_PRIVY_APP_ID` and `ALCHEMY_RPC_URL` (asked for, hidden). The key is
    never printed and is removed from disk once Vercel has it. Then it funds the deposit (0.005 ETH) and sends what is
-   left back to the Safe. Run it again to pick up where it stopped.
+   left back to the treasury. Run it again to pick up where it stopped.
 2. Verify both on the explorer: on each contract's Blockscout page, choose "Solidity (Standard JSON input)", compiler
    v0.8.28, and upload `artifacts/NomadAgents.standard-input.json` or `artifacts/NomadPaymaster.standard-input.json`. The page shows the constructor arguments to
    paste.
 3. Redeploy the site so it picks up the new settings.
 4. For encrypted paid copies, set `FILEBASE_IPFS_TOKEN` in Vercel to a Filebase IPFS RPC API key (the same kind
    of key Upoch uses) and redeploy. Without it, creators can still mint with a public link.
-5. When you are ready, open minting from the Safe: `node scripts/economy/safe-batch.mjs open-minting` writes a
-   batch for the Safe's Transaction Builder (two approvals).
+5. When you are ready, open minting from the treasury wallet: `setMintingOpen(true)` on the contract's Blockscout
+   page (Write contract).
 
 ## NomadPaymaster
 
@@ -79,7 +79,7 @@ margin, so the treasury is repaid. Users never need ETH.
   and expires within minutes. A wrong, reused or expired signature pays nothing.
 - **A ceiling per operation.** `maxCostPerOp`, fixed at deployment, caps what any one operation can cost.
 - **Money leaves only to the treasury.** The deposit and any stake can be withdrawn to the treasury and nowhere else,
-  only by the owner (Nomad's Safe). Renouncing ownership is disabled.
+  only by the owner (Nomad's treasury wallet). Renouncing ownership is disabled.
 - **Small on purpose.** As an unstaked paymaster must be, it reads no storage while validating. If the signing key ever
   leaked, the most it could cost is the deposit, which is kept small; the owner withdraws it and deploys a new one.
 
@@ -87,7 +87,7 @@ margin, so the treasury is repaid. Users never need ETH.
 | --- | --- |
 | EntryPoint | v0.7 on Robinhood Chain |
 | Signer | Nomad's server key (kept as a secret on the server, never in the repo) |
-| Treasury | Nomad's Safe |
+| Treasury | Nomad's treasury wallet |
 | maxCostPerOp | 0.0005 ETH suggested (about 100 times a typical trade's gas today) |
 
 Deployed with `contracts/deploy.mjs`, together with NomadAgents (see Deploy above). `/account` opens once the site has
@@ -119,4 +119,4 @@ checks the workflow's GitHub OpenID Connect token, so no secret is stored on Git
   creator's credits. Network fees are charged to credits by the paymaster.
 - **Switch on.** `node nomad/contracts/setup-runner.mjs` makes `AGENT_RUNNER_SECRET` and adds it to Vercel (every
   session key and the Idlex payer wallet come from it; it is never printed). Fund the Idlex wallet it prints with a
-  few USDG, redeploy, then open minting from the Safe.
+  few USDG, redeploy, then open minting from the treasury wallet.

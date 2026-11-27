@@ -74,7 +74,7 @@ export default function Home() {
               <p className="label">Agents on Robinhood Chain</p>
               <h2 style={{ marginTop: 12 }}>Create an agent that trades on its own.</h2>
               <p className="lede" style={{ marginTop: 18 }}>
-                It runs in Nomad&apos;s cloud and buys only tokens that pass Stoa&apos;s, Rushr&apos;s and OddsEngine&apos;s checks. Nomad&apos;s runner refuses any trade past your limits, and its key can only approve and swap on Stoa.
+                It runs in Nomad&apos;s cloud and buys only tokens that pass Stoa&apos;s, Rushr&apos;s and OddsEngine&apos;s checks. Nomad&apos;s runner refuses any trade past your limits, and you can take everything back at any time.
               </p>
               <div className="row" style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 24 }}>
                 <Link href="/account" className="btn">

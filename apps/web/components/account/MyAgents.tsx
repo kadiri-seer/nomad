@@ -366,7 +366,7 @@ function Instructions({ client, agent }: { client: Client; agent: AgentView }) {
         <span>Instructions</span>
         <textarea value={text} rows={5} maxLength={4000} placeholder={agent.template === "researcher" ? DEFAULT_RESEARCH : agent.template === "stocks" ? DEFAULT_STOCKS : undefined} onChange={(e) => (setText(e.target.value), setSaved(false))} />
       </label>
-      <p className="acct-small">Only you can see these. Venin checks them before they are saved, and they never change the agent&apos;s limits.</p>
+      <p className="acct-small">Only you can see these here. Nomad keeps them and gives them to the agent&apos;s AI each run. Venin checks them before they are saved, and they never change the agent&apos;s limits.</p>
       <button type="button" className="acct-primary" onClick={save} disabled={busy || saved}>
         {saved ? "Saved" : busy ? "Saving..." : "Save instructions"}
       </button>
