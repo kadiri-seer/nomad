@@ -24,7 +24,7 @@ export type EconomyWallet = { id: string; name: string; role: string; group: "tr
 
 /** Every wallet the economy page follows, in the order it shows them. */
 export const ECONOMY_WALLETS: EconomyWallet[] = [
-  { id: "treasury", name: "Treasury", role: "One wallet with one key. Pays builder bounties and receives mint fees and credit top-ups.", group: "treasury", address: REWARD_SAFE },
+  { id: "treasury", name: "Treasury", role: "Pays builder bounties and receives mint fees and credit top-ups.", group: "treasury", address: REWARD_SAFE },
   { id: "referral", name: "QHooks referral wallet", role: "Receives Nomad's share of QHooks fees on trades routed through Nomad.", group: "revenue", address: "0xD4bA760227cdDCD879c9d05Fbd908eb69b50dD7c" },
   ...AGENT_WALLETS.map((w) => ({ id: `ai-${w.id}`, name: `Nomad AI: ${w.name}`, role: w.role, group: "operating" as const, address: w.address }))
 ];

@@ -84,7 +84,7 @@ export default function Token() {
 
       <h2>The treasury</h2>
       <p>
-        Bounties are paid from Nomad&apos;s treasury on {TOKEN_CHAIN}: one wallet with one key, not a multisig. It also receives mint fees and credit top-ups, and anyone can see its balance and every payment on the explorer. The amount of every bounty is stated when it is posted.
+        Bounties are paid from Nomad&apos;s treasury on {TOKEN_CHAIN}. The amount of every bounty is stated when it is posted.
       </p>
 
       <h2>Fees, buybacks and burns</h2>

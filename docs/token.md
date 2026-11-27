@@ -40,7 +40,7 @@ Every bounty payment comes from the treasury, directly or through Bull's escrow,
 
 ## The treasury
 
-Bounties are paid from Nomad's treasury on Robinhood Chain: one wallet with one key, not a multisig. It also receives mint fees and credit top-ups, and anyone can see its balance and every payment on the explorer. The amount of every bounty is stated when it is posted.
+Bounties are paid from Nomad's treasury on Robinhood Chain. The amount of every bounty is stated when it is posted.
 
 ## Fees, buybacks and burns
 

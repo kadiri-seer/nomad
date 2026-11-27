@@ -4,7 +4,7 @@ export const TOKEN_TICKER = "$NOMAD";
 export const TOKEN_CHAIN = "Robinhood Chain";
 export const TOKEN_CA = "0x14c0a77e792f6c9818888630e95c50cf3b48c979";
 
-/** Nomad's treasury, which pays builder rewards: one wallet with one key, not a multisig. */
+/** Nomad's treasury, which pays builder rewards. */
 export const REWARD_SAFE = "0xe4862B7605f0CD66796F5d1A9cC936462642b515";
 
 export const EXPLORER = "https://robinhoodchain.blockscout.com";

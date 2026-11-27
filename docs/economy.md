@@ -27,10 +27,9 @@ How money moves around Nomad, and where each part can be checked. The live numbe
 
 ## Treasury actions
 
-Nothing is sent from a script. The treasury (`0xe4862B7605f0CD66796F5d1A9cC936462642b515`) is one wallet with one
-key, not a Safe: treasury actions are sent from that wallet, for example from Blockscout's Write contract tab or the
-bounty lock page. `scripts/economy/safe-batch.mjs` writes batch files for a Safe's Transaction Builder and only
-applies if the treasury moves to a Safe.
+Nothing is sent from a script. Treasury actions are sent from the treasury wallet
+(`0xe4862B7605f0CD66796F5d1A9cC936462642b515`), for example from Blockscout's Write contract tab or the bounty lock
+page.
 
 | Action | Command |
 | --- | --- |

@@ -23,7 +23,7 @@ The contract has not had an outside audit.
 
 | Setting | Default | Can change later |
 | --- | --- | --- |
-| Owner and treasury | Nomad's treasury wallet (one key), `0xe4862B7605f0CD66796F5d1A9cC936462642b515` | Treasury: yes. Owner: two-step transfer |
+| Owner and treasury | Nomad's treasury wallet, `0xe4862B7605f0CD66796F5d1A9cC936462642b515` | Treasury: yes. Owner: two-step transfer |
 | Mint fee | 142,000 $NOMAD ($4.98 on Nov 23, 2026) | Yes, up to the maximum |
 | Maximum mint fee | 10,000,000 $NOMAD | No |
 | Share of the mint fee burned | 50% | Yes |
