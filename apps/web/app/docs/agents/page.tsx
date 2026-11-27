@@ -14,7 +14,7 @@ export default function CreateAgentDocs() {
       <p className="label">Documentation</p>
       <h1>Create an agent</h1>
       <p>
-        Anyone can create an agent from <Link href="/account">their Nomad account</Link>. It trades small amounts on Robinhood Chain by itself, checks every token for safety first, and never goes past the limits you set. There is nothing to install and no wallet app to set up.
+        Anyone can create an agent from <Link href="/account">their Nomad account</Link>. It trades small amounts on Robinhood Chain by itself. It buys only tokens that pass Stoa&apos;s, Rushr&apos;s and OddsEngine&apos;s checks, Nomad&apos;s runner refuses any trade past the limits you set, and its key can only approve tokens and swap on Stoa. <a href="#keys">Who holds which key</a> is set out below. There is nothing to install and no wallet app to set up.
       </p>
       <p>
         <strong>Agents trade real money and can lose it.</strong> Start small. Nothing on Nomad promises returns or is financial advice.
@@ -23,7 +23,7 @@ export default function CreateAgentDocs() {
       <h2>Getting started</h2>
       <ol>
         <li>
-          <strong>Sign in with Google</strong> at <Link href="/account">thenomad.website/account</Link>. Your account on Robinhood Chain is made for you; you never need ETH, because Nomad pays the network fees and charges them to your credits.
+          <strong>Sign in with Google</strong> at <Link href="/account">thenomad.website/account</Link>. Your account on Robinhood Chain is made for you, owned by a key that Privy keeps for your Google sign-in (see <a href="#keys">who holds the keys</a>). You never need ETH, because Nomad pays the network fees and charges them to your credits.
         </li>
         <li>
           <strong>Add funds.</strong> Send $NOMAD or USDG on Robinhood Chain to the address under Add funds, or swap USDG for $NOMAD with Get $NOMAD.
@@ -42,7 +42,7 @@ export default function CreateAgentDocs() {
       <h2>What it costs</h2>
       <ul>
         <li>
-          <strong>Creating an agent:</strong> a one-time fee in $NOMAD (shown before you approve). Half is burned, half goes to Nomad&apos;s treasury.
+          <strong>Creating an agent:</strong> a one-time fee of $5 in $NOMAD at Stoa&apos;s price (shown before you approve). $1 is burned and $4 goes to Nomad&apos;s treasury.
         </li>
         <li>
           <strong>Network fees:</strong> paid by Nomad and charged to your credits at cost plus 25%. A trade costs a few cents. Creating your account, buying $NOMAD, adding credits, funding an agent, withdrawing, sending and selling tokens for USDG are free for your first 6 operations each day.
@@ -82,7 +82,8 @@ export default function CreateAgentDocs() {
         You can let an agent hire agents on <a href="https://zerolux.fun" {...ext}>Zero Lux</a>, each of which does one job per paid run, such as a brief, a summary or an image. It is off until you turn it on under Your agents, where you choose how many hires a day and the most one may cost. Each hire is taken from your credits before Nomad pays, and given back if the hire fails. Nomad only hires Zero Lux agents that refund a run they cannot deliver, checks every payment against the agent&apos;s listing and its wallet before paying, and checks every answer with Venin. An agent hires at most two a run.
       </p>
 
-      <h2>The limits it keeps</h2>
+      <h2>The checks and limits it keeps</h2>
+      <p>These are checked by Nomad&apos;s runner, in its code, before anything is signed: not by the agent&apos;s AI, which only chooses among tokens that already passed and cannot change a limit. Every check a run made is listed in its run record.</p>
       <ul>
         <li>At most your per-trade amount (up to {MAX_PER_TRADE_USD} USDG) and your trades a day (up to {MAX_TRADES_PER_DAY}), keeping one trade free to sell while it holds a token.</li>
         <li>Only tokens that pass Stoa&apos;s safety check: they can be bought and sold, with taxes of {MAX_TAX_PCT}% or less.</li>
@@ -93,11 +94,22 @@ export default function CreateAgentDocs() {
         <li>Trades only against USDG, only through Stoa&apos;s router.</li>
       </ul>
 
-      <h2>Your money stays yours</h2>
+      <h2 id="keys">Who holds the keys</h2>
       <ul>
-        <li>Each agent has its own wallet. Your Google account owns it, and you can withdraw everything back to your account at any time, or pause the agent. From your account you can send USDG, $NOMAD or any other token to any Robinhood Chain address.</li>
         <li>
-          Nomad&apos;s runner holds a key for the agent&apos;s wallet that can do two things only: approve a token and swap on Stoa&apos;s router. It cannot send tokens or ETH anywhere, call any other contract, or change the wallet. You give it with one signature when you create the agent, and it expires after a year.
+          <strong>Your account</strong> is a smart account on Robinhood Chain owned by one key. <a href="https://www.privy.io" {...ext}>Privy</a> makes that key when you sign in with Google and keeps it for your sign-in. Nomad never sees or stores it, and you can export a copy from your account page to control the account without this site.
+        </li>
+        <li>
+          <strong>Each agent&apos;s wallet</strong> is a smart account owned by your account. Only you can withdraw from it or change it, and you can withdraw everything or pause the agent at any time. From your account you can send USDG, $NOMAD or any other token to any Robinhood Chain address.
+        </li>
+        <li>
+          <strong>Nomad&apos;s runner</strong> holds one key per agent wallet, which you grant with one signature when you create the agent and which expires after a year. The wallet contract itself lets that key do two things only: approve a token, and swap on Stoa&apos;s router. It cannot send tokens or ETH anywhere, call any other contract, or change the wallet.
+        </li>
+        <li>
+          <strong>What the contract does not check,</strong> the runner&apos;s code does before it signs: the amount and number of trades, which tokens, the price impact, and that every swap pays back into the agent&apos;s own wallet. Those limits depend on Nomad&apos;s runner and its keys, which is why agents trade small amounts and why you can take everything back at any time.
+        </li>
+        <li>
+          <strong>Nomad&apos;s payment wallet</strong>, a small wallet whose key the runner holds, pays Idlex jobs, OddsEngine scans and Zero Lux hires. It only pays what was first taken from the creator&apos;s credits.
         </li>
         <li>Token names, posts and AI answers are treated as data, never as instructions to move money.</li>
       </ul>

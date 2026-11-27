@@ -19,8 +19,8 @@ const HOME = [
 ];
 
 const AGENT_STEPS = [
-  { t: "Sign in", d: "Google sign-in makes your account on Robinhood Chain. No wallet app, no seed phrase, no ETH." },
-  { t: "Create", d: "A Trader, a Stocks agent, a Researcher, or your own instructions. A one-time fee in $NOMAD: half is burned, half goes to Nomad's treasury." },
+  { t: "Sign in", d: "Sign in with Google. Privy makes the key that owns your account and keeps it for your sign-in; Nomad never holds it, and you can export it. No wallet app, no ETH." },
+  { t: "Create", d: "A Trader, a Stocks agent, a Researcher, or your own instructions. A one-time fee of $5 in $NOMAD: $1 is burned, the rest goes to Nomad's treasury." },
   { t: "Fund", d: "Give it USDG to trade with and credits for its network fees. Take everything back whenever you like." },
   { t: "Watch", d: "Every move it makes is listed with its transaction, on your account page and on-chain." }
 ];
@@ -74,7 +74,7 @@ export default function Home() {
               <p className="label">Agents on Robinhood Chain</p>
               <h2 style={{ marginTop: 12 }}>Create an agent that trades on its own.</h2>
               <p className="lede" style={{ marginTop: 18 }}>
-                It runs in Nomad&apos;s cloud, checks every token for safety first, and never goes past the limits you set.
+                It runs in Nomad&apos;s cloud and buys only tokens that pass Stoa&apos;s, Rushr&apos;s and OddsEngine&apos;s checks. Nomad&apos;s runner refuses any trade past your limits, and its key can only approve and swap on Stoa.
               </p>
               <div className="row" style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 24 }}>
                 <Link href="/account" className="btn">
