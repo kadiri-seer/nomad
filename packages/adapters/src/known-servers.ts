@@ -542,6 +542,21 @@ function virtualsSkillNote(s: { name: string; frontmatter?: Record<string, unkno
 }
 
 /**
+ * Autonomo's skill (github.com/autonomodotfun/autonomo-public, skills/autonomo/SKILL.md, read Nov 27, 2026): it pays
+ * per call through the autonomo-sdk command, which reads AUTONOMO_WALLET_KEY from the shell and keeps its own limits
+ * and its own count of the day's spending, apart from the MCP server's.
+ */
+function autonomoSkillNote(s: { name: string; frontmatter?: Record<string, unknown> }): Note | null {
+  const meta = s.frontmatter?.metadata as { author?: unknown; homepage?: unknown } | undefined;
+  if (s.name !== "autonomo" || (meta?.author !== "autonomo" && meta?.homepage !== "https://autonomo.fun")) return null;
+  return {
+    level: "info",
+    category: "skills",
+    message: `The "autonomo" skill pays per call through the autonomo-sdk command, which reads AUTONOMO_WALLET_KEY from your shell (never copied) and keeps its own limits: 0.05 dollars a call and 1 dollar a day unless the agent passes --max and --daily. The MCP server's limits do not apply to it.`
+  };
+}
+
+/**
  * Skills that only work with the setup they were written for. Nomad moves them like any skill and
  * says so in the preview instead of copying them silently.
  */
@@ -559,6 +574,8 @@ export function knownSkillNotes(skills: Array<{ name: string; frontmatter?: Reco
   for (const s of skills) {
     const virtuals = virtualsSkillNote(s, platformName);
     if (virtuals) notes.push(virtuals);
+    const autonomo = autonomoSkillNote(s);
+    if (autonomo) notes.push(autonomo);
     if (!fromBrainChain(s)) continue;
     if (s.name === "brainchain-worker") {
       notes.push(
@@ -1428,7 +1445,69 @@ const ZEROLUX: ServerProfile = {
   }
 };
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE, ROBINHOOD_TRADING, ROBINHOOD_BANKING, VIRTUALS, BULL, ZEROLUX];
+/** The autonomo-mcp command (also .cmd or .exe on Windows), alone or as a path. */
+const isAutonomoCommand = (command: string | undefined) => !!command && /(^|[\\/])autonomo-mcp(\.cmd|\.exe)?$/i.test(command);
+const isAutonomoPackage = isPackageArg("autonomo-mcp");
+/** Autonomo's spending limits and their defaults (autonomo-mcp 0.1.3). */
+const AUTONOMO_LIMITS: [string, string, string][] = [
+  ["AUTONOMO_MAX_USDG_PER_CALL", "0.05", "dollars a call (USDG or USDC)"],
+  ["AUTONOMO_DAILY_USDG", "1", "dollars a day (USDG and USDC together)"],
+  ["AUTONOMO_MAX_AUTONOMO_PER_CALL", "5000", "$AUTONOMO a call"],
+  ["AUTONOMO_DAILY_AUTONOMO", "10000", "$AUTONOMO a day"]
+];
+
+/**
+ * Autonomo, a marketplace of paid APIs agents pay for per call over x402, as Autonomo documents it (autonomo.fun/docs/
+ * agents and autonomo-mcp 0.1.3, read Nov 27, 2026): the local server `npx -y autonomo-mcp` (on Windows often
+ * `cmd /c npx -y autonomo-mcp`), which reads AUTONOMO_WALLET_KEY (the agent wallet's key, optional: finding APIs and
+ * checking prices need none), AUTONOMO_PAY_WITH, and four spending limits, and keeps the day's spending in
+ * ~/.autonomo-mcp/spend.json. It pays only Autonomo's gateways, at AUTONOMO_BASE_URL (https://autonomo.fun).
+ * The key is never copied; the limits move only as written values and are listed in the preview.
+ */
+const AUTONOMO: ServerProfile = {
+  id: "autonomo",
+  vendor: "Autonomo",
+  label: "Autonomo (paid APIs for agents, paid per call)",
+  matches: (t) => !!t.mcp && t.mcp.transport === "stdio" && (isAutonomoCommand(t.mcp.command) || t.mcp.args.some(isAutonomoPackage)),
+  // AUTONOMO_WALLET_KEY is handled in apply(): it is a raw key, and the agent's spending belongs to that wallet.
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [...AUTONOMO_LIMITS.map(([k]) => k), "AUTONOMO_PAY_WITH"],
+  looserDefaults: {},
+  apply(t, out, platform) {
+    const mcp = t.mcp!;
+    const literal = (k: string) => {
+      const v = mcp.env[k];
+      return v && "value" in v && v.value.trim() ? v.value.trim() : null;
+    };
+    out.notes.push({ level: "info", category: "tools", message: `"${t.name}" is Autonomo's MCP server (autonomo-mcp). It finds paid APIs and checks their prices for free, and pays per call from the agent's wallet in USDG or $AUTONOMO on Robinhood Chain, or USDC on Base.` });
+    const limits = AUTONOMO_LIMITS.map(([k, def, what]) => `${literal(k) ?? def} ${what}${literal(k) ? "" : " (default)"}`).join("; ");
+    const pay = literal("AUTONOMO_PAY_WITH");
+    out.notes.push({ level: "info", category: "tools", message: `Spending limits for "${t.name}" on ${platform}: ${limits}. Pays with ${pay ?? "auto (USDG, then $AUTONOMO, then USDC on Base), the default"}.` });
+    if (mcp.env.AUTONOMO_WALLET_KEY) {
+      out.unsupported.push({
+        category: "tools",
+        item: `${t.name}: AUTONOMO_WALLET_KEY`,
+        reason: "Wallet keys are references only.",
+        alternative: `Set AUTONOMO_WALLET_KEY on ${platform} yourself, to the same agent wallet's key. Until then it finds APIs and checks prices, but cannot pay.`
+      });
+    } else {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" had no AUTONOMO_WALLET_KEY, so on ${platform} it finds APIs and checks prices, but cannot pay.` });
+    }
+    const base = literal("AUTONOMO_BASE_URL");
+    if (base && !isExactHost(base, "autonomo.fun", "") && !isExactHost(base, "autonomo.fun", "/")) {
+      out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" pays the gateways at ${base} (AUTONOMO_BASE_URL), not Autonomo's own at https://autonomo.fun. Keep it only if you trust that address.` });
+    }
+    out.notes.push({ level: "info", category: "tools", message: `"${t.name}" counts the day's spending on each computer (~/.autonomo-mcp/spend.json), shared by every app there. On another computer the count starts again at zero, so keep the wallet's balance small.` });
+    if (/(^|[\\/])cmd(\.exe)?$/i.test(mcp.command ?? "")) {
+      out.manualSteps.push(`"${t.name}" starts through cmd /c, which only works on Windows. If ${platform} runs on a Mac or Linux, change it to: npx -y autonomo-mcp`);
+    } else {
+      out.manualSteps.push(`"${t.name}" runs Autonomo's server through npx: ${platform} needs Node.js 20 or later on its PATH.`);
+    }
+  }
+};
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE, ROBINHOOD_TRADING, ROBINHOOD_BANKING, VIRTUALS, BULL, ZEROLUX, AUTONOMO];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {
