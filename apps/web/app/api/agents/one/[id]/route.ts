@@ -7,7 +7,7 @@ import { keccak256, toHex, verifyMessage, type Hex } from "viem";
 import { veninCheck } from "@/lib/server/venin-check";
 import { json } from "@/lib/server/account-routes";
 import { agentEnv, ownerAgent, publicAgent } from "@/lib/server/agent-api";
-import { ownerActionMessage, RUN_EVERY_HOURS } from "@/lib/agents/shared";
+import { hiresAction, ownerActionMessage, RUN_EVERY_HOURS, validHires, type HireLimits } from "@/lib/agents/shared";
 
 export const dynamic = "force-dynamic";
 
@@ -28,13 +28,21 @@ export async function POST(req: Request, ctx: Ctx) {
   if (!env || !/^\d{1,30}$/.test(id)) return json({ error: "Not found." }, 404);
   const a = await env.store.get(id);
   if (!a) return json({ error: "Not found." }, 404);
-  let b: { action?: string; at?: number; signature?: string; runEveryHours?: number; instructions?: string };
+  let b: { action?: string; at?: number; signature?: string; runEveryHours?: number; instructions?: string; hires?: { perDay?: unknown; maxUsd?: unknown } | null };
   try {
     b = await req.json();
   } catch {
     return json({ error: "Not JSON." }, 400);
   }
   const text = typeof b.instructions === "string" ? b.instructions.replace(/\r\n/g, "\n").trim() : "";
+  let hires: HireLimits | null = null;
+  if (b.action === "hires") {
+    try {
+      hires = validHires(b.hires);
+    } catch (e) {
+      return json({ error: (e as Error).message }, 400);
+    }
+  }
   const action =
     b.action === "pause" || b.action === "resume"
       ? b.action
@@ -46,7 +54,9 @@ export async function POST(req: Request, ctx: Ctx) {
             ? "view"
           : b.action === "instructions"
             ? `set instructions ${keccak256(toHex(text))}`
-            : null;
+            : b.action === "hires"
+              ? hiresAction(hires)
+              : null;
   if (!action) return json({ error: "Unknown change." }, 400);
   const at = Number(b.at);
   if (!Number.isFinite(at) || Math.abs(Date.now() - at) > 10 * 60_000) return json({ error: "The signature is too old. Try again." }, 400);
@@ -64,6 +74,13 @@ export async function POST(req: Request, ctx: Ctx) {
     else delete a.instructions;
     await env.store.save(a);
     await env.store.addMove(id, { at: Date.now(), text: "Its creator changed its instructions." });
+    return json({ agent: ownerAgent(a) });
+  }
+  if (b.action === "hires") {
+    if (hires) a.hires = hires;
+    else delete a.hires;
+    await env.store.save(a);
+    await env.store.addMove(id, { at: Date.now(), text: hires ? `Its creator let it hire Zero Lux agents: up to ${hires.perDay} a day, at most ${hires.maxUsd} USDG each, from credits.` : "Its creator turned hiring off." });
     return json({ agent: ownerAgent(a) });
   }
   const now = Date.now();

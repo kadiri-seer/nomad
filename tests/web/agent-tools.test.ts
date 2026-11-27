@@ -311,3 +311,19 @@ describe("Bull's tools", () => {
     expect(two.calls!().map((c) => [c.service, c.tool, c.ok])).toEqual([["Bull", "bull_agent_reputation", true], ["Bull", "bull_agent_reputation", true]]);
   });
 });
+
+describe("tools added for one run", () => {
+  it("are offered beside the servers' tools, logged, capped and checked by Venin", async () => {
+    const f = fakeServer({ chain_overview: "calm" });
+    let ran: unknown = null;
+    const extra = [{ service: "Zero Lux", declaration: { name: "zerolux_hire", description: "Zero Lux: hire one agent." }, run: async (a: Record<string, unknown>) => ((ran = a), "x".repeat(MAX_TOOL_ANSWER_CHARS + 10)) }];
+    const kit = toolKit({ cache: memCache(), fetchImpl: f.fetchImpl, servers: [HEY], venin: clean, extra });
+    expect((await kit.declarations()).map((d) => d.name)).toContain("zerolux_hire");
+    expect((await kit.call("zerolux_hire", { id: 15 })).endsWith("[cut]")).toBe(true);
+    expect(ran).toEqual({ id: 15 });
+    expect(kit.used()).toEqual(["Zero Lux"]);
+    expect(kit.calls!().map((c) => [c.service, c.tool, c.ok])).toEqual([["Zero Lux", "zerolux_hire", true]]);
+    const planted = toolKit({ cache: memCache(), fetchImpl: f.fetchImpl, servers: [], venin: async () => ({ ran: true, planted: 1, findings: 1, says: [] }), extra });
+    expect(await planted.call("zerolux_hire", {})).toMatch(/^Withheld: Venin found planted instructions in Zero Lux's answer/);
+  });
+});

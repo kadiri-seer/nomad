@@ -218,4 +218,9 @@ export async function chargeRun(deps: CreditsDeps, account: Address, micros: big
   return true;
 }
 
+/** Gives back what chargeRun took for something that did not happen (a hire that failed). */
+export async function refundRun(deps: Pick<CreditsDeps, "redis">, account: Address, micros: bigint): Promise<void> {
+  if (micros > 0n) await deps.redis.cmd(["HINCRBY", KEY(account), "balance", micros.toString()]);
+}
+
 export { usd as formatUsd };

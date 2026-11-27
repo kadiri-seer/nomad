@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { encodeFunctionData, erc20Abi, keccak256, parseUnits, toHex, type Address, type Hex } from "viem";
 import { USDG } from "@/lib/accounts/chain";
 import { accountClient, fmtUsdg, publicClient, rememberTokens, type Call } from "@/lib/accounts/client";
-import { DEFAULT_RESEARCH, DEFAULT_STOCKS, ownerActionMessage, RUN_EVERY_HOURS, viewMessage, type Move, type Position } from "@/lib/agents/shared";
+import { DEFAULT_RESEARCH, DEFAULT_STOCKS, hiresAction, type HireLimits, ownerActionMessage, RUN_EVERY_HOURS, viewMessage, type Move, type Position } from "@/lib/agents/shared";
 import { hostedEnterMessage, linkMessage } from "@/lib/bounties/shared";
 import { Sheet } from "./Sheet";
 import { writeSnapshot } from "./snapshot";
@@ -23,9 +23,18 @@ type AgentView = {
   salt: string;
   runEveryHours: number;
   limits: { perTradeUsd: string; tradesPerDay: number };
+  hires?: HireLimits;
   waitingFor: string | null;
   lastMove?: Move | null;
 };
+
+/** The hire limits a creator can pick: hires a day, and the most per hire in USDG. */
+const HIRE_CHOICES: [number, string][] = [
+  [1, "0.25"],
+  [3, "0.25"],
+  [5, "0.50"],
+  [10, "1.00"]
+];
 
 const fail = (e: unknown) => window.dispatchEvent(new CustomEvent("nomad-account-error", { detail: (e as Error)?.message ?? "Something went wrong." }));
 const ago = (t: number) => {
@@ -146,13 +155,13 @@ function AgentSheet({ client, agent, onClose, onConfirm, onChanged }: { client: 
     erc20Balance(USDG, agent.account).then(setUsdg).catch(() => setUsdg(null));
   }, [agent.id, agent.account]);
 
-  const change = async (action: "pause" | "resume" | "schedule", runEveryHours?: number) => {
+  const change = async (action: "pause" | "resume" | "schedule" | "hires", runEveryHours?: number, hires?: HireLimits | null) => {
     setBusy(true);
     try {
       const at = Date.now();
-      const label = action === "schedule" ? `run every ${runEveryHours} hours` : action;
+      const label = action === "schedule" ? `run every ${runEveryHours} hours` : action === "hires" ? hiresAction(hires ?? null) : action;
       const signature = await client.owner.signMessage({ message: ownerActionMessage(agent.id, label, at) });
-      const r = await fetch(`/api/agents/one/${agent.id}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, at, signature, runEveryHours }) });
+      const r = await fetch(`/api/agents/one/${agent.id}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, at, signature, runEveryHours, hires }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "That did not go through.");
       onChanged({ ...agent, ...j.agent });
@@ -264,6 +273,30 @@ function AgentSheet({ client, agent, onClose, onConfirm, onChanged }: { client: 
           ))}
         </select>
       </label>
+      <label className="acct-field">
+        <span>Hiring Zero Lux agents</span>
+        <select
+          value={agent.hires ? `${agent.hires.perDay}:${agent.hires.maxUsd}` : "off"}
+          disabled={busy}
+          onChange={(e) => {
+            const [perDay, maxUsd] = e.target.value.split(":");
+            change("hires", undefined, e.target.value === "off" ? null : { perDay: Number(perDay), maxUsd });
+          }}
+        >
+          <option value="off">Off</option>
+          {agent.hires && !HIRE_CHOICES.some(([d, m]) => d === agent.hires!.perDay && m === agent.hires!.maxUsd) && (
+            <option value={`${agent.hires.perDay}:${agent.hires.maxUsd}`}>
+              Up to {agent.hires.perDay} a day, {agent.hires.maxUsd} USDG each
+            </option>
+          )}
+          {HIRE_CHOICES.map(([d, m]) => (
+            <option key={`${d}:${m}`} value={`${d}:${m}`}>
+              Up to {d} a day, {m} USDG each
+            </option>
+          ))}
+        </select>
+      </label>
+      {agent.hires && <p className="acct-small">It can pay other agents on Zero Lux for a job during its runs. Each hire comes out of your credits, and failed hires are given back.</p>}
       {agent.template !== "trader" && <Instructions client={client} agent={agent} />}
       <h3 className="acct-h3">{agent.template === "researcher" ? "Reports" : "Moves"}</h3>
       <ol className="acct-moves">

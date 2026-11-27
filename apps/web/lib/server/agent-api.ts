@@ -4,12 +4,12 @@ import { AGENTS_CONTRACT } from "../economy";
 import { AGENT_FEE_USD, agentPackage, BURN_ADDRESS, registerMessage, RUN_EVERY_HOURS, SESSION_DAYS, TEMPLATES, validLimits, type AgentRecord, type RunRecord, type Template } from "../agents/shared";
 import { NOMAD, TREASURY, USDG } from "../accounts/chain";
 import { redisFromEnv } from "../redis";
-import { balanceOf as creditBalance, chargeRun } from "./credits";
+import { balanceOf as creditBalance, chargeRun, refundRun } from "./credits";
 import { sponsorDeps } from "./account-routes";
 import { agentStore } from "./agents-store";
 import { agentSender, expectedAgentWallet, mainAccountOf, serverClient } from "./agent-exec";
 import { gemini, type ResearchLimits } from "./gemini";
-import { toolKit } from "./agent-tools";
+import { toolKit, type ExtraTool } from "./agent-tools";
 import { veninCheck } from "./venin-check";
 import { ODDSENGINE_DAILY_CAP, oddsEngine, type OddsVerdict } from "./oddsengine";
 import { rushrSafety } from "./rushr";
@@ -17,6 +17,7 @@ import { idlex } from "./idlex";
 import { idlexPayer, runnerSecret, sessionSigner } from "./runner-keys";
 import { buildCandidates, buildStockCandidates, type RunnerDeps } from "./runner";
 import { stoa } from "./stoa";
+import { zerolux, ZEROLUX_FACTORY_ABI } from "./zerolux";
 import { bountyEnv } from "./bounty-env";
 
 export class AgentApiError extends Error {
@@ -61,7 +62,8 @@ export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = 
     now,
     credits: {
       available: async (owner) => (await creditBalance(env.credits, owner)).micros.available,
-      charge: (owner, micros) => chargeRun(env.credits, owner, micros)
+      charge: (owner, micros) => chargeRun(env.credits, owner, micros),
+      refund: (owner, micros) => refundRun(env.credits, owner, micros)
     },
     balanceOf: (token, holder) => client.readContract({ address: token, abi: erc20, functionName: "balanceOf", args: [holder] }),
     quote: s.quote,
@@ -69,11 +71,13 @@ export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = 
     stockCandidates: () => buildStockCandidates(s, env.store, async (a) => Number(await client.readContract({ address: a, abi: decimalsAbi, functionName: "decimals" }))),
     sender: (agent) => agentSender(agent, env.secret, env.sponsor, env.bundlerUrl),
     // Each research question gets its own tool kit, so its sources are only the services that answered it.
-    ai: g ? { name: g.name, ask: g.ask, ...(toolsOn ? { withTools: (prompt: string, system: string, limits?: ResearchLimits) => g.withTools(prompt, system, toolKit({ cache: env.store }), limits) } : {}) } : null,
+    ai: g ? { name: g.name, ask: g.ask, ...(toolsOn ? { withTools: (prompt: string, system: string, limits?: ResearchLimits, extra?: ExtraTool[]) => g.withTools(prompt, system, toolKit({ cache: env.store, extra }), limits) } : {}) } : null,
     ...(b ? { bounties: { tasks: (a: AgentRecord) => b.tasks(a), submit: (a: AgentRecord, id: string, text: string, rec: RunRecord) => b.submitHosted(a, id, text, rec) } } : {}),
     venin: (path, text) => veninCheck(path, text),
     ...(process.env.ODDSENGINE_API_KEY?.trim() ? { oddsEngine: cappedOddsEngine(env.store, oddsEngine(process.env.ODDSENGINE_API_KEY.trim())) } : {}),
-    idlex: idlexOn ? idlex(idlexPayer(env.secret)) : null
+    idlex: idlexOn ? idlex(idlexPayer(env.secret)) : null,
+    // Hires are paid from the same small x402 wallet as Idlex jobs, and taken from the creator's credits first.
+    zerolux: process.env.AGENT_ZEROLUX !== "off" ? zerolux(idlexPayer(env.secret), { isAgentWallet: (factory, wallet) => client.readContract({ address: factory, abi: ZEROLUX_FACTORY_ABI, functionName: "isAgentWallet", args: [wallet] }) }) : null
   };
 }
 
@@ -82,14 +86,14 @@ export function runnerDeps(env: NonNullable<ReturnType<typeof agentEnv>>, now = 
  * it is waiting for, or its moves and reports: those are for its creator (ownerAgent, behind a signature).
  */
 export function publicAgent(a: AgentRecord) {
-  const { deferredAction: _d, instructions, pendingJob: _p, ...rest } = a;
+  const { deferredAction: _d, instructions, pendingJob: _p, pendingHire: _h, ...rest } = a;
   return { ...rest, hasInstructions: !!instructions };
 }
 
 /** What the agent's creator sees: the public view plus what it is waiting for. */
 export function ownerAgent(a: AgentRecord) {
   const p = a.pendingJob;
-  return { ...publicAgent(a), waitingFor: p ? (p.kind === "check" ? `a second opinion on ${p.symbol}` : "an answer from Idlex") : null };
+  return { ...publicAgent(a), waitingFor: p ? (p.kind === "check" ? `a second opinion on ${p.symbol}` : "an answer from Idlex") : a.pendingHire ? `an answer from Zero Lux agent ${a.pendingHire.name}` : null };
 }
 
 const TRANSFER_EVENT = parseAbi(["event Transfer(address indexed from, address indexed to, uint256 value)"]);

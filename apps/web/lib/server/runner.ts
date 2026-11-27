@@ -22,6 +22,7 @@ import {
   NOTES_SHOWN,
   MAX_HOLD_HOURS,
   DEFAULT_STOCKS,
+  HIRES_PER_RUN,
   MAX_STOCK_GAP_PCT,
   MIN_STOCK_LIQUIDITY_USD,
   STOCK_MAX_HOLD_HOURS,
@@ -47,6 +48,8 @@ import { stoaSwap } from "./sponsor";
 import type { Quote, Safety, Stoa, StockToken, TokenMarket } from "./stoa";
 import type { OddsVerdict } from "./oddsengine";
 import type { RushrSafety } from "./rushr";
+import type { ExtraTool } from "./agent-tools";
+import type { ZeroLux } from "./zerolux";
 
 /**
  * A token an agent may consider: Stoa's market data and safety check, and Rushr's verdict when Rushr has one. A stock
@@ -59,7 +62,9 @@ type Call = { to: Address; data: Hex; value?: bigint };
 export type RunnerDeps = {
   store: AgentStore;
   now: () => number;
-  credits: { available(owner: Address): Promise<bigint>; charge(owner: Address, micros: bigint): Promise<boolean> };
+  credits: { available(owner: Address): Promise<bigint>; charge(owner: Address, micros: bigint): Promise<boolean>; refund?(owner: Address, micros: bigint): Promise<void> };
+  /** Zero Lux, for agents whose creators turned hiring on (lib/server/zerolux.ts). */
+  zerolux?: Pick<ZeroLux, "agents" | "hire" | "collect"> | null;
   balanceOf(token: Address, holder: Address): Promise<bigint>;
   quote: Stoa["quote"];
   candidates(): Promise<Candidate[]>;
@@ -73,7 +78,7 @@ export type RunnerDeps = {
   ai: null | {
     name: string;
     ask(prompt: string, system: string): Promise<string | null>;
-    withTools?(prompt: string, system: string, limits?: ResearchLimits): Promise<{ text: string; used: string[]; calls?: ToolCallRecord[]; model?: string | null } | null>;
+    withTools?(prompt: string, system: string, limits?: ResearchLimits, extra?: ExtraTool[]): Promise<{ text: string; used: string[]; calls?: ToolCallRecord[]; model?: string | null } | null>;
   };
   /**
    * The bounties an agent has entered and not yet handed in (it works on the first each run), and handing work in,
@@ -226,6 +231,75 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
     agent.tradesDay = day;
     agent.tradesToday = 0;
   }
+  /**
+   * Hiring Zero Lux agents, when its creator turned it on: finding them is free; each hire is taken from the creator's
+   * credits before Nomad's x402 wallet pays, and given back if the hire fails. At most the creator's number a day and
+   * price per hire, and HIRES_PER_RUN a run.
+   */
+  const hiring = { thisRun: 0 };
+  const hireTools = (): ExtraTool[] => {
+    const h = agent.hires;
+    const zl = d.zerolux;
+    if (!h || !zl) return [];
+    const max = parseUnits(h.maxUsd, 6);
+    const hireable = async () => (await zl.agents()).filter((a) => a.price <= max);
+    return [
+      {
+        service: "Zero Lux",
+        declaration: {
+          name: "zerolux_find_agents",
+          description: `Zero Lux: agents on Robinhood Chain that each do one job per paid run (research, writing, market reads, images and more). Lists those this agent may hire, at most ${h.maxUsd} USDG a hire. Free.`,
+          parameters: { type: "object", properties: { query: { type: "string", description: "Optional words for the job, e.g. 'token research' or 'summarize'." } } }
+        },
+        async run(a) {
+          const words = String(a.query ?? "").toLowerCase().split(/[^a-z0-9$]+/).filter((w) => w.length > 1);
+          const list = await hireable();
+          const score = (x: { name: string; tagline: string }) => words.filter((w) => `${x.name} ${x.tagline}`.toLowerCase().includes(w)).length;
+          const found = (words.length ? list.filter((x) => score(x) > 0).sort((x, y) => score(y) - score(x)) : list).slice(0, 8);
+          return JSON.stringify({ agents: found.map((x) => ({ id: x.id, name: x.name, does: x.tagline, priceUsdg: usdgText(x.price), paidRuns: x.runs, model: x.model, tools: x.tools })), note: `Hire one with zerolux_hire. Each hire costs its price, from this agent's creator's credits, and only ${h.perDay} a day are allowed.` });
+        }
+      },
+      {
+        service: "Zero Lux",
+        declaration: {
+          name: "zerolux_hire",
+          description: `Zero Lux: pay one agent from zerolux_find_agents to do one job and return its answer. Costs its price (at most ${h.maxUsd} USDG), taken from this agent's creator's credits. Hire only when it clearly helps the task.`,
+          parameters: { type: "object", properties: { id: { type: "integer", description: "The agent's id from zerolux_find_agents." }, input: { type: "string", description: "The job for it, in plain words, with everything it needs." } }, required: ["id", "input"] }
+        },
+        async run(a) {
+          if (hiring.thisRun >= HIRES_PER_RUN) return `Not hired: this run already hired ${HIRES_PER_RUN} agents.`;
+          if (agent.pendingHire) return "Not hired: an earlier hire is still being answered.";
+          const target = (await hireable()).find((x) => x.id === Number(a.id));
+          if (!target) return "Not hired: there is no agent with that id that this agent may hire.";
+          const input = String(a.input ?? "").trim();
+          if (!input) return "Not hired: give it the job to do.";
+          if (!(await d.credits.charge(agent.owner, target.price).catch(() => false))) return "Not hired: its creator's credits are too low for this hire.";
+          const n = await d.store.count(`zerolux-hires:${agent.id}:${day}`, 2 * 86400);
+          if (n > h.perDay) {
+            await d.credits.refund?.(agent.owner, target.price);
+            return `Not hired: today's ${h.perDay} hires are used up.`;
+          }
+          hiring.thisRun++;
+          const r = await zl.hire(target, input, max).catch((e) => ({ status: "failed" as const, reason: (e as Error).message.slice(0, 160), paid: false }));
+          if (r.status === "done") {
+            if (r.tx) rec.txs.push(r.tx);
+            await note(`Hired Zero Lux agent ${target.name} (#${target.id}) for ${usdgText(target.price)} USDG.`, r.tx ?? undefined);
+            return `${target.name} (Zero Lux agent ${target.id}) answered:\n${r.output}`;
+          }
+          if (r.status === "pending") {
+            agent.pendingHire = { agent: target.id, name: target.name, input: input.slice(0, 4000), ticket: r.ticket, paid: r.paid.toString(), at: now };
+            await note(`Hired Zero Lux agent ${target.name} (#${target.id}) for ${usdgText(target.price)} USDG. Its answer comes on the next run.`);
+            return "Paid. Its answer is not back yet: it arrives on this agent's next run.";
+          }
+          // A failed hire costs the creator nothing: what was taken is given back, whatever Zero Lux keeps.
+          await d.credits.refund?.(agent.owner, target.price);
+          await note(`Could not hire Zero Lux agent ${target.name}: ${r.reason} Its credits were given back.`);
+          return `Not hired: ${r.reason}`;
+        }
+      }
+    ];
+  };
+
   const finish = async (work = true) => {
     if (work) await bountyWork().catch(() => undefined);
     rec.endedAt = Math.max(now, d.now());
@@ -264,7 +338,7 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
     ]
       .filter(Boolean)
       .join("\n\n");
-    const r = await d.ai.withTools(prompt, BOUNTY_SYSTEM, BOUNTY_LIMITS).catch(() => null);
+    const r = await d.ai.withTools(prompt, BOUNTY_SYSTEM, BOUNTY_LIMITS, hireTools()).catch(() => null);
     track(r);
     if (!r) return note(`Could not reach the AI for the bounty "${task.title}" this run. It tries again next run.`);
     const text = submissionOf(r.text);
@@ -280,6 +354,24 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
   if ((await d.credits.available(agent.owner)) < MIN_RUN_CREDITS_MICROS) {
     await note("Skipped this run: credits are below $0.05. Add credits to keep it running.");
     return finish(false);
+  }
+
+  // A hire from an earlier run whose answer was not back yet: its answer goes into the agent's notes for this run.
+  if (agent.pendingHire && d.zerolux) {
+    const p = agent.pendingHire;
+    const r = await d.zerolux.collect(p.agent, p.input, p.ticket, BigInt(p.paid)).catch(() => null);
+    if (r?.status === "done") {
+      delete agent.pendingHire;
+      if (r.tx) rec.txs.push(r.tx);
+      rec.calls.push({ service: "Zero Lux", tool: "zerolux_hire", at: d.now(), ok: true, fingerprint: fingerprint(r.output) });
+      const answer = r.output.replace(/\s+/g, " ").slice(0, 600);
+      if (!(d.venin && (await d.venin(`zero-lux/answer.md`, answer).catch(() => ({ planted: 0 }))).planted > 0)) await d.store.addNote(agent.id, `Answer from Zero Lux agent ${p.name}, hired last run: ${answer}`).catch(() => undefined);
+      await note(`Zero Lux agent ${p.name} answered the hire from its last run.`, r.tx ?? undefined);
+    } else if (r?.status === "failed" || now - p.at > 24 * HOUR) {
+      delete agent.pendingHire;
+      await d.credits.refund?.(agent.owner, BigInt(p.paid));
+      await note(`The hire of Zero Lux agent ${p.name} did not come back with an answer. Its credits were given back.`);
+    }
   }
 
   let senderP: Promise<{ send(calls: Call[]): Promise<Hex> }> | null = null;
@@ -343,7 +435,7 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
       return finish();
     }
     const prompt = [`What the owner wants looked into:\n${(agent.instructions?.trim() || DEFAULT_RESEARCH).slice(0, 2000)}`, await memory(), `Today is ${new Date(now).toISOString().slice(0, 10)} (UTC).`].join("\n\n");
-    const r = await d.ai.withTools(prompt, RESEARCH_SYSTEM).catch(() => null);
+    const r = await d.ai.withTools(prompt, RESEARCH_SYSTEM, undefined, hireTools()).catch(() => null);
     track(r);
     if (!r) {
       await note("Could not reach the research AI this run. It tries again next run.");
@@ -457,7 +549,7 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
   /** Research, then an answer: Gemini with the tools when it can, otherwise the plain question (Gemini, then Idlex). */
   const research = async (kind: "check" | "decide", toolsPrompt: string, toolsSystem: string, plainPrompt: string, plainSystem: string, c?: Candidate): Promise<{ text: string; by: string; used?: string[] } | "pending" | null> => {
     if (d.ai?.withTools) {
-      const r = await d.ai.withTools(toolsPrompt, toolsSystem).catch(() => null);
+      const r = await d.ai.withTools(toolsPrompt, toolsSystem, undefined, hireTools()).catch(() => null);
       track(r);
       if (r) return { text: r.text, by: d.ai.name, used: r.used };
     }

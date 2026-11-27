@@ -58,6 +58,11 @@ export const MAX_TOOL_ANSWER_CHARS = 3500;
 const MAX_ARGS_CHARS = 2000;
 
 export type FunctionDeclaration = { name: string; description: string; parameters?: Record<string, unknown> };
+/**
+ * A tool the runner adds for one agent's run (hiring a Zero Lux agent): its own declaration and handler. Its answers
+ * are capped, checked by Venin and logged like every other tool's.
+ */
+export type ExtraTool = { service: string; declaration: FunctionDeclaration; run(args: Record<string, unknown>): Promise<string> };
 export type ToolKit = {
   declarations(): Promise<FunctionDeclaration[]>;
   call(name: string, args: unknown): Promise<string>;
@@ -116,7 +121,7 @@ export function withFallback(s: ToolServer, fetchImpl?: typeof fetch): Client {
   return { listTools: () => run((c) => c.listTools()), call: (n, a) => run((c) => c.call(n, a)) };
 }
 
-export function toolKit(deps: { cache: Cache; fetchImpl?: typeof fetch; servers?: ToolServer[]; venin?: (path: string, text: string) => Promise<VeninVerdict> }): ToolKit {
+export function toolKit(deps: { cache: Cache; fetchImpl?: typeof fetch; servers?: ToolServer[]; venin?: (path: string, text: string) => Promise<VeninVerdict>; extra?: ExtraTool[] }): ToolKit {
   const servers = deps.servers ?? TOOL_SERVERS;
   const clients = new Map<string, Client>();
   const client = (s: ToolServer) => {
@@ -148,6 +153,7 @@ export function toolKit(deps: { cache: Cache; fetchImpl?: typeof fetch; servers?
           out.push(t.declaration);
         }
       }
+      for (const x of deps.extra ?? []) out.push(x.declaration);
       for (const { s, t } of lists) {
         for (const tool of t) {
           // A tool already named for its service (bull_stats) keeps its name; others get the service's id in front.
@@ -161,10 +167,26 @@ export function toolKit(deps: { cache: Cache; fetchImpl?: typeof fetch; servers?
       return out;
     },
     async call(name, args) {
-      const t = byName.get(name);
-      if (!t) return "Not run: there is no tool by that name.";
       const a = args && typeof args === "object" && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
       if (JSON.stringify(a).length > MAX_ARGS_CHARS) return "Not run: the request was too long.";
+      const x = (deps.extra ?? []).find((e) => e.declaration.name === name);
+      if (x) {
+        const at = Date.now();
+        let text: string;
+        try {
+          text = await x.run(a);
+        } catch (e) {
+          log.push({ service: x.service, tool: name, at, ok: false });
+          return `${x.service} did not answer: ${plain((e as Error).message, 120)}`;
+        }
+        used.add(x.service);
+        log.push({ service: x.service, tool: name, at, ok: true, fingerprint: fingerprint(text) });
+        const v = await venin(`${x.service.toLowerCase().replace(/\W+/g, "-")}/${name}.md`, text);
+        if (v.planted > 0) return `Withheld: Venin found planted instructions in ${x.service}'s answer, so it is not shown.`;
+        return text.length > MAX_TOOL_ANSWER_CHARS ? `${text.slice(0, MAX_TOOL_ANSWER_CHARS)} [cut]` : text;
+      }
+      const t = byName.get(name);
+      if (!t) return "Not run: there is no tool by that name.";
       let text: string;
       const at = Date.now();
       const cacheKey = t.server.cacheSeconds ? `agent-tool-answer:${t.server.id}:${fingerprint(`${t.tool} ${JSON.stringify(a)}`)}` : null;

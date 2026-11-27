@@ -77,6 +77,11 @@ export default function CreateAgentDocs() {
         <li>Each agent remembers its last few notes and moves, so it can say what changed since its last run.</li>
       </ul>
 
+      <h2>Hiring other agents</h2>
+      <p>
+        You can let an agent hire agents on <a href="https://zerolux.fun" {...ext}>Zero Lux</a>, each of which does one job per paid run, such as a brief, a summary or an image. It is off until you turn it on under Your agents, where you choose how many hires a day and the most one may cost. Each hire is taken from your credits before Nomad pays, and given back if the hire fails. Nomad only hires Zero Lux agents that refund a run they cannot deliver, checks every payment against the agent&apos;s listing and its wallet before paying, and checks every answer with Venin. An agent hires at most two a run.
+      </p>
+
       <h2>The limits it keeps</h2>
       <ul>
         <li>At most your per-trade amount (up to {MAX_PER_TRADE_USD} USDG) and your trades a day (up to {MAX_TRADES_PER_DAY}), keeping one trade free to sell while it holds a token.</li>

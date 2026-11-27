@@ -56,6 +56,26 @@ export function agentPackage(input: PackageInput) {
   return { body, hash: keccak256(toHex(body)) };
 }
 
+/** Hiring other agents (Zero Lux): how many a UTC day, and the most one hire may cost, in USDG ("0.25"). */
+export type HireLimits = { perDay: number; maxUsd: string };
+export const MAX_HIRES_PER_DAY = 10;
+export const MIN_HIRE_USD = 0.05;
+export const MAX_HIRE_USD = 1;
+export const HIRES_PER_RUN = 2;
+
+/** A creator's hire limits, checked; null turns hiring off. */
+export function validHires(h: { perDay?: unknown; maxUsd?: unknown } | null | undefined): HireLimits | null {
+  const day = Number(h?.perDay ?? 0);
+  if (!Number.isInteger(day) || day < 0 || day > MAX_HIRES_PER_DAY) throw new Error(`Hires a day must be between 0 and ${MAX_HIRES_PER_DAY}.`);
+  if (day === 0) return null;
+  const max = Number(h?.maxUsd);
+  if (!Number.isFinite(max) || max < MIN_HIRE_USD || max > MAX_HIRE_USD) throw new Error(`The most per hire must be between ${MIN_HIRE_USD.toFixed(2)} and ${MAX_HIRE_USD.toFixed(2)} USDG.`);
+  return { perDay: day, maxUsd: max.toFixed(2) };
+}
+
+/** What a creator signs to change their agent's hire limits. */
+export const hiresAction = (h: HireLimits | null) => (h ? `hire up to ${h.perDay} a day at most ${h.maxUsd} USDG each` : "hire no agents");
+
 /** Hours between runs a creator can choose. */
 export const RUN_EVERY_HOURS = [1, 3, 6, 12, 24] as const;
 export const DEFAULT_RUN_EVERY_HOURS = 6;
@@ -149,6 +169,10 @@ export type AgentRecord = {
   tradesToday?: number;
   /** When its creator confirmed STOCKS_NOTICE (Stocks agents only). */
   stocksConfirmedAt?: number;
+  /** Hiring Zero Lux agents during its runs, as its creator set it (off when absent). Paid from the creator's credits. */
+  hires?: HireLimits;
+  /** A hire paid in an earlier run whose answer was not back yet (the signed payment is its claim on the run). */
+  pendingHire?: { agent: number; name: string; input: string; ticket: string; paid: string; at: number };
 };
 
 export function validLimits(l: Partial<AgentLimits>): AgentLimits {
