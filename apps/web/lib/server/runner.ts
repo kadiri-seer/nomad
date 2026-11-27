@@ -44,7 +44,7 @@ import {
 import type { ResearchLimits } from "./gemini";
 import type { AgentStore } from "./agents-store";
 import type { IdlexJob } from "./idlex";
-import { stoaSwap } from "./sponsor";
+import { checkedSwapCalls } from "../accounts/stoa-swap";
 import type { Quote, Safety, Stoa, StockToken, TokenMarket } from "./stoa";
 import type { OddsVerdict } from "./oddsengine";
 import type { RushrSafety } from "./rushr";
@@ -128,16 +128,8 @@ export function passesChecks(c: Omit<Candidate, "passes">): boolean {
 
 /** The exact calls for a Stoa swap, refused unless the quote's transaction is exactly this swap to this wallet. */
 export function swapCalls(q: Quote, sell: Address, buy: Address, amountIn: bigint, wallet: Address): Call[] {
-  if (!q.tx || lc(q.tx.to) !== lc(STOA_ROUTER) || q.tx.value !== 0n) throw new Error("Stoa's swap did not go to its router.");
-  const s = stoaSwap(q.tx.data);
-  if (!s || lc(s.tokenIn) !== lc(sell) || lc(s.tokenOut) !== lc(buy) || lc(s.to) !== lc(wallet) || s.amountIn !== amountIn) throw new Error("Stoa's swap was not the one asked for.");
-  const calls: Call[] = [];
-  if (q.approval) {
-    if (lc(q.approval.spender) !== lc(STOA_ROUTER)) throw new Error("Stoa asked to approve something other than its router.");
-    calls.push({ to: sell, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [STOA_ROUTER, amountIn] }) });
-  }
-  calls.push({ to: STOA_ROUTER, data: q.tx.data });
-  return calls;
+  if (q.approval && lc(q.approval.spender) !== lc(STOA_ROUTER)) throw new Error("Stoa asked to approve something other than its router.");
+  return checkedSwapCalls(q.tx, !!q.approval, { sell, buy, amountIn, to: wallet, amountOut: q.amountOut });
 }
 
 const CHECK_SYSTEM =
@@ -413,7 +405,15 @@ export async function runAgent(d: RunnerDeps, agent: AgentRecord): Promise<strin
       await note(`Wanted to sell ${p.symbol} (${why}), but the price impact was ${q.priceImpactPct.toFixed(1)}%. Will try again next run.`);
       continue;
     }
-    const tx = await send(swapCalls(q, p.token, USDG, amount, agent.account));
+    let calls: Call[];
+    try {
+      calls = swapCalls(q, p.token, USDG, amount, agent.account);
+    } catch (e) {
+      // A swap Stoa returned that is not exactly the one asked for, or that would sell for nothing: not signed.
+      await note(`Wanted to sell ${p.symbol} (${why}), but did not sign Stoa's swap: ${(e as Error).message} Will try again next run.`);
+      continue;
+    }
+    const tx = await send(calls);
     agent.tradesToday = traded() + 1;
     await d.store.removePosition(agent.id, p.token);
     held.splice(held.indexOf(p), 1);

@@ -1,6 +1,6 @@
 /** The agent wallet for a signer and salt, and the runner's session key for it (an address; the key never leaves). */
 import { getAddress, isAddress } from "viem";
-import { json } from "@/lib/server/account-routes";
+import { json, rateLimited } from "@/lib/server/account-routes";
 import { agentEnv } from "@/lib/server/agent-api";
 import { expectedAgentWallet } from "@/lib/server/agent-exec";
 import { sessionSigner } from "@/lib/server/runner-keys";
@@ -8,6 +8,7 @@ import { sessionSigner } from "@/lib/server/runner-keys";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  if (await rateLimited(req, "agent-session", 30)) return json({ error: "Too many requests. Wait a minute." }, 429);
   const q = new URL(req.url).searchParams;
   const signer = q.get("signer") ?? "";
   const salt = q.get("salt") ?? "";

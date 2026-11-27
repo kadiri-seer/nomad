@@ -1,6 +1,7 @@
 import { MAX_PACKAGE_BYTES } from "@/lib/agent-package";
 import { storePackage } from "@/lib/server/agent-keys";
 import { deps, fail, json } from "@/lib/server/agent-routes";
+import { rateLimited } from "@/lib/server/account-routes";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,7 @@ export const dynamic = "force-dynamic";
  * hash, key, wallet, time and signature come in headers. The file was encrypted in the creator's browser.
  */
 export async function POST(req: Request) {
+  if (await rateLimited(req, "agent-package", 10)) return json({ error: "Too many tries. Wait a minute." }, 429);
   const d = deps();
   if (typeof d === "string") return json({ error: d }, 503);
   const len = Number(req.headers.get("content-length") ?? "0");

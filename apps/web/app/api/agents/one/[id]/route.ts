@@ -5,7 +5,7 @@
  */
 import { keccak256, toHex, verifyMessage, type Hex } from "viem";
 import { veninCheck } from "@/lib/server/venin-check";
-import { json } from "@/lib/server/account-routes";
+import { json, rateLimited } from "@/lib/server/account-routes";
 import { agentEnv, ownerAgent, publicAgent } from "@/lib/server/agent-api";
 import { hiresAction, ownerActionMessage, RUN_EVERY_HOURS, validHires, type HireLimits } from "@/lib/agents/shared";
 
@@ -23,6 +23,7 @@ export async function GET(_req: Request, ctx: Ctx) {
 }
 
 export async function POST(req: Request, ctx: Ctx) {
+  if (await rateLimited(req, "agent-owner", 30)) return json({ error: "Too many requests. Wait a minute." }, 429);
   const { id } = await ctx.params;
   const env = agentEnv();
   if (!env || !/^\d{1,30}$/.test(id)) return json({ error: "Not found." }, 404);
@@ -62,6 +63,8 @@ export async function POST(req: Request, ctx: Ctx) {
   if (!Number.isFinite(at) || Math.abs(Date.now() - at) > 10 * 60_000) return json({ error: "The signature is too old. Try again." }, 400);
   const ok = typeof b.signature === "string" && (await verifyMessage({ address: a.signer, message: ownerActionMessage(id, action, at), signature: b.signature as Hex }).catch(() => false));
   if (!ok) return json({ error: "Only the agent's creator can change it." }, 403);
+  // A change is made once per signature: one seen in transit cannot be sent again to undo or repeat it.
+  if (b.action !== "read" && b.action !== "view" && !(await env.store.lock(`owner-sig:${keccak256(b.signature as Hex)}`, 15 * 60))) return json({ error: "That signature was used already. Try again." }, 409);
   // Its instructions are private: only its creator reads or changes them. A Trader follows Nomad's rules instead.
   if (b.action === "read") return json({ instructions: a.instructions ?? "" });
   if (b.action === "view") return json({ agent: ownerAgent(a), moves: await env.store.moves(id, 30), positions: await env.store.positions(id) });

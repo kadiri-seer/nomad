@@ -30,8 +30,10 @@ export const SESSION_FUNCTIONS = {
 
 /**
  * The creator's grant of a session key to Nomad's runner on a new agent wallet: a signed deferred action that installs
- * the key with the runner's first operation. The key can only approve tokens and swap on Stoa's router, until the
- * deadline: it cannot transfer tokens or ETH, call anything else, or change the wallet (its owner, modules or code).
+ * the key with the runner's first operation. The key can only call approve (on any token, for any spender) and Stoa's
+ * swap (paying out anywhere), until the deadline: it cannot transfer tokens or ETH itself, call anything else, or
+ * change the wallet (its owner, modules or code). Whom it approves and where a swap pays out are checked by the
+ * runner's code (lib/accounts/stoa-swap.ts), not on chain, so the runner's secret guards every agent wallet.
  * Checked against Robinhood Chain's real contracts: approve-and-swap from the runner's key is accepted; a transfer, a
  * swap call to any other contract, an ETH transfer and an upgrade are refused; any other key is refused.
  */

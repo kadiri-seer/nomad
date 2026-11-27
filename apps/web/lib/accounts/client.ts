@@ -8,7 +8,8 @@ import { toAccount } from "viem/accounts";
 import { createBundlerClient, createPaymasterClient } from "viem/account-abstraction";
 import { toModularAccountV2 } from "@alchemy/smart-accounts";
 import { AGENTS_ABI } from "../agents-contract";
-import { CHAIN_ID, NOMAD, PUBLIC_RPC, STOA_QUOTE_API, TREASURY, USDG } from "./chain";
+import { CHAIN_ID, NOMAD, PUBLIC_RPC, STOA_QUOTE_API, STOA_ROUTER, TREASURY, USDG } from "./chain";
+import { checkedSwapCalls } from "./stoa-swap";
 
 export const robinhood = {
   id: CHAIN_ID,
@@ -106,10 +107,19 @@ export async function stoaQuote(sellToken: Address, buyToken: Address, amount: b
   const r = await fetch(`${STOA_QUOTE_API}?${q}`, { cache: "no-store" });
   const j = (await r.json()) as StoaQuote & { error?: string };
   if (!r.ok || j.error) throw new Error(j.error ?? "No route for this swap right now.");
-  const calls: Call[] = [];
-  if (to && j.approval) calls.push({ to: j.approval.token, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [j.approval.spender, BigInt(j.approval.amount)] }) });
-  if (to && j.tx) calls.push({ to: j.tx.to, data: j.tx.data, value: BigInt(j.tx.value) });
-  return { amountOut: BigInt(j.amountOut), impactPct: j.priceImpactPct, calls };
+  const amountOut = BigInt(j.amountOut);
+  let calls: Call[] = [];
+  if (to) {
+    // Signed only if it is exactly the swap asked for: Stoa's router, these tokens and amount, paid out to `to`, with
+    // a real minimum out, and an approval of exactly the amount sold to the router (lib/accounts/stoa-swap.ts).
+    if (j.approval && (j.approval.token.toLowerCase() !== sellToken.toLowerCase() || j.approval.spender.toLowerCase() !== STOA_ROUTER.toLowerCase())) throw new Error("Stoa asked to approve something other than its router, so nothing was signed.");
+    try {
+      calls = checkedSwapCalls(j.tx && { to: j.tx.to, data: j.tx.data, value: j.tx.value }, !!j.approval, { sell: sellToken, buy: buyToken, amountIn: amount, to, amountOut });
+    } catch (e) {
+      throw new Error(`${(e as Error).message} Nothing was signed.`);
+    }
+  }
+  return { amountOut, impactPct: j.priceImpactPct, calls };
 }
 
 /** $NOMAD for a dollar amount: Stoa's quote for selling that much USDG. */

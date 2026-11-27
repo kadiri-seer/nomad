@@ -266,43 +266,8 @@ export async function classifyAgentMove(
   return target && lc(target.owner) === lc(sender) ? "fund-agent" : "paid";
 }
 
-/** Stoa's router swap, as its public API encodes it: swap((tokenIn, tokenOut, mid, leg1, leg2, amountIn, minOut, to, deadline, referrer)). */
-const STOA_SWAP_ABI = [
-  {
-    type: "function",
-    name: "swap",
-    stateMutability: "payable",
-    inputs: [
-      {
-        name: "p",
-        type: "tuple",
-        components: [
-          { name: "tokenIn", type: "address" },
-          { name: "tokenOut", type: "address" },
-          { name: "mid", type: "address" },
-          { name: "leg1", type: "tuple", components: [{ name: "venue", type: "address" }, { name: "isPool", type: "bool" }] },
-          { name: "leg2", type: "tuple", components: [{ name: "venue", type: "address" }, { name: "isPool", type: "bool" }] },
-          { name: "amountIn", type: "uint256" },
-          { name: "minOut", type: "uint256" },
-          { name: "to", type: "address" },
-          { name: "deadline", type: "uint256" },
-          { name: "referrer", type: "address" }
-        ]
-      }
-    ],
-    outputs: [{ type: "uint256" }]
-  }
-] as const;
-
-export function stoaSwap(data: Hex): { tokenIn: Address; tokenOut: Address; to: Address; amountIn: bigint; minOut: bigint } | null {
-  try {
-    const d = decodeFunctionData({ abi: STOA_SWAP_ABI, data });
-    const p = d.args[0];
-    return { tokenIn: p.tokenIn, tokenOut: p.tokenOut, to: p.to, amountIn: p.amountIn, minOut: p.minOut };
-  } catch {
-    return null;
-  }
-}
+export { stoaSwap } from "../accounts/stoa-swap";
+import { stoaSwap } from "../accounts/stoa-swap";
 
 export type SponsorDeps = {
   paymaster: Address | "";

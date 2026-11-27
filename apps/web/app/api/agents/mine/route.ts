@@ -3,7 +3,7 @@
  * their creator (POST, signed by the creator's Google wallet).
  */
 import { getAddress, isAddress, verifyMessage, type Hex } from "viem";
-import { json } from "@/lib/server/account-routes";
+import { json, rateLimited } from "@/lib/server/account-routes";
 import { agentEnv, ownerAgent, publicAgent } from "@/lib/server/agent-api";
 import { mainAccountOf } from "@/lib/server/agent-exec";
 import { viewMessage } from "@/lib/agents/shared";
@@ -11,6 +11,7 @@ import { viewMessage } from "@/lib/agents/shared";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  if (await rateLimited(req, "agents-mine", 60)) return json({ error: "Too many requests. Wait a minute." }, 429);
   const owner = new URL(req.url).searchParams.get("owner") ?? "";
   if (!isAddress(owner, { strict: false })) return json({ error: "owner is not an address." }, 400);
   const env = agentEnv();
@@ -20,6 +21,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  if (await rateLimited(req, "agents-mine-owner", 30)) return json({ error: "Too many requests. Wait a minute." }, 429);
   let b: { signer?: string; at?: number; signature?: string };
   try {
     b = await req.json();

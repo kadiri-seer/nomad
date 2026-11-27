@@ -14,6 +14,7 @@ import { idlexPayer, runnerSecret, sessionKey, sessionSigner } from "../../apps/
 import { buildCandidates, cleanSymbol, parseDecision, passesChecks, reportOf, runAgent, splitNote, swapCalls, tick, type Candidate, type RunnerDeps } from "../../apps/web/lib/server/runner";
 import { classifyAgentMove } from "../../apps/web/lib/server/sponsor";
 import type { Quote } from "../../apps/web/lib/server/stoa";
+import { stoaSwap } from "../../apps/web/lib/accounts/stoa-swap";
 import { MemoryRedis } from "../../apps/web/lib/redis";
 
 const WALLET = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as Address;
@@ -50,13 +51,13 @@ const SWAP_ABI = [
   }
 ] as const;
 const Z = "0x0000000000000000000000000000000000000000" as Address;
-const swapData = (tokenIn: Address, tokenOut: Address, amountIn: bigint, to: Address) =>
-  encodeFunctionData({ abi: SWAP_ABI, functionName: "swap", args: [{ tokenIn, tokenOut, mid: Z, leg1: { venue: Z, isPool: true }, leg2: { venue: Z, isPool: false }, amountIn, minOut: 1n, to, deadline: 9999999999n, referrer: Z }] });
+const swapData = (tokenIn: Address, tokenOut: Address, amountIn: bigint, to: Address, minOut = 1n) =>
+  encodeFunctionData({ abi: SWAP_ABI, functionName: "swap", args: [{ tokenIn, tokenOut, mid: Z, leg1: { venue: Z, isPool: true }, leg2: { venue: Z, isPool: false }, amountIn, minOut, to, deadline: 9999999999n, referrer: Z }] });
 const quoteFor = (sell: Address, buy: Address, amount: bigint, taker: Address, out: bigint, impact = 0.3): Quote => ({
   amountOut: out,
   minOut: out,
   priceImpactPct: impact,
-  tx: { to: STOA_ROUTER, data: swapData(sell, buy, amount, taker), value: 0n },
+  tx: { to: STOA_ROUTER, data: swapData(sell, buy, amount, taker, out - out / 100n), value: 0n },
   approval: { spender: STOA_ROUTER, amount, token: sell }
 });
 
@@ -125,8 +126,10 @@ function harness(opts: { oddsEngine?: RunnerDeps["oddsEngine"]; venin?: RunnerDe
       async send(calls) {
         sent.push(calls);
         const swap = calls[calls.length - 1];
-        // The wallet now holds what it bought.
-        balances[TOKEN.toLowerCase()] = (balances[TOKEN.toLowerCase()] ?? 0n) + 1n;
+        // The wallet now holds what it bought, at the harness's price (a sale leaves it holding nothing).
+        const s = stoaSwap(swap.data);
+        if (s && s.tokenIn.toLowerCase() === USDG.toLowerCase()) balances[s.tokenOut.toLowerCase()] = (balances[s.tokenOut.toLowerCase()] ?? 0n) + s.amountIn * 10n ** 12n;
+        else if (s) balances[s.tokenIn.toLowerCase()] = 0n;
         return `0x${"ab".repeat(32)}` as Hex;
       }
     }),
@@ -178,7 +181,7 @@ describe("runner keys", () => {
 
 describe("swaps the runner signs", () => {
   it("are exactly the asked swap to the agent's own wallet, with an exact approval to Stoa's router", () => {
-    const q = quoteFor(USDG, TOKEN, 300_000n, WALLET, 1n);
+    const q = quoteFor(USDG, TOKEN, 300_000n, WALLET, 1_000_000n);
     const calls = swapCalls(q, USDG, TOKEN, 300_000n, WALLET);
     expect(calls).toHaveLength(2);
     expect(calls[0].to).toBe(USDG);
@@ -186,11 +189,17 @@ describe("swaps the runner signs", () => {
     expect(calls[1].to).toBe(STOA_ROUTER);
   });
   it("refuse a swap paying out elsewhere, of another amount, or not to the router", () => {
-    expect(() => swapCalls(quoteFor(USDG, TOKEN, 300_000n, OWNER, 1n), USDG, TOKEN, 300_000n, WALLET)).toThrow();
-    expect(() => swapCalls(quoteFor(USDG, TOKEN, 300_001n, WALLET, 1n), USDG, TOKEN, 300_000n, WALLET)).toThrow();
-    const q = quoteFor(USDG, TOKEN, 300_000n, WALLET, 1n);
+    expect(() => swapCalls(quoteFor(USDG, TOKEN, 300_000n, OWNER, 1_000_000n), USDG, TOKEN, 300_000n, WALLET)).toThrow();
+    expect(() => swapCalls(quoteFor(USDG, TOKEN, 300_001n, WALLET, 1_000_000n), USDG, TOKEN, 300_000n, WALLET)).toThrow();
+    const q = quoteFor(USDG, TOKEN, 300_000n, WALLET, 1_000_000n);
     expect(() => swapCalls({ ...q, tx: { ...q.tx!, to: OWNER } }, USDG, TOKEN, 300_000n, WALLET)).toThrow();
     expect(() => swapCalls({ ...q, approval: { ...q.approval!, spender: OWNER } }, USDG, TOKEN, 300_000n, WALLET)).toThrow();
+  });
+  it("refuse a swap with no minimum out, or one far below the quote", () => {
+    const q = quoteFor(USDG, TOKEN, 300_000n, WALLET, 1_000_000n);
+    expect(() => swapCalls({ ...q, tx: { ...q.tx!, data: swapData(USDG, TOKEN, 300_000n, WALLET, 0n) } }, USDG, TOKEN, 300_000n, WALLET)).toThrow(/minimum out/);
+    expect(() => swapCalls({ ...q, tx: { ...q.tx!, data: swapData(USDG, TOKEN, 300_000n, WALLET, 970_000n) } }, USDG, TOKEN, 300_000n, WALLET)).toThrow(/minimum out/);
+    expect(swapCalls({ ...q, tx: { ...q.tx!, data: swapData(USDG, TOKEN, 300_000n, WALLET, 980_000n) } }, USDG, TOKEN, 300_000n, WALLET)).toHaveLength(2);
   });
 });
 
@@ -280,7 +289,7 @@ describe("a Trader's run", () => {
   });
   it("sells a holding that is up 25% or more, and keeps a trade free for exits", async () => {
     const now = 1_800_000_000_000;
-    const h = harness({ now, tokenBalances: { [TOKEN]: 10n ** 18n }, quotes: (sell, buy, amount) => (buy === USDG ? quoteFor(sell, buy, amount, WALLET, 400_000n) : quoteFor(sell, buy, amount, WALLET, 1n)), candidates: [candidate(TOKEN2, "PONS")] });
+    const h = harness({ now, tokenBalances: { [TOKEN]: 10n ** 18n }, quotes: (sell, buy, amount) => (buy === USDG ? quoteFor(sell, buy, amount, WALLET, 400_000n) : quoteFor(sell, buy, amount, WALLET, 10n ** 18n)), candidates: [candidate(TOKEN2, "PONS")] });
     await h.store.setPosition("7", { token: TOKEN, symbol: "HOOKR", decimals: 18, amount: (10n ** 18n).toString(), costMicros: "300000", boughtAt: now - HOUR });
     const lines = await runAgent(h.d, agent());
     expect(lines[0]).toBe("Sold all its HOOKR (up 33%) for 0.40 USDG.");
@@ -457,6 +466,7 @@ describe("research, reports and memory", () => {
     expect((await h.store.notes("7")).map((n) => n.text)).toEqual(["HOOKR team shipped v2 this week."]);
     // The next run's AI is given what it noted and did.
     const next = researching("RED FLAG: yes\nInsiders are selling.");
+    h.balances[TOKEN.toLowerCase()] = 0n; // it no longer holds HOOKR, so it looks at it again
     const h2 = { ...h, d: { ...h.d, ai: next.ai, now: () => 1_800_000_000_000 + HOUR } };
     await runAgent(h2.d, agent({ tradesToday: 0 }));
     expect(next.asked[0].prompt).toContain("HOOKR team shipped v2 this week.");

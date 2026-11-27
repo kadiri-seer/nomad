@@ -4,12 +4,13 @@
  */
 import { getAddress } from "viem";
 import { redisFromEnv } from "@/lib/redis";
-import { creditsDeps, json } from "@/lib/server/account-routes";
+import { creditsDeps, json, rateLimited } from "@/lib/server/account-routes";
 import { balanceOf, claimTopUp, CreditsError, settle } from "@/lib/server/credits";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  if (await rateLimited(req, "credits", 60)) return json({ error: "Too many requests. Wait a minute." }, 429);
   const account = new URL(req.url).searchParams.get("account") ?? "";
   if (!/^0x[0-9a-fA-F]{40}$/.test(account)) return json({ error: "account must be an address." }, 400);
   const redis = redisFromEnv();
@@ -25,6 +26,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  if (await rateLimited(req, "credits-claim", 20)) return json({ error: "Too many tries. Wait a minute." }, 429);
   const redis = redisFromEnv();
   if (!redis) return json({ error: "Storage is not connected on this site." }, 503);
   let body: { account?: unknown; txHash?: unknown };

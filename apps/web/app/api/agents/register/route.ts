@@ -1,10 +1,11 @@
 /** Registers an agent after its mint: checks the mint, owner and wallet on-chain, stores it and schedules its first run. */
-import { json } from "@/lib/server/account-routes";
+import { json, rateLimited } from "@/lib/server/account-routes";
 import { AgentApiError, agentEnv, checkRegistration, publicAgent, type Registration } from "@/lib/server/agent-api";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  if (await rateLimited(req, "agent-register", 10)) return json({ error: "Too many tries. Wait a minute." }, 429);
   const env = agentEnv();
   if (!env) return json({ error: "Agents are not switched on on this site yet." }, 503);
   let body: Registration;

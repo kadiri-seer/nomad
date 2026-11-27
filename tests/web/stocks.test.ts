@@ -85,7 +85,7 @@ const quote = (sell: Address, buy: Address, amount: bigint, out: bigint, taker: 
   priceImpactPct: 0.2,
   tx: {
     to: STOA_ROUTER,
-    data: encodeFunctionData({ abi: SWAP_ABI, functionName: "swap", args: [{ tokenIn: sell, tokenOut: buy, mid: Z, leg1: { venue: Z, isPool: true }, leg2: { venue: Z, isPool: false }, amountIn: amount, minOut: 1n, to: taker, deadline: 9999999999n, referrer: Z }] }),
+    data: encodeFunctionData({ abi: SWAP_ABI, functionName: "swap", args: [{ tokenIn: sell, tokenOut: buy, mid: Z, leg1: { venue: Z, isPool: true }, leg2: { venue: Z, isPool: false }, amountIn: amount, minOut: out - out / 100n, to: taker, deadline: 9999999999n, referrer: Z }] }),
     value: 0n
   },
   approval: { spender: STOA_ROUTER, amount, token: sell }
