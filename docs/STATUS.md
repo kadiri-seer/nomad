@@ -347,6 +347,17 @@ Tested (automated, every push):
 
 Not verified: a real payment through a moved setup.
 
+## Kudo setups (added)
+
+Written Nov 27, 2026. Kudo records promises between agents as covenant NFTs on Robinhood Chain, through a local MCP server (`npx -y @kudo-dev/mcp`, signing with `KUDO_PRIVATE_KEY`, or in a Phala TEE with a key from dstack), a `kudo` skill that signs with `cast`, and an ElizaOS plugin (`@kudo-dev/plugin-kudo`). See [docs/guides/kudo-setups.md](guides/kudo-setups.md).
+
+Tested (automated, every push):
+- Kudo setups moving from Claude Code to Codex, OpenClaw and Cursor (`tests/migration/kudo.test.ts`): the server and `KUDO_AGENT_ID` move, the wallet key arrives only as a reference and is never written, with a step to set the same wallet's key; the `kudo` skill and its files move with a note on `cast` and `PRIVATE_KEY`; `KUDO_KEY_SOURCE=dstack` moves as a setting with a warning that the key stays in its enclave; a setup with no key says its writes return unsigned transactions; an RPC other than Robinhood Chain's public one gets a warning that shows only its host; look-alikes are not Kudo.
+- `KUDO_KEY_SOURCE` is kept as a setting only when it says `env` or `dstack`; any other value under that name is held back like a key.
+- Kudo's ElizaOS plugin is known, with its key settings, and points to the MCP server on other apps.
+
+Not verified: a covenant minted through a moved setup.
+
 ## Venin's check-up (in 0.7.5)
 
 Written Nov 23, 2026, after the Venin x Nomad test (a planted strain survived a move; Venin's scan caught it before and after). Every move preview can now run Venin's scanner on the files it would write: planted orders need the person's `planted-orders` approval, which an assistant over MCP can never give; other findings are shown. Venin published its scanner as `@veninlab/venin` 0.1.0 (Nov 24, 2026); Nomad pins that version and loads it on every move (`NOMAD_VENIN_PACKAGE` can name another build). Checked before pinning: no install scripts or dependencies, and the WebAssembly module imports nothing but wasm-bindgen's own setup, so it cannot reach the network or files. Venin's `hidden` check (invisible characters) counts as planted orders, with `order` and `comment`. Tests: `tests/migration/venin.test.ts` and `tests/home/mcp.test.ts`; the published package runs in every CI run and finds the planted order; the native build of Venin's `scan_json` passed too.

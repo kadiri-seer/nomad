@@ -4,7 +4,15 @@ import { redactText, redactLaunchField, redactWalletText, redactWalletLaunchFiel
 const EVM_KEY_VALUE = /\b0x[0-9a-fA-F]{64}\b/;
 
 /** True when an env or header value must not be copied: a credential by name or shape, a wallet key, or a private RPC URL. */
+/**
+ * A setting that only says where a key comes from (Kudo's KUDO_KEY_SOURCE: "env", or "dstack" inside a Phala TEE).
+ * Only these exact words: anything else under such a name is treated like any other key setting.
+ */
+const KEY_SOURCE_SETTING = /_KEY_SOURCE$/i;
+const KEY_SOURCE_WORDS = /^(env|dstack)$/i;
+
 export function isSecretEnvEntry(key: string, value: string): boolean {
+  if (KEY_SOURCE_SETTING.test(key) && KEY_SOURCE_WORDS.test(value.trim())) return false;
   if (isSensitiveEnvKey(key) || looksLikeSecretValue(value) || EVM_KEY_VALUE.test(value)) return true;
   // "off" turns an RPC (or service) off, as Ostra's settings allow: it is a setting, not an address.
   return isRpcEnvKey(key) && !isPublicRpcUrl(value) && value.trim().toLowerCase() !== "off";

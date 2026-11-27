@@ -557,10 +557,25 @@ function autonomoSkillNote(s: { name: string; frontmatter?: Record<string, unkno
 }
 
 /**
+ * Kudo's skill (github.com/Kudo-Agentic/kudo-agent, packages/sdk/skills/kudo/SKILL.md, read Nov 27, 2026): it signs
+ * with cast and the PRIVATE_KEY in the shell (in a Phala TEE, a key from dstack), and sends through Kudo's gas relay
+ * with sponsored-send.mjs when it can.
+ */
+function kudoSkillNote(s: { name: string; description?: string; frontmatter?: Record<string, unknown> }): Note | null {
+  const d = s.description ?? s.frontmatter?.description;
+  if (s.name !== "kudo" || typeof d !== "string" || !/Kudo/.test(d) || !/covenant/i.test(d)) return null;
+  return {
+    level: "info",
+    category: "skills",
+    message: `The "kudo" skill signs with Foundry's cast and the PRIVATE_KEY in your shell (never copied), and needs node for its sponsored-send.mjs script. Use the same wallet to keep the agent's identity and record on Kudo. Covenant text is public and permanent.`
+  };
+}
+
+/**
  * Skills that only work with the setup they were written for. Nomad moves them like any skill and
  * says so in the preview instead of copying them silently.
  */
-export function knownSkillNotes(skills: Array<{ name: string; frontmatter?: Record<string, unknown> }>, platformId: string, platformName: string): Note[] {
+export function knownSkillNotes(skills: Array<{ name: string; description?: string; frontmatter?: Record<string, unknown> }>, platformId: string, platformName: string): Note[] {
   const notes: Note[] = [];
   const fromBrainChain = (s: { frontmatter?: Record<string, unknown> }) => {
     const home = s.frontmatter?.homepage;
@@ -576,6 +591,8 @@ export function knownSkillNotes(skills: Array<{ name: string; frontmatter?: Reco
     if (virtuals) notes.push(virtuals);
     const autonomo = autonomoSkillNote(s);
     if (autonomo) notes.push(autonomo);
+    const kudo = kudoSkillNote(s);
+    if (kudo) notes.push(kudo);
     if (!fromBrainChain(s)) continue;
     if (s.name === "brainchain-worker") {
       notes.push(
@@ -1507,7 +1524,71 @@ const AUTONOMO: ServerProfile = {
   }
 };
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE, ROBINHOOD_TRADING, ROBINHOOD_BANKING, VIRTUALS, BULL, ZEROLUX, AUTONOMO];
+/** The kudo-mcp command (also .cmd or .exe on Windows), alone or as a path. */
+const isKudoCommand = (command: string | undefined) => !!command && /(^|[\\/])kudo-mcp(\.cmd|\.exe)?$/i.test(command);
+const isKudoPackage = isPackageArg("@kudo-dev/mcp");
+const ROBINHOOD_RPC_HOST = "rpc.mainnet.chain.robinhood.com";
+
+/**
+ * Kudo, which records promises between agents as covenant NFTs on Robinhood Chain, judged kept or broken by its
+ * Evaluator and tied to each agent's ERC-8004 identity, as Kudo documents it (docs.kudo.archi/integrate and
+ * @kudo-dev/mcp 0.1.0, read Nov 27, 2026): the local server `npx -y @kudo-dev/mcp` (stdio), which reads
+ * KUDO_PRIVATE_KEY (the agent wallet's key, optional: without it write tools return unsigned transactions),
+ * KUDO_AGENT_ID (the agent's ERC-8004 id), KUDO_RPC_URL, and in a Phala TEE KUDO_KEY_SOURCE=dstack (the key is
+ * derived inside the enclave). It never moves tokens. The key is never copied: the identity and record belong to it.
+ */
+const KUDO: ServerProfile = {
+  id: "kudo",
+  vendor: "Kudo",
+  label: "Kudo (promises between agents, recorded on chain)",
+  matches: (t) => !!t.mcp && t.mcp.transport === "stdio" && (isKudoCommand(t.mcp.command) || t.mcp.args.some(isKudoPackage)),
+  // KUDO_PRIVATE_KEY is handled in apply(): it is a raw key, and the agent's identity and record belong to its wallet.
+  keyVars: [],
+  emptyOkEnv: [],
+  limitVars: [],
+  looserDefaults: {},
+  apply(t, out, platform) {
+    const mcp = t.mcp!;
+    const literal = (k: string) => {
+      const v = mcp.env[k];
+      return v && "value" in v && v.value.trim() ? v.value.trim() : null;
+    };
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      message: `"${t.name}" is Kudo's MCP server (@kudo-dev/mcp). It registers the agent's ERC-8004 identity, writes its promises to other agents as covenants on Robinhood Chain, takes open asks and links proof. It never moves tokens: a promise to pay is paid from the agent's own wallet.`
+    });
+    const agentId = literal("KUDO_AGENT_ID");
+    const dstack = literal("KUDO_KEY_SOURCE")?.toLowerCase() === "dstack";
+    if (dstack) {
+      out.notes.push({
+        level: "warning",
+        category: "tools",
+        message: `"${t.name}" takes its key from dstack inside a Phala TEE (KUDO_KEY_SOURCE=dstack). On ${platform} outside that enclave it has no key, and a new Phala app gets a new key: a new wallet that must register its own identity on Kudo.`
+      });
+    } else if (mcp.env.KUDO_PRIVATE_KEY) {
+      out.notes.push({ level: "warning", category: "tools", message: `With KUDO_PRIVATE_KEY, "${t.name}" signs and sends Kudo transactions from the agent's wallet by itself. Covenant text is public and permanent: check this agent's instructions on ${platform} for what it may promise.` });
+      out.unsupported.push({
+        category: "tools",
+        item: `${t.name}: KUDO_PRIVATE_KEY`,
+        reason: "Wallet keys are references only.",
+        alternative: `Set KUDO_PRIVATE_KEY on ${platform} to the same wallet's key to keep its ERC-8004 identity${agentId ? ` (agent ${agentId})` : ""} and its kept-or-broken record on Kudo: both belong to the wallet. Until then its write tools return unsigned transactions.`
+      });
+    } else {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" had no KUDO_PRIVATE_KEY, so on ${platform} its write tools return unsigned transactions for your own wallet to sign.` });
+    }
+    const rpc = literal("KUDO_RPC_URL");
+    if (rpc && !isExactHost(rpc, ROBINHOOD_RPC_HOST, "") && !isExactHost(rpc, ROBINHOOD_RPC_HOST, "/")) {
+      out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" reads Robinhood Chain through ${rpc.replace(/^(https?:\/\/[^/]+).*/, "$1")} (KUDO_RPC_URL), not the public RPC. It moves as written: keep it only if you trust that address.` });
+    }
+    if (mcp.args.includes("--http")) {
+      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" serves Kudo over HTTP from this computer (--http), and never signs in that mode.` });
+    }
+    out.manualSteps.push(`"${t.name}" runs Kudo's server through npx: ${platform} needs Node.js on its PATH.`);
+  }
+};
+
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE, ROBINHOOD_TRADING, ROBINHOOD_BANKING, VIRTUALS, BULL, ZEROLUX, AUTONOMO, KUDO];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {

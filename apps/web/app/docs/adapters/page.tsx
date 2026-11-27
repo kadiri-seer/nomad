@@ -144,6 +144,22 @@ export default function Adapters() {
       <p>
         OddsEngine runs crypto safety checks and AI models behind one key, through a hosted MCP server, paid per call. Nomad moves the server (<code>https://api.oddsengine.live/mcp</code>) into the destination&apos;s own format. The key is never copied, also when it was part of the address: the destination reads it from <code>ODDSENGINE_API_KEY</code>. Connect OddsEngine at <a href="https://engine.oddsengine.live/?ref=nomad">engine.oddsengine.live</a>. At OddsEngine&apos;s request, a short skill has the agent end its OddsEngine check results with &quot;Checked by OddsEngine.&quot; The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/oddsengine-setups.md">OddsEngine setups guide</a>.
       </p>
+      <h2>Bull setups</h2>
+      <p>
+        Bull runs agreements and escrow between agents on Robinhood Chain, through a hosted MCP server that needs no key and never sends anything, or a local one that signs with the agent&apos;s wallet. Nomad moves the hosted server (<code>https://www.bull.family/api/mcp</code>) and the local one into the destination&apos;s own format. The local server&apos;s <code>BULL_AGENT_KEY</code> is never copied: set the same wallet&apos;s key at the destination to keep the agent&apos;s record on Bull. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/bull-setups.md">Bull setups guide</a>.
+      </p>
+      <h2>Zero Lux setups</h2>
+      <p>
+        Zero Lux sells one agent job per paid run in USDG, paid with a signature and no gas, through a hosted MCP server that needs no key. Nomad moves the server (<code>https://zerolux.fun/mcp</code>) into the destination&apos;s own format, exactly as written. Each hire asks the agent&apos;s wallet to sign its payment in the app where it runs. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/zerolux-setups.md">Zero Lux setups guide</a>.
+      </p>
+      <h2>Autonomo setups</h2>
+      <p>
+        Autonomo is a marketplace of paid APIs that agents pay for per call, through a local MCP server (<code>npx -y autonomo-mcp</code>) with spending limits. Nomad moves the server and its limits into the destination&apos;s own format, and the preview lists the limits that apply. <code>AUTONOMO_WALLET_KEY</code> is never copied. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/autonomo-setups.md">Autonomo setups guide</a>.
+      </p>
+      <h2>Kudo setups</h2>
+      <p>
+        Kudo records promises between agents as covenants on Robinhood Chain, judged kept or broken against proof and tied to each agent&apos;s ERC-8004 identity. Nomad moves its local MCP server (<code>npx -y @kudo-dev/mcp</code>) and the <code>kudo</code> skill into the destination&apos;s own format, with the agent&apos;s id. <code>KUDO_PRIVATE_KEY</code> is never copied: set the same wallet&apos;s key at the destination to keep the agent&apos;s identity and record. A key from a Phala TEE does not leave its enclave, and the preview says so. Connect Kudo at <a href="https://app.kudo.archi/dashboard">app.kudo.archi</a>. The details are in the <a href="https://github.com/kadiri-seer/nomad/blob/main/docs/guides/kudo-setups.md">Kudo setups guide</a>.
+      </p>
       <h3>Guided platforms</h3>
       <p>
         Hosted products (ChatGPT, Claude, Gemini, Grok, Perplexity) do not offer an agent import, and frameworks (CrewAI, LangGraph, LangChain, AutoGen, Semantic Kernel, PydanticAI, Agno, Mastra, Dify, Flowise, n8n, Letta) define agents in code or in their own apps. For these Nomad writes a kit into a folder you choose: text sized for each settings field, generated starter code, memory items, skills, routines and numbered steps. Nothing is sent to those services.
