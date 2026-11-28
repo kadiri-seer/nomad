@@ -11,6 +11,12 @@ import type { RunRecord } from "../agents/shared";
 
 export type PrizeToken = "USDG" | "NOMAD";
 
+/** Who may enter: any agent, only agents hosted on Nomad, or only agents running somewhere else. */
+export type Entrants = "any" | "hosted" | "outside";
+
+/** A project that puts in part of a prize. It funds its share from its own Nomad account. */
+export type Sponsor = { name: string; account: Address; share: string };
+
 export type Bounty = {
   /** Short and stable, used in links: "fee-research". */
   id: string;
@@ -27,7 +33,40 @@ export type Bounty = {
   services?: string[];
   /** When true, only entries Nomad can verify can be submitted: hosted runs, or transactions on chain. */
   proofRequired?: boolean;
+  /** How many winners. The prize amount is for each of them. Default 1. */
+  places?: number;
+  /** Who may enter. Default any agent. */
+  entrants?: Entrants;
+  /** A reviewer may pick a winner as soon as a valid entry is in, without waiting for the close. */
+  firstValidWins?: boolean;
+  /** The winning work stays off the public page until a reviewer releases it. */
+  privateUntilReleased?: boolean;
+  /** An entry Venin turns away does not use up one of its tries (for bounties about getting past a scanner). */
+  freeScanRejects?: boolean;
+  /** The co-sponsor and its share of the whole prize, paid from its Nomad account into the treasury. */
+  sponsor?: Sponsor;
+  /** Nomad's share of the whole prize, when a sponsor puts in the rest. */
+  nomadShare?: string;
+  /** The sponsor's share, sent from its Nomad account to the treasury, read on chain. */
+  deposit?: { tx: Hex; amount: string; at: number };
+  /** Nomad accounts that may read this bounty's entries and pick winners, besides Nomad's team (its sponsor). */
+  reviewers?: Address[];
 };
+
+/** A sponsor's bounty as it is kept before and after Nomad's approval. */
+export type DraftStatus = "waiting" | "returned" | "approved" | "cancelled";
+export type StoredBounty = Bounty & {
+  status: DraftStatus;
+  createdAt: number;
+  updatedAt: number;
+  /** Nomad's note when it sent the bounty back. */
+  note?: string;
+  /** The schedule was set by Nomad and the sponsor cannot change it. */
+  scheduleLocked?: boolean;
+};
+
+/** A whitelisted sponsor, from the site's settings: its Nomad account, and optionally a schedule set in advance. */
+export type SponsorSpec = { name: string; account: Address; opens?: string; days?: number; maxPrize?: string };
 
 /** How much of an entry can be checked: a run Nomad recorded, transactions on chain, or the work alone. */
 export type Proof = "nomad" | "onchain" | "work";
@@ -58,7 +97,8 @@ export type Entry = {
   submission?: Submission;
 };
 
-export type BountyResult = {
+/** One winner and its prize. */
+export type Award = {
   winner: Address;
   pickedAt: number;
   /** The prize locked in Bull's arbiter escrow for the winner (lib/bounties/bull.ts), until the reviewer confirms. */
@@ -67,6 +107,13 @@ export type BountyResult = {
   paidAt?: number;
   /** "bull" when the prize was released from Bull's escrow; otherwise it was sent from the treasury. */
   paidVia?: "bull";
+};
+
+export type BountyResult = {
+  /** The winners picked so far, in the order they were picked. */
+  awards: Award[];
+  /** When a reviewer released the winning work (for privateUntilReleased bounties). */
+  releasedAt?: number;
 };
 
 export type BountyState = "upcoming" | "open" | "judging" | "decided" | "paid";
@@ -83,11 +130,13 @@ export const PRIZE_DECIMALS: Record<PrizeToken, number> = { USDG: 6, NOMAD: 18 }
 
 export const closesAt = (b: Bounty) => Date.parse(b.closes);
 export const opensAt = (b: Bounty) => Date.parse(b.opens);
+export const placesOf = (b: Bounty) => Math.max(1, Math.floor(b.places ?? 1));
+export const entrantsOf = (b: Bounty): Entrants => b.entrants ?? "any";
 
 /** Where a bounty is, from its dates and its result. Funding is checked separately. */
 export function bountyState(b: Bounty, result: BountyResult | null, now = Date.now()): BountyState {
-  if (result?.paidTx) return "paid";
-  if (result) return "decided";
+  const awards = result?.awards ?? [];
+  if (awards.length >= placesOf(b)) return awards.every((a) => a.paidTx) ? "paid" : "decided";
   if (now < opensAt(b)) return "upcoming";
   if (now < closesAt(b)) return "open";
   return "judging";
@@ -95,8 +144,9 @@ export function bountyState(b: Bounty, result: BountyResult | null, now = Date.n
 
 /** The status line a creator sees for one entry. */
 export function entryStatus(e: Entry, title: string, state: BountyState, result: BountyResult | null): string {
-  if (result && result.winner.toLowerCase() === e.owner.toLowerCase()) return result.paidTx ? `Won ${title}, paid` : `Won ${title}`;
-  if (result) return `${title}: not chosen`;
+  const award = result?.awards.find((a) => a.winner.toLowerCase() === e.owner.toLowerCase());
+  if (award) return award.paidTx ? `Won ${title}, paid` : `Won ${title}`;
+  if (state === "decided" || state === "paid") return `${title}: not chosen`;
   if (e.submission) return `${title}: submitted`;
   if (state !== "open") return `${title}: closed before it submitted`;
   if (e.tries >= MAX_TRIES) return `${title}: out of tries (${e.problem ?? "checks did not pass"})`;
@@ -111,6 +161,56 @@ export const submitMessage = (bounty: string, text: string, txs: readonly string
   `Nomad bounty ${bounty}: submit ${keccak256(toHex(text))}${txs.length ? ` with ${txs.map((t) => t.toLowerCase()).join(",")}` : ""} at ${at}`;
 export const linkMessage = (wallet: string, name: string, at: number) => `Nomad: link outside agent ${wallet.toLowerCase()} named ${name} at ${at}`;
 export const reviewMessage = (action: string, at: number) => `Nomad bounty review: ${action} at ${at}`;
+export const sponsorMessage = (action: string, at: number) => `Nomad bounty sponsor: ${action} at ${at}`;
+
+/** The fields a sponsor sets, in a fixed order, so a signature names exactly what it saves. */
+export type DraftFields = {
+  title: string;
+  brief: string;
+  result: string;
+  prize: string;
+  share: string;
+  places: number;
+  entrants: Entrants;
+  firstValidWins: boolean;
+  privateUntilReleased: boolean;
+  freeScanRejects: boolean;
+  opens: string;
+  days: number;
+};
+export const draftFingerprint = (f: DraftFields) =>
+  keccak256(toHex(JSON.stringify([f.title, f.brief, f.result, f.prize, f.share, f.places, f.entrants, f.firstValidWins, f.privateUntilReleased, f.freeScanRejects, f.opens, f.days])));
+export const noteFingerprint = (note: string) => keccak256(toHex(note));
+
+/**
+ * A sponsor's fields as both sides read them, before any checks: the browser signs these, and the server checks the
+ * same. A schedule Nomad set in advance replaces whatever was sent.
+ */
+export function normalDraft(raw: unknown, locked: { opens: string; days: number } | null): DraftFields {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const text = (k: string) => (typeof o[k] === "string" ? (o[k] as string).replace(/\r\n/g, "\n").trim() : "");
+  const t = Date.parse(String(o.opens ?? ""));
+  return {
+    title: text("title"),
+    brief: text("brief"),
+    result: text("result"),
+    prize: String(o.prize ?? "").trim(),
+    share: String(o.share ?? "").trim(),
+    places: Number(o.places ?? 1),
+    entrants: o.entrants === "hosted" || o.entrants === "outside" ? o.entrants : "any",
+    firstValidWins: o.firstValidWins === true,
+    privateUntilReleased: o.privateUntilReleased === true,
+    freeScanRejects: o.freeScanRejects === true,
+    opens: locked ? locked.opens : Number.isFinite(t) ? new Date(t).toISOString() : "",
+    days: locked ? locked.days : Number(o.days)
+  };
+}
+
+/** Limits on what a sponsor can post. */
+export const SPONSOR_MAX_PRIZE = "1000";
+export const SPONSOR_MAX_DAYS = 30;
+export const SPONSOR_MAX_PLACES = 100;
+export const BOUNTY_DAYS = [3, 7, 10, 14, 30] as const;
 
 /** Word shingles of a text, for spotting copies. */
 function shingles(text: string, n = 5): Set<string> {

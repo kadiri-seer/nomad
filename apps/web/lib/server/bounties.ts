@@ -1,16 +1,20 @@
 /**
- * Agent bounties on the server: where entries live (Redis), entering, handing work in with its checks, linking outside
- * agents, and the team's review. The list of bounties and reviewers is lib/bounties/list.ts; everything here is
- * written against injected dependencies (chain reads, signatures, Venin) so the tests run without a network.
+ * Agent bounties on the server: where bounties and entries live (Redis), entering, handing work in with its checks,
+ * linking outside agents, sponsors' own bounties, and the review. Bounties come from lib/bounties/list.ts and from
+ * whitelisted sponsors (approved by Nomad's team); everything here is written against injected dependencies (chain
+ * reads, signatures, Venin) so the tests run without a network.
  */
 import { getAddress, isAddress, parseUnits, type Address, type Hex } from "viem";
 import { NOMAD, TREASURY, USDG } from "../accounts/chain";
 import { BULL_AGREEMENTS, checkEscrowPlan, ESCROW_HOURS, type createdAgreement } from "../bounties/bull";
 import type { AgentRecord, RunRecord } from "../agents/shared";
 import {
+  BOUNTY_DAYS,
   bountyState,
   closesAt,
   COPY_SIMILARITY,
+  draftFingerprint,
+  entrantsOf,
   entryStatus,
   hostedEnterMessage,
   linkMessage,
@@ -19,17 +23,29 @@ import {
   MAX_SUBMISSION_CHARS,
   MAX_TRIES,
   MIN_SUBMISSION_CHARS,
+  normalDraft,
+  noteFingerprint,
+  opensAt,
   outsideEnterMessage,
+  placesOf,
   PRIZE_DECIMALS,
   reviewMessage,
   similarity,
+  SPONSOR_MAX_DAYS,
+  SPONSOR_MAX_PLACES,
+  SPONSOR_MAX_PRIZE,
+  sponsorMessage,
   submitMessage,
+  type Award,
   type Bounty,
   type BountyResult,
   type BountyState,
+  type DraftFields,
   type Entry,
   type PrizeToken,
-  type Proof
+  type Proof,
+  type SponsorSpec,
+  type StoredBounty
 } from "../bounties/shared";
 import { hashToObject, type RedisLike } from "../redis";
 
@@ -43,6 +59,7 @@ const ENTRIES = (b: string) => `nomad:bounty:${b}:entries`;
 const RESULT = (b: string) => `nomad:bounty:${b}:result`;
 const AGENT_BOUNTIES = (id: string) => `nomad:agent:${id}:bounties`;
 const LINK = (wallet: string) => `nomad:bounty-link:${wallet.toLowerCase()}`;
+const DRAFTS = "nomad:bounty-drafts";
 
 export function bountyStore(redis: RedisLike) {
   return {
@@ -83,6 +100,17 @@ export function bountyStore(redis: RedisLike) {
     },
     async setLink(wallet: Address, v: { owner: Address; name: string; at: number }) {
       await redis.cmd(["SET", LINK(wallet), JSON.stringify(v)]);
+    },
+    /** Sponsors' bounties, in every state. */
+    async drafts(): Promise<StoredBounty[]> {
+      return Object.values(hashToObject(await redis.cmd(["HGETALL", DRAFTS]))).map((r) => JSON.parse(r) as StoredBounty);
+    },
+    async draft(id: string): Promise<StoredBounty | null> {
+      const raw = await redis.cmd(["HGET", DRAFTS, id]);
+      return typeof raw === "string" ? (JSON.parse(raw) as StoredBounty) : null;
+    },
+    async putDraft(b: StoredBounty) {
+      await redis.cmd(["HSET", DRAFTS, b.id, JSON.stringify(b)]);
     }
   };
 }
@@ -92,6 +120,8 @@ export type BountyDeps = {
   store: BountyStore;
   list: Bounty[];
   reviewers: Address[];
+  /** Whitelisted sponsors (from the site's settings). */
+  sponsors?: SponsorSpec[];
   now: () => number;
   /** What the treasury holds of a prize token, in its smallest unit. */
   treasuryBalance(token: PrizeToken): Promise<bigint>;
@@ -102,8 +132,13 @@ export type BountyDeps = {
   agent(id: string): Promise<AgentRecord | null>;
   /** True when `tx` succeeded, was made by `wallet` (directly or as a smart account), and after `sinceMs`. */
   txBy(wallet: Address, tx: Hex, sinceMs: number): Promise<boolean>;
-  /** True when `tx` moved at least `amount` of `token` to `to`, from the treasury or (`from`) Bull's agreements contract. */
+  /** True when `tx` moved at least `amount` of `token` to `to`, from the treasury or from `from`. */
   paid(token: PrizeToken, to: Address, amount: bigint, tx: Hex, from?: Address): Promise<boolean>;
+  /**
+   * Marks a transaction as spent for credits, so a sponsor's deposit can never also be counted as credit top-up.
+   * False when it was already counted (as credits, or as another deposit).
+   */
+  claimTx?(tx: Hex): Promise<boolean>;
   /** Bull's plan for a prize escrow (bull_agreement_from_template), as Bull answered. */
   bullPlan(args: Record<string, unknown>): Promise<unknown>;
   /** The Bull agreement a successful transaction created, from its receipt. */
@@ -115,17 +150,49 @@ export type BountyDeps = {
 };
 
 const SIGNATURE_MAX_AGE_MS = 10 * 60_000;
+const DAY_MS = 86_400_000;
 const isHash = (s: unknown): s is Hex => typeof s === "string" && /^0x[0-9a-fA-F]{64}$/.test(s);
 const lc = (a: string) => a.toLowerCase();
+const VENIN_PROBLEM = "Venin found planted instructions in it";
 
+/** One winner's prize, in the token's smallest unit. */
 export const prizeUnits = (b: Bounty) => parseUnits(b.prize.amount, PRIZE_DECIMALS[b.prize.token]);
+/** The whole prize: one prize for each place. */
+export const totalUnits = (b: Bounty) => prizeUnits(b) * BigInt(placesOf(b));
+const usdgUnits = (s: string) => parseUnits(s, 6);
+const fmtUsdg = (u: bigint) => {
+  const whole = u / 1_000_000n;
+  const frac = (u % 1_000_000n).toString().padStart(6, "0").replace(/0+$/, "");
+  return frac ? `${whole}.${frac}` : `${whole}`;
+};
+
+/** The whitelisted sponsors in the site's settings (BOUNTY_SPONSORS, JSON). Anything malformed is left out. */
+export function parseSponsors(raw: string | undefined): SponsorSpec[] {
+  if (!raw?.trim()) return [];
+  let list: unknown;
+  try {
+    list = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(list)) return [];
+  const out: SponsorSpec[] = [];
+  for (const x of list) {
+    const o = (x ?? {}) as Record<string, unknown>;
+    const name = typeof o.name === "string" ? o.name.replace(/[^\p{L}\p{N} ._&-]/gu, "").trim().slice(0, 40) : "";
+    if (!name || typeof o.account !== "string" || !isAddress(o.account, { strict: false })) continue;
+    const spec: SponsorSpec = { name, account: getAddress(o.account) };
+    if (typeof o.opens === "string" && Number.isFinite(Date.parse(o.opens))) spec.opens = new Date(Date.parse(o.opens)).toISOString();
+    const days = Number(o.days);
+    if (Number.isInteger(days) && days >= 1 && days <= SPONSOR_MAX_DAYS) spec.days = days;
+    if (typeof o.maxPrize === "string" && /^\d{1,7}(\.\d{1,6})?$/.test(o.maxPrize)) spec.maxPrize = o.maxPrize;
+    out.push(spec);
+  }
+  return out;
+}
 
 export function bounties(d: BountyDeps) {
-  const byId = (id: string) => {
-    const b = d.list.find((x) => x.id === id);
-    if (!b) throw new BountyError(404, "There is no bounty by that name.");
-    return b;
-  };
+  const sponsors = d.sponsors ?? [];
   const fresh = (at: unknown) => {
     const n = Number(at);
     if (!Number.isFinite(n) || Math.abs(d.now() - n) > SIGNATURE_MAX_AGE_MS) throw new BountyError(400, "The signature is too old. Sign again.");
@@ -135,39 +202,74 @@ export function bounties(d: BountyDeps) {
     if (typeof s !== "string" || !/^0x[0-9a-fA-F]+$/.test(s)) throw new BountyError(400, "signature is missing.");
     return s as Hex;
   };
+  const signerOf = (s: unknown) => {
+    if (typeof s !== "string" || !isAddress(s, { strict: false })) throw new BountyError(400, "signer is not an address.");
+    return getAddress(s);
+  };
+
+  /** Every bounty that can be seen: the ones in the code, and sponsors' bounties Nomad approved. */
+  async function all(): Promise<Bounty[]> {
+    const approved = (await d.store.drafts()).filter((b) => b.status === "approved");
+    return [...d.list, ...approved.map(publicFields)];
+  }
+  async function byId(id: string): Promise<Bounty> {
+    const b = (await all()).find((x) => x.id === id);
+    if (!b) throw new BountyError(404, "There is no bounty by that name.");
+    return b;
+  }
+  /** A stored bounty without what only Nomad and its sponsor need. */
+  function publicFields(b: StoredBounty): Bounty {
+    const { status: _s, createdAt: _c, updatedAt: _u, note: _n, scheduleLocked: _l, ...rest } = b;
+    return rest;
+  }
+  /** A sponsor's share is in once its deposit was read on chain (a bounty without a sponsor needs none). */
+  const sponsorFunded = (b: Bounty) => !b.sponsor || usdgUnits(b.sponsor.share) === 0n || !!b.deposit;
+
+  /** Whether an award still needs money from the treasury: not paid, and not locked in a live escrow. */
+  const owing = (a: Award) => !a.paidTx && !(a.escrow && a.escrow.expiresAt > d.now());
 
   /**
    * Bounties the treasury can pay: for each prize token, every unpaid prize counted against its balance, earliest
    * closing first. A bounty past that point does not show as open.
    */
-  async function funded(): Promise<Set<string>> {
+  async function funded(list?: Bounty[]): Promise<Set<string>> {
     const out = new Set<string>();
-    const unpaid = (await Promise.all(d.list.map(async (b) => ({ b, r: await d.store.result(b.id) })))).filter((x) => !x.r?.paidTx && !(x.r?.escrow && x.r.escrow.expiresAt > d.now())).sort((x, y) => closesAt(x.b) - closesAt(y.b));
+    // A sponsor's bounty counts only once its share is in, so an unfunded one never holds back the others.
+    const rows = await Promise.all((list ?? (await all())).filter(sponsorFunded).map(async (b) => ({ b, r: await d.store.result(b.id) })));
+    const unpaid = rows
+      .map(({ b, r }) => {
+        const awards = r?.awards ?? [];
+        const open = placesOf(b) - awards.length;
+        const places = BigInt(Math.max(0, open) + awards.filter(owing).length);
+        return { b, need: prizeUnits(b) * places };
+      })
+      .filter((x) => x.need > 0n)
+      .sort((x, y) => closesAt(x.b) - closesAt(y.b));
     for (const token of ["USDG", "NOMAD"] as PrizeToken[]) {
       const these = unpaid.filter((x) => x.b.prize.token === token);
       if (!these.length) continue;
       let left = await d.treasuryBalance(token).catch(() => 0n);
-      for (const { b } of these) {
-        const p = prizeUnits(b);
-        if (p > left) break;
-        left -= p;
+      for (const { b, need } of these) {
+        if (need > left) break;
+        left -= need;
         out.add(b.id);
       }
     }
+    for (const { b, r } of rows) if ((r?.awards ?? []).length >= placesOf(b) && (r?.awards ?? []).every((a) => !owing(a))) out.add(b.id);
     return out;
   }
 
-  /** A bounty's state, or "hidden" while it is not funded and not yet decided. */
+  /** A bounty's state, or "hidden" while it is not funded (its sponsor's share included) and not yet decided. */
   async function stateOf(b: Bounty, fundedSet?: Set<string>): Promise<{ state: BountyState | "hidden"; result: BountyResult | null }> {
     const result = await d.store.result(b.id);
     const state = bountyState(b, result, d.now());
     if (state === "decided" || state === "paid") return { state, result };
     const f = fundedSet ?? (await funded());
-    return { state: f.has(b.id) ? state : "hidden", result };
+    return { state: f.has(b.id) && sponsorFunded(b) ? state : "hidden", result };
   }
 
   async function openBounty(id: string) {
-    const b = byId(id);
+    const b = await byId(id);
     const { state } = await stateOf(b);
     if (state !== "open") throw new BountyError(409, state === "upcoming" ? "This bounty has not opened yet." : "This bounty is not open.");
     return b;
@@ -175,14 +277,18 @@ export function bounties(d: BountyDeps) {
 
   async function openEntriesOf(owner: Address) {
     let n = 0;
-    for (const b of d.list) {
+    for (const b of await all()) {
       if (bountyState(b, null, d.now()) !== "open") continue;
       if (await d.store.entry(b.id, owner)) n += 1;
     }
     return n;
   }
 
-  async function createEntry(e: Entry) {
+  /** The accounts that review a bounty besides Nomad's team: its listed reviewers and its sponsor. */
+  const bountyReviewers = (b: Bounty) => [...(b.reviewers ?? []), ...(b.sponsor ? [b.sponsor.account] : [])].map(lc);
+
+  async function createEntry(b: Bounty, e: Entry) {
+    if (bountyReviewers(b).includes(lc(e.owner))) throw new BountyError(403, "A bounty's sponsor and reviewers cannot enter it.");
     if ((await openEntriesOf(e.owner)) >= MAX_OPEN_ENTRIES) throw new BountyError(409, `An account can be in at most ${MAX_OPEN_ENTRIES} open bounties at a time.`);
     if (!(await d.store.create(e))) throw new BountyError(409, "Your account has already entered this bounty. Each account gets one entry.");
   }
@@ -192,7 +298,7 @@ export function bounties(d: BountyDeps) {
     if (text.length < MIN_SUBMISSION_CHARS) return "the work is too short";
     if (text.length > MAX_SUBMISSION_CHARS) return `the work is longer than ${MAX_SUBMISSION_CHARS} characters`;
     if (d.secrets(text) > 0) return "the work contains what looks like a key or secret";
-    if ((await d.venin(`bounties/${b.id}/submission.md`, text).catch(() => 0)) > 0) return "Venin found planted instructions in it";
+    if ((await d.venin(`bounties/${b.id}/submission.md`, text).catch(() => 0)) > 0) return VENIN_PROBLEM;
     if (services && b.services?.length) {
       const used = new Set(services.map(lc));
       const missing = b.services.filter((s) => !used.has(lc(s)));
@@ -205,9 +311,10 @@ export function bounties(d: BountyDeps) {
     return null;
   }
 
-  async function record(e: Entry, problem: string | null, submission: Entry["submission"]) {
+  async function record(b: Bounty, e: Entry, problem: string | null, submission: Entry["submission"]) {
     if (problem) {
-      e.tries += 1;
+      // On a bounty about getting past a scanner, Venin turning work away is part of the game, not a failed try.
+      if (!(b.freeScanRejects && problem === VENIN_PROBLEM)) e.tries += 1;
       e.problem = problem;
     } else {
       e.problem = undefined;
@@ -216,64 +323,141 @@ export function bounties(d: BountyDeps) {
     await d.store.put(e);
   }
 
-  async function isReviewer(signer: Address) {
+  async function accountOf(signer: Address) {
+    return getAddress(await d.mainAccountOf(signer).catch(() => signer));
+  }
+  /** Nomad's team: the listed reviewers, by sign-in wallet or Nomad account. */
+  async function isTeam(signer: Address) {
     const set = new Set(d.reviewers.map(lc));
     if (set.has(lc(signer))) return true;
     return set.has(lc(await d.mainAccountOf(signer).catch(() => "0x")));
   }
+  /** Whether this signer reviews this bounty: Nomad's team, or its sponsor or listed reviewers. */
+  async function reviews(signer: Address, b: Bounty) {
+    if (await isTeam(signer)) return true;
+    const who = [lc(signer), lc(await accountOf(signer))];
+    return bountyReviewers(b).some((r) => who.includes(r));
+  }
+  const sponsorOf = (account: Address) => sponsors.find((s) => lc(s.account) === lc(account)) ?? null;
+
+  /** A sponsor's fields (already read with normalDraft), checked against the limits. */
+  async function checkDraft(spec: SponsorSpec, f: DraftFields, locked: boolean): Promise<DraftFields> {
+    const len = (v: string, min: number, max: number, label: string) => {
+      if (v.length < min || v.length > max) throw new BountyError(400, `${label} must be ${min} to ${max} characters.`);
+    };
+    len(f.title, 3, 80, "The title");
+    len(f.brief, 20, 1200, "What to do");
+    len(f.result, 10, 400, "What to hand in");
+    const money = /^\d{1,7}(\.\d{1,6})?$/;
+    if (!money.test(f.prize)) throw new BountyError(400, "The prize must be an amount of USDG.");
+    if (!money.test(f.share)) throw new BountyError(400, "Your share must be an amount of USDG.");
+    if (!Number.isInteger(f.places) || f.places < 1 || f.places > SPONSOR_MAX_PLACES) throw new BountyError(400, `Winners must be 1 to ${SPONSOR_MAX_PLACES}.`);
+    if (usdgUnits(f.prize) <= 0n) throw new BountyError(400, "The prize must be more than 0.");
+    const total = usdgUnits(f.prize) * BigInt(f.places);
+    const max = spec.maxPrize ?? SPONSOR_MAX_PRIZE;
+    if (total > usdgUnits(max)) throw new BountyError(400, `The whole prize can be at most ${max} USDG.`);
+    if (usdgUnits(f.share) > total) throw new BountyError(400, "Your share cannot be more than the whole prize.");
+    if (!locked) {
+      if (!f.opens) throw new BountyError(400, "Choose when it opens.");
+      if (Date.parse(f.opens) < d.now()) throw new BountyError(400, "It must open in the future.");
+      if (!Number.isInteger(f.days) || f.days < 1 || f.days > SPONSOR_MAX_DAYS) throw new BountyError(400, `It can run 1 to ${SPONSOR_MAX_DAYS} days.`);
+    }
+    for (const [k, v] of [["title", f.title], ["brief", f.brief], ["result", f.result]] as const) {
+      const name = k === "brief" ? "task" : k;
+      if (d.secrets(v) > 0) throw new BountyError(400, `The ${name} contains what looks like a key or secret.`);
+      if ((await d.venin(`bounties/new/${k}.md`, v).catch(() => 0)) > 0) throw new BountyError(400, `Venin found planted instructions in the ${name}, so it was not saved.`);
+    }
+    return f;
+  }
+
+  /** A sponsor's preset schedule, from its settings, when it has one. */
+  const presetOf = (spec: SponsorSpec) => (spec.opens && spec.days ? { opens: spec.opens, days: spec.days } : null);
+  const slug = (title: string) =>
+    `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "bounty"}-${Math.floor(d.now() % 1_000_000).toString(36)}`;
+
+  /** What a sponsor sees of its own bounty. */
+  const mine = async (b: StoredBounty) => {
+    const result = await d.store.result(b.id);
+    const state = b.status === "approved" ? bountyState(b, result, d.now()) : null;
+    return { ...b, state, entries: (await d.store.entries(b.id)).length, awards: result?.awards.length ?? 0 };
+  };
+
+  function awardOf(result: BountyResult | null, winner: Address) {
+    return result?.awards.find((a) => lc(a.winner) === lc(winner)) ?? null;
+  }
+  async function setAward(id: string, result: BountyResult, a: Award) {
+    await d.store.setResult(id, { ...result, awards: result.awards.map((x) => (lc(x.winner) === lc(a.winner) ? a : x)) });
+  }
+  const addressOf = (v: unknown, what: string) => {
+    if (typeof v !== "string" || !isAddress(v, { strict: false })) throw new BountyError(400, `${what} is not an address.`);
+    return getAddress(v);
+  };
 
   return {
     funded,
     stateOf,
-    isReviewer,
+    isReviewer: isTeam,
 
     /** What anyone may see: open, upcoming, judging and decided bounties, never the entries. */
     async publicList() {
-      const f = await funded();
+      const list = await all();
+      const f = await funded(list);
       const out = [];
-      for (const b of d.list) {
+      for (const b of list) {
         const { state, result } = await stateOf(b, f);
         if (state === "hidden") continue;
-        out.push({ ...b, state, entries: (await d.store.entries(b.id)).length, ...(result?.paidTx ? { paidTx: result.paidTx } : {}) });
+        const { reviewers: _r, ...shown } = b;
+        out.push({ ...shown, state, entries: (await d.store.entries(b.id)).length, winners: result?.awards.length ?? 0 });
       }
       return out;
     },
 
-    /** One bounty; once decided, its winning work and the proof behind it. Other entries stay private. */
+    /** One bounty; once decided, its winning work and the proof behind it (unless it is held). Other entries stay private. */
     async publicOne(id: string) {
-      const b = byId(id);
+      const b = await byId(id);
       const { state, result } = await stateOf(b);
       if (state === "hidden") throw new BountyError(404, "There is no bounty by that name.");
-      let winner = null;
-      if (result) {
-        const e = await d.store.entry(b.id, result.winner);
-        if (e?.submission) winner = { agentName: e.agentName, ...(e.agentId ? { agentId: e.agentId } : {}), ...(e.wallet ? { wallet: e.wallet } : {}), submission: e.submission, paidTx: result.paidTx ?? null, ...(result.paidVia ? { paidVia: result.paidVia } : {}), ...(result.escrow ? { escrow: { id: result.escrow.id, expiresAt: result.escrow.expiresAt } } : {}) };
+      const held = !!b.privateUntilReleased && !result?.releasedAt;
+      const winners = [];
+      for (const a of result?.awards ?? []) {
+        const e = await d.store.entry(b.id, a.winner);
+        if (!e?.submission) continue;
+        winners.push({
+          agentName: e.agentName,
+          ...(e.agentId ? { agentId: e.agentId } : {}),
+          ...(e.wallet ? { wallet: e.wallet } : {}),
+          submission: held ? null : e.submission,
+          paidTx: a.paidTx ?? null,
+          ...(a.paidVia ? { paidVia: a.paidVia } : {}),
+          ...(a.escrow ? { escrow: { id: a.escrow.id, expiresAt: a.escrow.expiresAt } } : {})
+        });
       }
-      return { ...b, state, entries: (await d.store.entries(b.id)).length, winner };
+      const { reviewers: _r, ...shown } = b;
+      return { ...shown, state, entries: (await d.store.entries(b.id)).length, winners, held };
     },
 
     /** A hosted agent enters: signed by its creator's Google wallet. Its next runs get the brief. */
     async enterHosted(body: { bounty?: unknown; agentId?: unknown; at?: unknown; signature?: unknown }) {
       const b = await openBounty(String(body.bounty ?? ""));
+      if (entrantsOf(b) === "outside") throw new BountyError(409, "This bounty is for agents running outside Nomad only.");
       const id = String(body.agentId ?? "");
       if (!/^\d{1,30}$/.test(id)) throw new BountyError(400, "agentId is not valid.");
       const a = await d.agent(id);
       if (!a) throw new BountyError(404, "There is no agent by that id.");
       const at = fresh(body.at);
       if (!(await d.verify(a.signer, hostedEnterMessage(b.id, id, at), sig(body.signature)).catch(() => false))) throw new BountyError(403, "Only the agent's creator can enter it.");
-      await createEntry({ bounty: b.id, owner: getAddress(a.owner), agentName: a.name, agentId: id, enteredAt: d.now(), tries: 0 });
+      await createEntry(b, { bounty: b.id, owner: getAddress(a.owner), agentName: a.name, agentId: id, enteredAt: d.now(), tries: 0 });
       await d.store.addAgentBounty(id, b.id);
       return { ok: true, status: `Working on ${b.title}` };
     },
 
     /** An outside agent links its wallet to a Nomad account: signed by the account's Google wallet. */
     async link(body: { signer?: unknown; wallet?: unknown; name?: unknown; at?: unknown; signature?: unknown }) {
-      if (typeof body.signer !== "string" || !isAddress(body.signer, { strict: false })) throw new BountyError(400, "signer is not an address.");
+      const signer = signerOf(body.signer);
       if (typeof body.wallet !== "string" || !isAddress(body.wallet, { strict: false })) throw new BountyError(400, "That is not a wallet address.");
       const name = String(body.name ?? "").replace(/[^\p{L}\p{N} ._-]/gu, "").trim().slice(0, 40);
       if (!name) throw new BountyError(400, "Give the agent a name.");
       const at = fresh(body.at);
-      const signer = getAddress(body.signer);
       const wallet = getAddress(body.wallet);
       if (!(await d.verify(signer, linkMessage(wallet, name, at), sig(body.signature)).catch(() => false))) throw new BountyError(403, "The signature does not match.");
       const owner = getAddress(await d.mainAccountOf(signer));
@@ -287,42 +471,45 @@ export function bounties(d: BountyDeps) {
     /** An outside agent enters: signed by its own linked wallet. */
     async enterOutside(body: { bounty?: unknown; wallet?: unknown; at?: unknown; signature?: unknown }) {
       const b = await openBounty(String(body.bounty ?? ""));
+      if (entrantsOf(b) === "hosted") throw new BountyError(409, "This bounty is for agents hosted on Nomad only.");
       if (typeof body.wallet !== "string" || !isAddress(body.wallet, { strict: false })) throw new BountyError(400, "wallet is not an address.");
       const wallet = getAddress(body.wallet);
       const link = await d.store.link(wallet);
       if (!link) throw new BountyError(403, "Link this wallet to your Nomad account first, from your account page.");
       const at = fresh(body.at);
       if (!(await d.verify(wallet, outsideEnterMessage(b.id, at), sig(body.signature)).catch(() => false))) throw new BountyError(403, "The signature is not from that wallet.");
-      await createEntry({ bounty: b.id, owner: getAddress(link.owner), agentName: link.name, wallet, enteredAt: d.now(), tries: 0 });
+      await createEntry(b, { bounty: b.id, owner: getAddress(link.owner), agentName: link.name, wallet, enteredAt: d.now(), tries: 0 });
       return { ok: true, status: `Entered ${b.title}. Submit the work before ${b.closes}.` };
     },
 
     /** The bounties a hosted agent entered and has not handed in yet: the work for its next run. */
     async tasks(agent: AgentRecord) {
       const out = [];
+      const list = await all();
       for (const id of await d.store.agentBounties(agent.id)) {
-        const b = d.list.find((x) => x.id === id);
+        const b = list.find((x) => x.id === id);
         const e = b ? await d.store.entry(b.id, agent.owner) : null;
-        const done = !b || !e || e.agentId !== agent.id || !!e.submission || e.tries >= MAX_TRIES || bountyState(b, null, d.now()) !== "open";
+        const state = b ? bountyState(b, await d.store.result(b.id), d.now()) : null;
+        const done = !b || !e || e.agentId !== agent.id || !!e.submission || e.tries >= MAX_TRIES || state !== "open";
         if (done) {
           await d.store.removeAgentBounty(agent.id, id);
           continue;
         }
-        out.push({ id: b.id, title: b.title, brief: b.brief, result: b.result, ...(b.services ? { services: b.services } : {}) });
+        out.push({ id: b!.id, title: b!.title, brief: b!.brief, result: b!.result, ...(b!.services ? { services: b!.services } : {}) });
       }
       return out;
     },
 
     /** A hosted run hands its work in, with the run's record as proof. */
     async submitHosted(agent: AgentRecord, bountyId: string, text: string, rec: RunRecord): Promise<{ ok: boolean; problem?: string }> {
-      const b = byId(bountyId);
-      if (bountyState(b, null, d.now()) !== "open") return { ok: false, problem: "the bounty has closed" };
+      const b = await byId(bountyId);
+      if (bountyState(b, await d.store.result(b.id), d.now()) !== "open") return { ok: false, problem: "the bounty has closed" };
       const e = await d.store.entry(b.id, agent.owner);
       if (!e || e.agentId !== agent.id || e.submission) return { ok: false, problem: "this agent has no open entry" };
       if (rec.startedAt < e.enteredAt) return { ok: false, problem: "the run started before the agent entered" };
       const used = [...new Set(rec.calls.filter((c) => c.ok).map((c) => c.service.replace(/ \(.*\)$/, "")))];
       const problem = await problemWith(b, e.owner, text, used);
-      await record(e, problem, { at: d.now(), text, proof: "nomad", record: rec, ...(rec.txs.length ? { txs: rec.txs } : {}) });
+      await record(b, e, problem, { at: d.now(), text, proof: "nomad", record: rec, ...(rec.txs.length ? { txs: rec.txs } : {}) });
       if (!problem || e.tries >= MAX_TRIES) await d.store.removeAgentBounty(agent.id, b.id);
       return problem ? { ok: false, problem } : { ok: true };
     },
@@ -330,6 +517,7 @@ export function bounties(d: BountyDeps) {
     /** An outside agent hands its work in: signed by its wallet, with any transactions it made after entering. */
     async submitOutside(body: { bounty?: unknown; wallet?: unknown; text?: unknown; txs?: unknown; at?: unknown; signature?: unknown }) {
       const b = await openBounty(String(body.bounty ?? ""));
+      if (bountyState(b, await d.store.result(b.id), d.now()) !== "open") throw new BountyError(409, "This bounty is not open.");
       if (typeof body.wallet !== "string" || !isAddress(body.wallet, { strict: false })) throw new BountyError(400, "wallet is not an address.");
       const wallet = getAddress(body.wallet);
       const link = await d.store.link(wallet);
@@ -347,15 +535,18 @@ export function bounties(d: BountyDeps) {
       const proof: Proof = txs.length ? "onchain" : "work";
       if (b.proofRequired && proof === "work") throw new BountyError(400, "This bounty needs proof: include transactions your agent's wallet made after it entered.");
       const problem = await problemWith(b, e.owner, text);
-      await record(e, problem, { at: d.now(), text, proof, ...(txs.length ? { txs } : {}) });
-      if (problem) throw new BountyError(422, `It did not pass a check: ${problem}. ${MAX_TRIES - e.tries} ${MAX_TRIES - e.tries === 1 ? "try" : "tries"} left.`);
+      await record(b, e, problem, { at: d.now(), text, proof, ...(txs.length ? { txs } : {}) });
+      if (problem) {
+        const free = b.freeScanRejects && problem === VENIN_PROBLEM;
+        throw new BountyError(422, `It did not pass a check: ${problem}. ${free ? "This does not use up a try here." : `${MAX_TRIES - e.tries} ${MAX_TRIES - e.tries === 1 ? "try" : "tries"} left.`}`);
+      }
       return { ok: true, proof };
     },
 
     /** The status line for each of an account's entries. */
     async statusOf(owner: Address) {
       const out = [];
-      for (const b of d.list) {
+      for (const b of await all()) {
         const e = await d.store.entry(b.id, owner);
         if (!e) continue;
         const result = await d.store.result(b.id);
@@ -369,25 +560,29 @@ export function bounties(d: BountyDeps) {
      * Locking a picked winner's prize in Bull's escrow, from the treasury's own wallet (on a phone, inside the wallet's
      * browser, where there is no Nomad sign-in). Nothing here needs a signature: Bull's plan is checked field by field
      * and can only be sent by the treasury, and a lock is recorded only after Nomad reads on chain that the treasury
-     * made it for the winner. The arbiter is always the first reviewer's Nomad account.
+     * made it for that winner. The arbiter is always the first reviewer's Nomad account.
      */
     async lockList() {
       const out = [];
-      for (const b of d.list) {
+      for (const b of await all()) {
         const result = await d.store.result(b.id);
-        if (!result || result.paidTx) continue;
-        const live = result.escrow && result.escrow.expiresAt > d.now() ? result.escrow : null;
-        out.push({ id: b.id, title: b.title, prize: b.prize, winner: result.winner, ...(live ? { lockedUntil: live.expiresAt, agreement: live.id } : {}) });
+        for (const a of result?.awards ?? []) {
+          if (a.paidTx) continue;
+          const live = a.escrow && a.escrow.expiresAt > d.now() ? a.escrow : null;
+          out.push({ id: b.id, title: b.title, prize: b.prize, winner: a.winner, ...(live ? { lockedUntil: live.expiresAt, agreement: live.id } : {}) });
+        }
       }
       return { treasury: TREASURY, bounties: out };
     },
 
-    async lockPlan(id: string) {
-      const b = byId(id);
+    async lockPlan(id: string, winnerRaw?: unknown) {
+      const b = await byId(id);
       const result = await d.store.result(b.id);
-      if (!result) throw new BountyError(409, "No winner is picked for this bounty yet.");
-      if (result.paidTx) throw new BountyError(409, "This bounty is already paid.");
-      if (result.escrow && result.escrow.expiresAt > d.now()) throw new BountyError(409, "The prize is already locked with Bull.");
+      if (!result?.awards.length) throw new BountyError(409, "No winner is picked for this bounty yet.");
+      const a = winnerRaw === undefined && result.awards.length === 1 ? result.awards[0] : awardOf(result, addressOf(winnerRaw, "winner"));
+      if (!a) throw new BountyError(404, "That account is not a winner of this bounty.");
+      if (a.paidTx) throw new BountyError(409, "This prize is already paid.");
+      if (a.escrow && a.escrow.expiresAt > d.now()) throw new BountyError(409, "The prize is already locked with Bull.");
       const arbiter = d.reviewers[0];
       if (!arbiter) throw new BountyError(503, "No reviewer is set up to confirm the payment.");
       const token = b.prize.token === "USDG" ? USDG : NOMAD;
@@ -395,22 +590,22 @@ export function bounties(d: BountyDeps) {
         template: "arbiter_escrow",
         chain: "robinhood",
         payer: TREASURY,
-        payee: result.winner,
+        payee: a.winner,
         arbiter,
         amount: b.prize.amount,
         asset: b.prize.token === "USDG" ? "usdg" : NOMAD,
         expiryHours: ESCROW_HOURS,
-        terms: `Nomad agent bounty "${b.title}" (${b.id}): the prize for the winning entry, released when Nomad's reviewer confirms.`
+        terms: `Nomad agent bounty "${b.title}" (${b.id}): the prize for a winning entry, released when Nomad's reviewer confirms.`
       };
       let plan;
       try {
-        plan = checkEscrowPlan(await d.bullPlan(args), { winner: result.winner, arbiter, token, amount: prizeUnits(b), nowSec: Math.floor(d.now() / 1000) });
+        plan = checkEscrowPlan(await d.bullPlan(args), { winner: a.winner, arbiter, token, amount: prizeUnits(b), nowSec: Math.floor(d.now() / 1000) });
       } catch (e) {
         throw new BountyError(502, `Bull's plan was not used: ${(e as Error).message}`);
       }
       return {
         treasury: TREASURY,
-        winner: result.winner,
+        winner: a.winner,
         arbiter,
         feeWei: plan.feeWei.toString(),
         feeUsd: plan.feeUsd,
@@ -419,84 +614,254 @@ export function bounties(d: BountyDeps) {
       };
     },
 
-    async lockRecord(id: string, tx: unknown) {
-      const b = byId(id);
+    async lockRecord(id: string, tx: unknown, winnerRaw?: unknown) {
+      const b = await byId(id);
       if (!isHash(tx)) throw new BountyError(400, "tx is not a transaction hash.");
       const result = await d.store.result(b.id);
-      if (!result) throw new BountyError(409, "No winner is picked for this bounty yet.");
-      if (result.paidTx) throw new BountyError(409, "This bounty is already paid.");
-      if (result.escrow?.tx && lc(result.escrow.tx) === lc(tx)) return { ok: true, escrow: result.escrow.id };
-      if (result.escrow && result.escrow.expiresAt > d.now()) throw new BountyError(409, "The prize is already locked with Bull.");
+      if (!result?.awards.length) throw new BountyError(409, "No winner is picked for this bounty yet.");
+      const a = winnerRaw === undefined && result.awards.length === 1 ? result.awards[0] : awardOf(result, addressOf(winnerRaw, "winner"));
+      if (!a) throw new BountyError(404, "That account is not a winner of this bounty.");
+      if (a.paidTx) throw new BountyError(409, "This prize is already paid.");
+      if (a.escrow?.tx && lc(a.escrow.tx) === lc(tx)) return { ok: true, escrow: a.escrow.id };
+      if (a.escrow && a.escrow.expiresAt > d.now()) throw new BountyError(409, "The prize is already locked with Bull.");
       const token = b.prize.token === "USDG" ? USDG : NOMAD;
-      const a = await d.escrowCreated(tx).catch(() => null);
-      if (!a || lc(a.payer) !== lc(TREASURY) || lc(a.payee) !== lc(result.winner) || lc(a.asset) !== lc(token) || a.amount < prizeUnits(b) || a.expiresAt <= d.now())
+      const made = await d.escrowCreated(tx).catch(() => null);
+      if (!made || lc(made.payer) !== lc(TREASURY) || lc(made.payee) !== lc(a.winner) || lc(made.asset) !== lc(token) || made.amount < prizeUnits(b) || made.expiresAt <= d.now())
         throw new BountyError(400, `That transaction did not lock ${b.prize.amount} ${b.prize.token} from the treasury for the winner with Bull. If it was just sent, wait a moment and try again.`);
-      await d.store.setResult(b.id, { ...result, escrow: { id: a.id, tx, expiresAt: a.expiresAt } });
-      return { ok: true, escrow: a.id };
+      // The same lock cannot stand for two winners.
+      if (result.awards.some((x) => x !== a && x.escrow?.id === made.id)) throw new BountyError(409, "That lock is already recorded for another winner.");
+      await setAward(b.id, result, { ...a, escrow: { id: made.id, tx, expiresAt: made.expiresAt } });
+      return { ok: true, escrow: made.id };
     },
 
     /**
-     * The team's review, each step signed by a reviewer's Google wallet: list closed bounties with their handed-in
-     * entries, pick a winner after the close date, and record the payout once its transaction is on chain.
+     * A sponsor's own bounties, each step signed by the sponsor's Google wallet; its Nomad account must be on the
+     * whitelist. "check" tells a wallet only about itself.
      */
-    async review(body: { signer?: unknown; action?: unknown; bounty?: unknown; winner?: unknown; tx?: unknown; at?: unknown; signature?: unknown }) {
-      if (typeof body.signer !== "string" || !isAddress(body.signer, { strict: false })) throw new BountyError(400, "signer is not an address.");
-      const signer = getAddress(body.signer);
+    async sponsor(body: Record<string, unknown>) {
+      const signer = signerOf(body.signer);
       const at = fresh(body.at);
+      const action = body.action;
+      const id = typeof body.bounty === "string" ? body.bounty : "";
+      let label: string;
+      let fields: DraftFields | null = null;
+      const account = await accountOf(signer);
+      const spec = sponsorOf(account);
+      if (action === "check") label = "check";
+      else if (action === "save") {
+        if (!spec) throw new BountyError(403, "This account is not a bounty sponsor on Nomad.");
+        const existing = id ? await d.store.draft(id) : null;
+        const lockedSchedule = existing?.scheduleLocked ? { opens: existing.opens, days: Math.round((closesAt(existing) - opensAt(existing)) / DAY_MS) } : presetOf(spec);
+        fields = normalDraft(body.draft, lockedSchedule);
+        label = `save ${id || "new"} ${draftFingerprint(fields)}`;
+      } else if (action === "cancel") label = `cancel ${id}`;
+      else if (action === "deposit" && isHash(body.tx)) label = `deposit ${id} ${lc(body.tx)}`;
+      else throw new BountyError(400, "Unknown sponsor step.");
+      if (!(await d.verify(signer, sponsorMessage(label, at), sig(body.signature)).catch(() => false))) throw new BountyError(403, "The signature does not match.");
+
+      if (action === "check") {
+        if (!spec) return { sponsor: null };
+        const list = (await d.store.drafts()).filter((b) => b.sponsor && lc(b.sponsor.account) === lc(account) && b.status !== "cancelled");
+        return { sponsor: { name: spec.name, account: spec.account, preset: presetOf(spec), maxPrize: spec.maxPrize ?? SPONSOR_MAX_PRIZE }, bounties: await Promise.all(list.map(mine)) };
+      }
+      if (!spec) throw new BountyError(403, "This account is not a bounty sponsor on Nomad.");
+
+      if (action === "save") {
+        const existingFirst = id ? await d.store.draft(id) : null;
+        const f = await checkDraft(spec, fields!, !!(existingFirst?.scheduleLocked || presetOf(spec)));
+        const existing = id ? await d.store.draft(id) : null;
+        if (id && (!existing || !existing.sponsor || lc(existing.sponsor.account) !== lc(account))) throw new BountyError(404, "There is no bounty of yours by that name.");
+        if (existing && (existing.status === "cancelled" || (existing.status === "approved" && d.now() >= opensAt(existing)))) throw new BountyError(409, "This bounty can no longer be changed.");
+        if (existing?.deposit && (f.share !== existing.sponsor!.share || f.prize !== existing.prize.amount || f.places !== placesOf(existing)))
+          throw new BountyError(409, "Your share is already deposited, so the prize and your share stay as they are.");
+        const b: StoredBounty = {
+          id: existing?.id ?? slug(f.title),
+          title: f.title,
+          brief: f.brief,
+          result: f.result,
+          prize: { amount: f.prize, token: "USDG" },
+          opens: f.opens,
+          closes: new Date(Date.parse(f.opens) + f.days * DAY_MS).toISOString(),
+          places: f.places,
+          entrants: f.entrants,
+          ...(f.firstValidWins ? { firstValidWins: true } : {}),
+          ...(f.privateUntilReleased ? { privateUntilReleased: true } : {}),
+          ...(f.freeScanRejects ? { freeScanRejects: true } : {}),
+          sponsor: { name: spec.name, account: spec.account, share: f.share },
+          // A change, even after approval, goes back to Nomad before it shows.
+          status: "waiting",
+          createdAt: existing?.createdAt ?? d.now(),
+          updatedAt: d.now(),
+          ...(existing?.scheduleLocked || presetOf(spec) ? { scheduleLocked: true } : {}),
+          ...(existing?.deposit ? { deposit: existing.deposit } : {})
+        };
+        if (d.list.some((x) => x.id === b.id) || (!existing && (await d.store.draft(b.id)))) throw new BountyError(409, "Choose another title, or try again.");
+        await d.store.putDraft(b);
+        return { ok: true, bounty: await mine(b) };
+      }
+
+      const b = await d.store.draft(id);
+      if (!b || !b.sponsor || lc(b.sponsor.account) !== lc(account)) throw new BountyError(404, "There is no bounty of yours by that name.");
+      if (action === "cancel") {
+        if (b.status === "approved" && d.now() >= opensAt(b)) throw new BountyError(409, "This bounty has opened, so it cannot be cancelled here. Ask Nomad.");
+        await d.store.putDraft({ ...b, status: "cancelled", updatedAt: d.now() });
+        return { ok: true, refund: b.deposit ? `Nomad sends your ${b.deposit.amount} USDG back from the treasury.` : null };
+      }
+      // deposit
+      if (b.status !== "approved") throw new BountyError(409, "Fund your share once Nomad has approved the bounty.");
+      if (b.deposit) return { ok: true, deposit: b.deposit };
+      const share = usdgUnits(b.sponsor.share);
+      if (share === 0n) throw new BountyError(409, "This bounty has no share for you to fund.");
+      const tx = body.tx as Hex;
+      if (!(await d.paid("USDG", TREASURY, share, tx, b.sponsor.account).catch(() => false)))
+        throw new BountyError(400, `That transaction did not send ${b.sponsor.share} USDG from your Nomad account to the treasury. If it was just sent, wait a moment and try again.`);
+      if (d.claimTx && !(await d.claimTx(tx))) throw new BountyError(409, "That transaction was already counted, as credits or as another deposit.");
+      const deposit = { tx, amount: b.sponsor.share, at: d.now() };
+      await d.store.putDraft({ ...b, deposit, updatedAt: d.now() });
+      return { ok: true, deposit };
+    },
+
+    /**
+     * The review, each step signed by the reviewer's Google wallet. Nomad's team approves sponsors' bounties, sees
+     * every bounty and records payments; a bounty's sponsor reads its entries, picks its winners and releases held work.
+     */
+    async review(body: Record<string, unknown>) {
+      const signer = signerOf(body.signer);
+      const at = fresh(body.at);
+      const id = String(body.bounty ?? "");
+      const winner = typeof body.winner === "string" && isAddress(body.winner, { strict: false }) ? lc(body.winner) : null;
+      const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) : "";
+      const nomadShare = typeof body.nomadShare === "string" ? body.nomadShare.trim() : "";
+      const opens = typeof body.opens === "string" ? body.opens : "";
+      const days = Number(body.days);
+      const locked = body.locked === true;
       const action =
         body.action === "check"
           ? "check"
           : body.action === "list"
             ? "list"
-            : body.action === "pick" && typeof body.winner === "string" && isAddress(body.winner, { strict: false })
-              ? `pick ${String(body.bounty)} ${lc(body.winner)}`
-              : body.action === "paid" && isHash(body.tx)
-                ? `paid ${String(body.bounty)} ${lc(body.tx)}`
-                : null;
+            : body.action === "pending"
+              ? "pending"
+              : body.action === "pick" && winner
+                ? `pick ${id} ${winner}`
+                : body.action === "unpick" && winner
+                  ? `unpick ${id} ${winner}`
+                  : body.action === "release"
+                    ? `release ${id}`
+                    : body.action === "paid" && isHash(body.tx)
+                      ? `paid ${id}${winner ? ` ${winner}` : ""} ${lc(body.tx)}`
+                      : body.action === "approve"
+                        ? `approve ${id} ${nomadShare} ${opens} ${days} ${locked ? 1 : 0}`
+                        : body.action === "return"
+                          ? `return ${id} ${noteFingerprint(note)}`
+                          : null;
       if (!action) throw new BountyError(400, "Unknown review step.");
       if (!(await d.verify(signer, reviewMessage(action, at), sig(body.signature)).catch(() => false))) throw new BountyError(403, "The signature does not match.");
+      const team = await isTeam(signer);
+      const list = await all();
       // Whether a wallet reviews is told only to that wallet, so nobody can look up who the reviewers are.
-      if (body.action === "check") return { reviewer: await isReviewer(signer) };
-      if (!(await isReviewer(signer))) throw new BountyError(403, "Only the Nomad team can review bounties.");
+      if (body.action === "check") {
+        const some = team || (await Promise.all(list.map((b) => reviews(signer, b)))).some(Boolean);
+        return { reviewer: some, team };
+      }
+
+      if (body.action === "pending" || body.action === "approve" || body.action === "return") {
+        if (!team) throw new BountyError(403, "Only the Nomad team approves bounties.");
+        if (body.action === "pending") return { bounties: (await d.store.drafts()).filter((b) => b.status === "waiting").sort((a, b) => a.updatedAt - b.updatedAt) };
+        const b = await d.store.draft(id);
+        if (!b || b.status !== "waiting") throw new BountyError(409, "That bounty is not waiting for approval.");
+        if (body.action === "return") {
+          if (!note) throw new BountyError(400, "Say what to change.");
+          await d.store.putDraft({ ...b, status: "returned", note, updatedAt: d.now() });
+          return { ok: true };
+        }
+        // approve, with Nomad's share and the schedule (kept or set here)
+        if (!/^\d{1,7}(\.\d{1,6})?$/.test(nomadShare)) throw new BountyError(400, "Nomad's share must be an amount of USDG.");
+        if (usdgUnits(nomadShare) + usdgUnits(b.sponsor?.share ?? "0") !== totalUnits(b))
+          throw new BountyError(400, `Nomad's share and the sponsor's ${b.sponsor?.share ?? "0"} USDG must add up to the whole prize, ${fmtUsdg(totalUnits(b))} USDG.`);
+        const t = Date.parse(opens);
+        if (!Number.isFinite(t) || !Number.isInteger(days) || days < 1 || days > SPONSOR_MAX_DAYS) throw new BountyError(400, `Set when it opens and how many days it runs (1 to ${SPONSOR_MAX_DAYS}).`);
+        if (t + days * DAY_MS <= d.now()) throw new BountyError(400, "That schedule has already ended.");
+        await d.store.putDraft({
+          ...b,
+          status: "approved",
+          nomadShare,
+          opens: new Date(t).toISOString(),
+          closes: new Date(t + days * DAY_MS).toISOString(),
+          ...(locked || b.scheduleLocked ? { scheduleLocked: true } : {}),
+          note: undefined,
+          updatedAt: d.now()
+        });
+        return { ok: true };
+      }
 
       if (body.action === "list") {
         const out = [];
-        for (const b of d.list) {
+        const theirs = [];
+        for (const b of list) if (await reviews(signer, b)) theirs.push(b);
+        if (!team && !theirs.length) throw new BountyError(403, "Only the Nomad team and a bounty's sponsor can review it.");
+        for (const b of theirs) {
           const result = await d.store.result(b.id);
           const state = bountyState(b, result, d.now());
-          if (state === "upcoming" || state === "open" || state === "paid") continue;
+          // While open, only a first-valid bounty needs a reviewer; afterwards, every unpaid one.
+          if (state === "upcoming" || state === "paid" || (state === "open" && !b.firstValidWins)) continue;
           const entries = (await d.store.entries(b.id)).filter((e) => e.submission);
-          out.push({ ...b, state, result, prizeUnits: prizeUnits(b).toString(), entries });
+          out.push({ ...b, state, result, prizeUnits: prizeUnits(b).toString(), entries, team });
         }
         return { bounties: out };
       }
-      const b = byId(String(body.bounty ?? ""));
-      const result = await d.store.result(b.id);
+
+      const b = await byId(id);
+      if (!(await reviews(signer, b))) throw new BountyError(403, "Only the Nomad team and this bounty's sponsor can review it.");
+      const result: BountyResult = (await d.store.result(b.id)) ?? { awards: [] };
+
       if (body.action === "pick") {
-        if (d.now() < closesAt(b)) throw new BountyError(409, "Pick the winner after the bounty closes.");
-        if (result?.paidTx) throw new BountyError(409, "This bounty is already paid.");
-        if (result?.escrow && result.escrow.expiresAt > d.now()) throw new BountyError(409, "The prize is already locked for the winner picked before.");
-        const winner = getAddress(body.winner as string);
-        const e = await d.store.entry(b.id, winner);
+        const state = bountyState(b, result, d.now());
+        if (state === "upcoming") throw new BountyError(409, "This bounty has not opened yet.");
+        if (state === "open" && !b.firstValidWins) throw new BountyError(409, "Pick the winner after the bounty closes.");
+        if (result.awards.length >= placesOf(b)) throw new BountyError(409, placesOf(b) === 1 ? "The winner is already picked." : "Every place is already picked.");
+        if (awardOf(result, winner as Address)) throw new BountyError(409, "That account is already a winner here.");
+        const e = await d.store.entry(b.id, getAddress(winner!));
         if (!e?.submission) throw new BountyError(404, "That account has no handed-in entry here.");
-        await d.store.setResult(b.id, { winner, pickedAt: d.now() });
+        await d.store.setResult(b.id, { ...result, awards: [...result.awards, { winner: getAddress(winner!), pickedAt: d.now() }] });
+        return { ok: true, places: placesOf(b), picked: result.awards.length + 1 };
+      }
+      if (body.action === "unpick") {
+        const a = awardOf(result, winner as Address);
+        if (!a) throw new BountyError(404, "That account is not a winner here.");
+        if (a.paidTx || (a.escrow && a.escrow.expiresAt > d.now())) throw new BountyError(409, "That prize is locked or paid, so the pick stays.");
+        await d.store.setResult(b.id, { ...result, awards: result.awards.filter((x) => x !== a) });
         return { ok: true };
       }
-      if (!result) throw new BountyError(409, "Pick a winner first.");
-      if (result.paidTx) throw new BountyError(409, "This bounty is already paid.");
+      if (body.action === "release") {
+        if (!b.privateUntilReleased) throw new BountyError(409, "This bounty's winning work is already public.");
+        if (!result.awards.length) throw new BountyError(409, "Pick a winner first.");
+        await d.store.setResult(b.id, { ...result, releasedAt: result.releasedAt ?? d.now() });
+        return { ok: true };
+      }
+
+      // paid: only Nomad's team records payments.
+      if (!team) throw new BountyError(403, "Only the Nomad team records payments.");
+      if (!result.awards.length) throw new BountyError(409, "Pick a winner first.");
+      const a = winner ? awardOf(result, winner as Address) : result.awards.length === 1 ? result.awards[0] : null;
+      if (!a) throw new BountyError(404, winner ? "That account is not a winner here." : "Say which winner this payment is for.");
+      if (a.paidTx) throw new BountyError(409, "This prize is already paid.");
       const tx = body.tx as Hex;
+      if (result.awards.some((x) => x.paidTx && lc(x.paidTx) === lc(tx))) throw new BountyError(409, "That payment is already recorded for another winner.");
       // Paid: released from Bull's escrow (the usual way), or sent straight from the treasury.
-      const from = result.escrow ? BULL_AGREEMENTS : undefined;
-      if (!(await d.paid(b.prize.token, result.winner, prizeUnits(b), tx, from).catch(() => false)))
+      const from = a.escrow ? BULL_AGREEMENTS : undefined;
+      if (!(await d.paid(b.prize.token, a.winner, prizeUnits(b), tx, from).catch(() => false)))
         throw new BountyError(
           400,
-          result.escrow
+          a.escrow
             ? `That transaction did not release ${b.prize.amount} ${b.prize.token} from Bull's escrow to the winner's account. If it was just sent, wait a moment and try again.`
             : `That transaction did not send ${b.prize.amount} ${b.prize.token} from the treasury to the winner's account. If it was just sent, wait a moment and try again.`
         );
-      await d.store.setResult(b.id, { ...result, paidTx: tx, paidAt: d.now(), ...(result.escrow ? { paidVia: "bull" as const } : {}) });
+      await setAward(b.id, result, { ...a, paidTx: tx, paidAt: d.now(), ...(a.escrow ? { paidVia: "bull" as const } : {}) });
       return { ok: true };
     }
   };
 }
 export type Bounties = ReturnType<typeof bounties>;
+
+export { BOUNTY_DAYS };

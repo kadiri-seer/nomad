@@ -84,7 +84,7 @@ function setup(opts: { list?: Bounty[]; balance?: bigint; now?: number; bullPlan
         ? action
         : action === "pick"
           ? `pick ${extra.bounty} ${extra.winner!.toLowerCase()}`
-          : `paid ${extra.bounty} ${extra.tx!.toLowerCase()}`;
+          : `paid ${extra.bounty}${extra.winner ? ` ${extra.winner.toLowerCase()}` : ""} ${extra.tx!.toLowerCase()}`;
     return s.review({ signer: who.address, action, ...extra, at: now, signature: await who.signMessage({ message: reviewMessage(label, now) }) });
   };
   return { s, d, agents, paidTxs, enter, review, setNow: (t: number) => (now = t) };
@@ -189,8 +189,8 @@ describe("bounties: handing in", () => {
 describe("bounties: review and payout", () => {
   it("only a listed sign-in wallet learns it is a reviewer, and only by signing as itself", async () => {
     const t = setup();
-    expect(await t.review("check")).toEqual({ reviewer: true });
-    expect(await t.review("check", {}, creator)).toEqual({ reviewer: false });
+    expect(await t.review("check")).toEqual({ reviewer: true, team: true });
+    expect(await t.review("check", {}, creator)).toEqual({ reviewer: false, team: false });
     // Asking about someone else's address does not work: the signature must be theirs.
     await expect(t.s.review({ signer: reviewer.address, action: "check", at: NOW, signature: await creator.signMessage({ message: reviewMessage("check", NOW) }) })).rejects.toThrow(/does not match/);
   });
@@ -207,13 +207,13 @@ describe("bounties: review and payout", () => {
     t.setNow(NOW + 6 * DAY);
     const listed = (await t.review("list")) as { bounties: { entries: unknown[] }[] };
     expect(listed.bounties[0].entries).toHaveLength(2);
-    expect(await t.review("pick", { bounty: "fees", winner })).toEqual({ ok: true });
+    expect(await t.review("pick", { bounty: "fees", winner })).toMatchObject({ ok: true });
     expect((await t.s.statusOf(winner))[0].status).toBe("Won Fee research");
     expect((await t.s.statusOf(ACCOUNT(other.address)))[0].status).toBe("Fee research: not chosen");
     // Only the winner's work is public; the other entry is not.
     const pub = await t.s.publicOne("fees");
-    expect(pub.winner?.submission.text).toBe(LONG);
-    expect(pub.winner?.submission.proof).toBe("nomad");
+    expect(pub.winners[0].submission?.text).toBe(LONG);
+    expect(pub.winners[0].submission?.proof).toBe("nomad");
     expect(JSON.stringify(pub)).not.toContain("Hedgehood");
     const tx = `0xcc${"0".repeat(62)}` as Hex;
     await expect(t.review("paid", { bounty: "fees", tx })).rejects.toThrow(/did not send 25 USDG/);
@@ -304,15 +304,15 @@ describe("bounties: paying through Bull's escrow", () => {
     await expect(t.s.lockPlan("fees")).rejects.toThrow(/already locked/);
     expect((await t.s.lockList()).bounties).toEqual([{ id: "fees", title: "Fee research", prize: { amount: "25", token: "USDG" }, winner, lockedUntil: NOW + 9 * DAY, agreement: "12" }]);
     // While it is locked, the winner cannot be changed, and the public page shows the lock.
-    await expect(t.review("pick", { bounty: "fees", winner: ACCOUNT(other.address) })).rejects.toThrow(/already locked/);
-    expect((await t.s.publicOne("fees")).winner).toMatchObject({ escrow: { id: "12" }, paidTx: null });
+    await expect(t.review("pick", { bounty: "fees", winner: ACCOUNT(other.address) })).rejects.toThrow(/already picked/);
+    expect((await t.s.publicOne("fees")).winners[0]).toMatchObject({ escrow: { id: "12" }, paidTx: null });
     // Paid only by a transfer out of Bull's contract, not from the treasury straight.
     const releaseTx = `0xff${"0".repeat(62)}` as Hex;
     t.paidTxs.add(releaseTx);
     await expect(t.review("paid", { bounty: "fees", tx: releaseTx })).rejects.toThrow(/did not release 25 USDG from Bull's escrow/);
     t.paidTxs.add(`${releaseTx}:${BULL_AGREEMENTS.toLowerCase()}`);
     expect(await t.review("paid", { bounty: "fees", tx: releaseTx })).toEqual({ ok: true });
-    expect((await t.s.publicOne("fees")).winner).toMatchObject({ paidTx: releaseTx, paidVia: "bull", escrow: { id: "12" } });
+    expect((await t.s.publicOne("fees")).winners[0]).toMatchObject({ paidTx: releaseTx, paidVia: "bull", escrow: { id: "12" } });
   });
 
   it("says why when Bull's plan is not used, and a lock that expired can be made again", async () => {
@@ -324,14 +324,14 @@ describe("bounties: paying through Bull's escrow", () => {
     t.setNow(NOW + 6 * DAY);
     await t.review("pick", { bounty: "fees", winner });
     await expect(t.s.lockPlan("fees")).rejects.toThrow(/Bull's plan was not used: Bull's agreement does not pay the winner/);
-    await t.d.store.setResult("fees", { winner, pickedAt: NOW, escrow: { id: "3", tx: `0x${"1".repeat(64)}`, expiresAt: NOW + 6 * DAY - 1 } });
+    await t.d.store.setResult("fees", { awards: [{ winner, pickedAt: NOW, escrow: { id: "3", tx: `0x${"1".repeat(64)}`, expiresAt: NOW + 6 * DAY - 1 } }] });
     await expect(t.s.lockPlan("fees")).rejects.toThrow(/not used/);
   });
 
   it("a locked prize no longer counts against the treasury's balance for other bounties", async () => {
     const later = bounty({ id: "next", opens: "2026-12-05T00:00:00Z", closes: "2026-12-20T00:00:00Z" });
     const t = setup({ list: [bounty(), later], balance: 25_000_000n, now: NOW + 6 * DAY });
-    await t.d.store.setResult("fees", { winner, pickedAt: NOW, escrow: { id: "12", tx: `0x${"1".repeat(64)}`, expiresAt: NOW + 9 * DAY } });
+    await t.d.store.setResult("fees", { awards: [{ winner, pickedAt: NOW, escrow: { id: "12", tx: `0x${"1".repeat(64)}`, expiresAt: NOW + 9 * DAY } }] });
     expect((await t.s.publicList()).map((b: { id: string }) => b.id)).toContain("next");
   });
 

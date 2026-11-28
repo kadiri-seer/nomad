@@ -2273,3 +2273,8 @@ html[data-theme="dark"] .acct-balance { background: #2a2925; color: #f3f2ee; }
 .bounty-winner > .muted {
   margin-top: 16px;
 }
+.bounty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}

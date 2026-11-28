@@ -16,6 +16,7 @@ import { grantSession, newSalt } from "@/lib/agents/wallet";
 import { betaMessage, CREATE_BETA_ONLY } from "@/lib/agents/beta";
 import { MyAgents } from "./MyAgents";
 import { BountyReview } from "./BountyReview";
+import { BountySponsor } from "./BountySponsor";
 import { CopyButton } from "../CopyButton";
 import { Sheet } from "./Sheet";
 import { clearSnapshot, readSnapshot, writeSnapshot } from "./snapshot";
@@ -301,6 +302,8 @@ function Home({ client, onSignOut }: { client: Client; onSignOut: () => void }) 
           </section>
 
           <MyAgents client={client} onConfirm={setConfirm} version={version} onAgents={setAgentWallets} />
+
+          <BountySponsor client={client} onConfirm={setConfirm} />
 
           <BountyReview client={client} />
 

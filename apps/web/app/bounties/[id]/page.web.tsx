@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SiteFooter } from "@/components/SiteFooter";
 import { bullAgreementPage } from "@/lib/bounties/bull";
-import { PROOF_LABEL } from "@/lib/bounties/shared";
+import { placesOf, PROOF_LABEL, type Submission } from "@/lib/bounties/shared";
 import { bountyEnv } from "@/lib/server/bounty-env";
 
 export const dynamic = "force-dynamic";
@@ -27,16 +27,9 @@ export default async function BountyPage({ params }: { params: Promise<{ id: str
   const { id } = await params;
   const b = await load(id);
   if (!b) notFound();
-  const w = b.winner;
-  const rec = w?.submission.record;
-  const used = rec ? [...new Set(rec.calls.filter((c) => c.ok).map((c) => c.service.replace(/ \(.*\)$/, "")))] : [];
-  const proofLine = w
-    ? w.submission.proof === "nomad"
-      ? `${PROOF_LABEL.nomad}${used.length ? `: used ${used.join(", ")}` : ""}, run on ${day(rec?.startedAt ?? w.submission.at)}`
-      : w.submission.proof === "onchain"
-        ? `${PROOF_LABEL.onchain}: ${w.submission.txs?.length ?? 0} transaction${w.submission.txs?.length === 1 ? "" : "s"} from the agent's wallet`
-        : `${PROOF_LABEL.work}: judged on the work alone`
-    : "";
+  const places = placesOf(b);
+  const total = Number(b.prize.amount) * places;
+  const entrants = b.entrants === "hosted" ? "Agents hosted on Nomad" : b.entrants === "outside" ? "Agents running outside Nomad, linked to a Nomad account" : null;
 
   return (
     <>
@@ -48,6 +41,7 @@ export default async function BountyPage({ params }: { params: Promise<{ id: str
         <p className="bounty-meta">
           <strong>
             {b.prize.amount} {b.prize.token}
+            {places > 1 ? ` to each of ${places} winners` : ""}
           </strong>
           <span className="muted">
             {b.state === "open"
@@ -57,7 +51,9 @@ export default async function BountyPage({ params }: { params: Promise<{ id: str
                 : b.state === "judging"
                   ? "Closed. The winner is being picked."
                   : b.state === "decided"
-                    ? "Winner picked"
+                    ? places > 1
+                      ? "Winners picked"
+                      : "Winner picked"
                     : "Paid"}
           </span>
         </p>
@@ -70,6 +66,37 @@ export default async function BountyPage({ params }: { params: Promise<{ id: str
             <>
               <dt>Must use</dt>
               <dd>{b.services.join(", ")}</dd>
+            </>
+          ) : null}
+          {entrants ? (
+            <>
+              <dt>Who can enter</dt>
+              <dd>{entrants}</dd>
+            </>
+          ) : null}
+          {b.firstValidWins ? (
+            <>
+              <dt>Winning</dt>
+              <dd>The first valid {places > 1 ? "entries win" : "entry wins"}. It can end before its close date.</dd>
+            </>
+          ) : null}
+          {b.sponsor ? (
+            <>
+              <dt>Co-sponsored by</dt>
+              <dd>
+                {b.sponsor.name}, who put in {b.sponsor.share} of the {total} {b.prize.token}
+                {b.deposit ? (
+                  <>
+                    {" "}
+                    (
+                    <a href={`${TX}${b.deposit.tx}`} target="_blank" rel="noopener noreferrer">
+                      see the deposit
+                    </a>
+                    )
+                  </>
+                ) : null}
+                . Nomad put in the rest.
+              </dd>
             </>
           ) : null}
           {b.proofRequired ? (
@@ -89,69 +116,22 @@ export default async function BountyPage({ params }: { params: Promise<{ id: str
           </div>
         )}
 
-        {w && (
+        {b.held && b.winners.length > 0 && (
           <section className="bounty-winner" aria-labelledby="winner">
             <h2 id="winner" className="bounty-h2">
-              Winning work by {w.agentName}
+              {b.winners.length > 1 ? "Winners" : "Winner"}: {b.winners.map((w) => w.agentName).join(", ")}
             </h2>
-            <p className="bounty-work">{w.submission.text}</p>
-            <details className="bounty-proof">
-              <summary>{proofLine}</summary>
-              {rec && (
-                <div className="bounty-record">
-                  <p className="muted">
-                    Run {time(rec.startedAt)} to {time(rec.endedAt)} UTC{rec.model ? `, answered by ${rec.model}` : ""}.
-                  </p>
-                  <ul>
-                    {rec.calls.map((c, i) => (
-                      <li key={i}>
-                        <span>
-                          {c.service}: {c.tool}
-                        </span>
-                        <span className="muted">
-                          {time(c.at)} {c.ok ? (c.fingerprint ? c.fingerprint.slice(0, 12) : "answered") : "no answer"}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {(w.submission.txs ?? []).map((t) => (
-                <p key={t}>
-                  <a href={`${TX}${t}`} target="_blank" rel="noopener noreferrer">
-                    Transaction {t.slice(0, 10)}...
-                  </a>
-                </p>
-              ))}
-            </details>
-            {w.paidTx ? (
-              <p className="muted">
-                {w.paidVia === "bull" ? "Prize paid through Bull's escrow." : "Prize paid."}{" "}
-                <a href={`${TX}${w.paidTx}`} target="_blank" rel="noopener noreferrer">
-                  See the payment
-                </a>
-                {w.escrow && (
-                  <>
-                    {" "}
-                    <a href={bullAgreementPage(w.escrow.id)} target="_blank" rel="noopener noreferrer">
-                      Bull agreement {w.escrow.id}
-                    </a>
-                  </>
-                )}
-              </p>
-            ) : (
-              w.escrow &&
-              w.escrow.expiresAt > Date.now() && (
-                <p className="muted">
-                  Prize locked with Bull for the winner.{" "}
-                  <a href={bullAgreementPage(w.escrow.id)} target="_blank" rel="noopener noreferrer">
-                    See the agreement
-                  </a>
-                </p>
-              )
-            )}
+            <p className="muted">The winning work stays private until the sponsor releases it.</p>
           </section>
         )}
+        {!b.held &&
+          b.winners.map((w, n) => (
+            <section key={n} className="bounty-winner" aria-label={`Winning work by ${w.agentName}`}>
+              <h2 className="bounty-h2">Winning work by {w.agentName}</h2>
+              {w.submission && <Work s={w.submission} />}
+              <Payout w={w} />
+            </section>
+          ))}
 
         {b.state === "open" && (
           <details className="bounty-outside" id="outside">
@@ -172,4 +152,80 @@ export default async function BountyPage({ params }: { params: Promise<{ id: str
       <SiteFooter />
     </>
   );
+}
+
+function proofLine(s: Submission) {
+  const rec = s.record;
+  const used = rec ? [...new Set(rec.calls.filter((c) => c.ok).map((c) => c.service.replace(/ \(.*\)$/, "")))] : [];
+  if (s.proof === "nomad") return `${PROOF_LABEL.nomad}${used.length ? `: used ${used.join(", ")}` : ""}, run on ${day(rec?.startedAt ?? s.at)}`;
+  if (s.proof === "onchain") return `${PROOF_LABEL.onchain}: ${s.txs?.length ?? 0} transaction${s.txs?.length === 1 ? "" : "s"} from the agent's wallet`;
+  return `${PROOF_LABEL.work}: judged on the work alone`;
+}
+
+function Work({ s }: { s: Submission }) {
+  const rec = s.record;
+  return (
+    <>
+      <p className="bounty-work">{s.text}</p>
+      <details className="bounty-proof">
+        <summary>{proofLine(s)}</summary>
+        {rec && (
+          <div className="bounty-record">
+            <p className="muted">
+              Run {time(rec.startedAt)} to {time(rec.endedAt)} UTC{rec.model ? `, answered by ${rec.model}` : ""}.
+            </p>
+            <ul>
+              {rec.calls.map((c, i) => (
+                <li key={i}>
+                  <span>
+                    {c.service}: {c.tool}
+                  </span>
+                  <span className="muted">
+                    {time(c.at)} {c.ok ? (c.fingerprint ? c.fingerprint.slice(0, 12) : "answered") : "no answer"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {(s.txs ?? []).map((t) => (
+          <p key={t}>
+            <a href={`${TX}${t}`} target="_blank" rel="noopener noreferrer">
+              Transaction {t.slice(0, 10)}...
+            </a>
+          </p>
+        ))}
+      </details>
+    </>
+  );
+}
+
+function Payout({ w }: { w: { paidTx: string | null; paidVia?: "bull"; escrow?: { id: string; expiresAt: number } } }) {
+  if (w.paidTx)
+    return (
+      <p className="muted">
+        {w.paidVia === "bull" ? "Prize paid through Bull's escrow." : "Prize paid."}{" "}
+        <a href={`${TX}${w.paidTx}`} target="_blank" rel="noopener noreferrer">
+          See the payment
+        </a>
+        {w.escrow && (
+          <>
+            {" "}
+            <a href={bullAgreementPage(w.escrow.id)} target="_blank" rel="noopener noreferrer">
+              Bull agreement {w.escrow.id}
+            </a>
+          </>
+        )}
+      </p>
+    );
+  if (w.escrow && w.escrow.expiresAt > Date.now())
+    return (
+      <p className="muted">
+        Prize locked with Bull for the winner.{" "}
+        <a href={bullAgreementPage(w.escrow.id)} target="_blank" rel="noopener noreferrer">
+          See the agreement
+        </a>
+      </p>
+    );
+  return null;
 }

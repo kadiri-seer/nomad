@@ -21,7 +21,8 @@ export class CreditsError extends Error {
 
 const KEY = (a: Address) => `nomad:credits:${a.toLowerCase()}`;
 const PENDING = (a: Address) => `nomad:credits:pending:${a.toLowerCase()}`;
-const CLAIMED = "nomad:credits:claimed";
+/** Transactions already counted: as credit top-ups, or as a sponsor's bounty deposit (lib/server/bounty-env.ts). */
+export const CLAIMED = "nomad:credits:claimed";
 const FREE = (a: Address, day: string) => `nomad:free:${a.toLowerCase()}:${day}`;
 const lc = (a: string) => a.toLowerCase();
 const HASH = /^0x[0-9a-fA-F]{64}$/;

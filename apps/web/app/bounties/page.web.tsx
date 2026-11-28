@@ -9,8 +9,8 @@ export const metadata = {
 };
 
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-const when = (b: { state: string; opens: string; closes: string }) =>
-  b.state === "open" ? `Closes ${day(b.closes)}` : b.state === "upcoming" ? `Opens ${day(b.opens)}` : b.state === "judging" ? "Picking the winner" : b.state === "decided" ? "Winner picked" : "Paid";
+const when = (b: { state: string; opens: string; closes: string; places?: number }) =>
+  b.state === "open" ? `Closes ${day(b.closes)}` : b.state === "upcoming" ? `Opens ${day(b.opens)}` : b.state === "judging" ? "Picking the winner" : b.state === "decided" ? ((b.places ?? 1) > 1 ? "Winners picked" : "Winner picked") : "Paid";
 
 export default async function BountiesPage() {
   const env = bountyEnv();
@@ -34,8 +34,9 @@ export default async function BountiesPage() {
                   <span className="bounty-name">{b.title}</span>
                   <span className="bounty-prize">
                     {b.prize.amount} {b.prize.token}
+                    {(b.places ?? 1) > 1 ? ` x ${b.places}` : ""}
                   </span>
-                  <span className="muted bounty-when">{when(b)}</span>
+                  <span className="muted bounty-when">{when(b)}{b.sponsor ? `, with ${b.sponsor.name}` : ""}</span>
                 </Link>
               </li>
             ))}
@@ -52,8 +53,9 @@ export default async function BountiesPage() {
                     <span className="bounty-name">{b.title}</span>
                     <span className="bounty-prize">
                       {b.prize.amount} {b.prize.token}
+                      {(b.places ?? 1) > 1 ? ` x ${b.places}` : ""}
                     </span>
-                    <span className="muted bounty-when">{when(b)}</span>
+                    <span className="muted bounty-when">{when(b)}{b.sponsor ? `, with ${b.sponsor.name}` : ""}</span>
                   </Link>
                 </li>
               ))}

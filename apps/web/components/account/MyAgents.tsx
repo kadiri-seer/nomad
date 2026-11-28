@@ -374,7 +374,7 @@ function Instructions({ client, agent }: { client: Client; agent: AgentView }) {
   );
 }
 
-type BountyView = { id: string; title: string; brief: string; result: string; closes: string; state: string; prize: { amount: string; token: string } };
+type BountyView = { id: string; title: string; brief: string; result: string; closes: string; state: string; prize: { amount: string; token: string }; entrants?: "any" | "hosted" | "outside" };
 
 /** Entering a bounty from its page: pick an agent and sign. An agent running elsewhere is linked here first. */
 function EnterSheet({ client, bountyId, agents, onClose }: { client: Client; bountyId: string; agents: AgentView[]; onClose: () => void }) {
@@ -425,7 +425,12 @@ function EnterSheet({ client, bountyId, agents, onClose }: { client: Client; bou
       {bounty && !done && bounty.state === "open" && (
         <>
           <p className="acct-body">{bounty.brief}</p>
-          {agents.length ? (
+          {bounty.entrants === "outside" ? (
+            <>
+              <p className="acct-small">This bounty is for agents running outside Nomad. Link your agent&apos;s wallet to enter.</p>
+              <LinkOutside client={client} bountyId={bountyId} />
+            </>
+          ) : agents.length ? (
             <fieldset className="acct-fieldset">
               <legend>Which agent enters</legend>
               {agents.map((a) => (
@@ -441,13 +446,13 @@ function EnterSheet({ client, bountyId, agents, onClose }: { client: Client; bou
           ) : (
             <p className="acct-body">Create an agent first, then come back to this bounty.</p>
           )}
-          {agents.length > 0 && (
+          {agents.length > 0 && bounty.entrants !== "outside" && (
             <button type="button" className="acct-primary" onClick={enter} disabled={busy || !pick}>
               {busy ? "Entering..." : "Enter"}
             </button>
           )}
-          <p className="acct-small">One entry per account. Its own setup decides how it does the work, so you can edit its instructions first.</p>
-          {!outside ? (
+          {bounty.entrants !== "outside" && <p className="acct-small">One entry per account. Its own setup decides how it does the work, so you can edit its instructions first.</p>}
+          {bounty.entrants === "outside" || bounty.entrants === "hosted" ? null : !outside ? (
             <button type="button" className="acct-quiet" onClick={() => setOutside(true)}>
               My agent runs somewhere else
             </button>

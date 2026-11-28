@@ -7,7 +7,8 @@ import type { PrizeToken } from "../bounties/shared";
 import { redisFromEnv } from "../redis";
 import { agentStore } from "./agents-store";
 import { mainAccountOf, serverClient } from "./agent-exec";
-import { bounties, bountyStore } from "./bounties";
+import { bounties, bountyStore, parseSponsors } from "./bounties";
+import { CLAIMED } from "./credits";
 import { veninCheck } from "./venin-check";
 import { parseMcpAnswer } from "./mcp";
 import { BULL_MCP, createdAgreement } from "../bounties/bull";
@@ -28,6 +29,7 @@ export function bountyEnv() {
     store: bountyStore(redis),
     list: BOUNTIES,
     reviewers: REVIEWERS,
+    sponsors: parseSponsors(process.env.BOUNTY_SPONSORS),
     now: () => Date.now(),
     async treasuryBalance(token) {
       const key = `treasury-balance:${token}`;
@@ -72,6 +74,8 @@ export function bountyEnv() {
       }
       return sent >= amount;
     },
+    // A deposit joins the set credits use, so the same transfer can never also be claimed as credits.
+    claimTx: async (tx) => Number(await redis.cmd(["SADD", CLAIMED, tx.toLowerCase()])) === 1,
     async escrowCreated(tx) {
       const r = await client.getTransactionReceipt({ hash: tx });
       return r.status === "success" ? createdAgreement(r.logs) : null;

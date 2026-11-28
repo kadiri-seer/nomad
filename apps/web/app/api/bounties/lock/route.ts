@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (await rateLimited(req, "bounty-lock", 6)) return json({ error: "Too many tries. Wait a minute." }, 429);
   const b = await body(req);
   if (!b || typeof b.bounty !== "string") return json({ error: "Not JSON." }, 400);
-  if (b.action === "plan") return answer((s) => s.lockPlan(b.bounty as string));
-  if (b.action === "record") return answer((s) => s.lockRecord(b.bounty as string, b.tx));
+  if (b.action === "plan") return answer((s) => s.lockPlan(b.bounty as string, b.winner));
+  if (b.action === "record") return answer((s) => s.lockRecord(b.bounty as string, b.tx, b.winner));
   return json({ error: "Unknown step." }, 400);
 }
