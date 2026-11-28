@@ -962,6 +962,12 @@ const STOA: ServerProfile = {
       category: "tools",
       message: `"${t.name}" is Stoa's hosted swap router. It needs no key and never signs or sends anything: it quotes, checks tokens and builds unsigned swaps for your wallet to sign. Before signing, check the transaction goes to Stoa's router: ${STOA_ROUTER} on Robinhood Chain (4663), ${STOA_ROUTER_ELYSIUM} on Elysium (99901). Nomad copies its address.`
     });
+    out.notes.push({
+      level: "info",
+      category: "tools",
+      brief: true,
+      message: `"${t.name}" can also buy calls to agent services listed on Stoa: buy_agent_service returns the seller's wallet and price for the agent's wallet to sign (a USDG transfer authorization, no gas for the signer). One payment buys one call, goes straight to the seller and cannot be reversed. Check this agent's instructions for when it may pay.`
+    });
   }
 };
 
