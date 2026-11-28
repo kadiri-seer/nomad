@@ -33,8 +33,11 @@ export function buildClaudeCodeOddsEngine(home: string) {
 }
 
 /** Cursor, with the key in the address (the form for clients that take only a URL). */
-export function buildCursorOddsEngineKeyInAddress(project: string) {
+/** A key of another shape than oe_live_ (an older or test key): it is still a key because of where it sits. */
+export const FAKE_ODDSENGINE_ODD_KEY = "k9QwErTy7UiOp3AsDfGh5JkLz";
+
+export function buildCursorOddsEngineKeyInAddress(project: string, key: string = FAKE_ODDSENGINE_KEY) {
   put(project, ".cursorrules", "Check a signature with OddsEngine before signing.\n");
-  put(project, ".cursor/mcp.json", JSON.stringify({ mcpServers: { oddsengine: { url: ODDSENGINE_KEY_URL } } }, null, 2));
+  put(project, ".cursor/mcp.json", JSON.stringify({ mcpServers: { oddsengine: { url: `${ODDSENGINE_URL}/k/${key}` } } }, null, 2));
   return project;
 }

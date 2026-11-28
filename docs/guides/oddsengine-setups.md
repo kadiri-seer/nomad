@@ -1,6 +1,6 @@
 # OddsEngine setups
 
-OddsEngine runs crypto safety checks and AI models behind one key, through a hosted MCP server, `https://api.oddsengine.live/mcp`. Its safety tools (`scan_token`, `check_before_sign`, `wallet_approvals`, `trace_wallet`, `money_out`, `drain_report`) only read and never move funds; its AI tools (`list_models`, `estimate_cost`, `chat`, `compare`, `balance`) answer with models from other companies. Every call is paid from your OddsEngine balance. Nomad moves that MCP entry between agents, and never copies the key.
+OddsEngine runs crypto safety checks and AI models behind one key, through a hosted MCP server, `https://api.oddsengine.live/mcp`. Its safety tools (`scan_token`, `check_before_sign`, `wallet_approvals`, `trace_wallet`, `money_out`, `drain_report`) only read and never move funds. Its other tools answer with models from other companies (`list_models`, `estimate_cost`, `chat`, `compare`, `balance`), and since Nov 28, 2026 also generate images, voice, 3D and video and rent GPUs: those spend more of the balance per call. Every call is paid from your OddsEngine balance. Nomad moves that MCP entry between agents, and never copies the key.
 
 This follows what OddsEngine's team described to Nomad on Nov 22, 2026, and OddsEngine's team reviewed this guide the same day.
 
@@ -35,8 +35,8 @@ If the source already kept the key alone in a variable of its own (`Bearer ${MY_
 
 ## Worth a look
 
-- **Calls cost money.** Every call, the safety checks included, is paid from your OddsEngine balance, and the AI tools cost more per call. Give an agent the key only if you are fine with it spending that balance.
-- **The key is needed to run a tool, not to connect.** Without a key the server still connects and lists its 11 tools, but OddsEngine refuses each call until `ODDSENGINE_API_KEY` is set (or the call is paid per call, below). A setup with no key gets a step with the link above.
+- **Calls cost money.** Every call, the safety checks included, is paid from your OddsEngine balance. The AI, generation and GPU tools cost more per call. Give an agent the key only if you are fine with it spending that balance.
+- **The key is needed to run a tool, not to connect.** Without a key the server still connects and lists its tools, but OddsEngine refuses each call until `ODDSENGINE_API_KEY` is set (or the call is paid per call, below). A setup with no key gets a step with the link above.
 - **Keys in text.** An OddsEngine key pasted into instructions or notes is removed, like any other secret.
 - **Look-alikes.** Only OddsEngine's own address counts as OddsEngine: `https://api.oddsengine.live/mcp` (or `/mcp/k/...`) over https on the standard port, with no user name in it. Anything else moves as an ordinary server, without OddsEngine's notes.
 

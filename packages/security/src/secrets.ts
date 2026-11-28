@@ -64,6 +64,9 @@ export const SECRET_RULES: SecretRule[] = [
   { id: "memoria-key", name: "Memoria API key", pattern: /\bmem_[0-9a-f]{12}_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g },
   // OddsEngine's API key, as its console shows it: "oe_live_" and the key (40 more characters in keys seen so far).
   { id: "oddsengine-key", name: "OddsEngine API key", pattern: /\boe_(?:live|test)_[A-Za-z0-9_-]{24,}(?![A-Za-z0-9_-])/g },
+  // Anything in the key's place in OddsEngine's address (https://api.oddsengine.live/mcp/k/<key>), whatever its shape:
+  // OddsEngine takes the key there, so the path itself says it is one.
+  { id: "oddsengine-address-key", name: "OddsEngine API key in an address", pattern: /api\.oddsengine\.live\/mcp\/k\/([^\s/?#"'`]{6,})/gi, group: 1 },
   { id: "url-credentials", name: "Password in connection string", pattern: /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:([^\s@/]{6,})@/gi, group: 1 },
   {
     id: "generic-assignment",

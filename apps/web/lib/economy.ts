@@ -8,6 +8,7 @@ import { decodeEventLog, type Abi } from "viem";
 import { AGENT_WALLETS, fmt, units } from "./agent";
 import { EXPLORER, REWARD_SAFE, TOKEN_CA, isSpamToken } from "./token";
 import { AGENTS_ABI } from "./agents-contract";
+import { dollars, nomadUsd as liveNomadUsd } from "./nomad-price";
 
 export const BURN_ADDRESS = "0x000000000000000000000000000000000000dEaD";
 export const NOMAD_DECIMALS = 18;
@@ -153,7 +154,6 @@ export const PARTNERS: Record<string, string> = {
   oak: "Oak",
   stoa: "Stoa",
   oddsengine: "OddsEngine",
-  upoch: "Upoch",
   memoria: "Memoria",
   hey: "HEY Research",
   zolva: "Zolva",
@@ -401,7 +401,8 @@ const settle = async <T,>(p: Promise<T>, label: string, errors: string[]): Promi
 export async function readEconomy(signal?: AbortSignal): Promise<Economy> {
   const errors: string[] = [];
   const token = obj(await settle(getJson(`${API}/tokens/${TOKEN_CA}`, signal), "the $NOMAD token page", errors));
-  const nomadUsd = num(token.exchange_rate);
+  // $NOMAD's live price from Stoa, as ETH's comes from the explorer; the explorer's own rate when Stoa does not answer.
+  const nomadUsd = await liveNomadUsd(num(token.exchange_rate), signal);
   const supply = token.total_supply != null ? units(token.total_supply, token.decimals ?? NOMAD_DECIMALS) : null;
   const holders = num(token.holders_count ?? token.holders);
 
@@ -452,3 +453,5 @@ export async function readEconomy(signal?: AbortSignal): Promise<Economy> {
 }
 
 export const tokenAmount = (n: number, symbol = "$NOMAD") => `${fmt(n)} ${symbol}`;
+/** A $NOMAD amount with its dollar value at the live price, when there is one: "1,200 $NOMAD ($4.80)". */
+export const nomadAmount = (n: number, usdPerNomad: number | null | undefined) => (usdPerNomad ? `${tokenAmount(n)} (${dollars(n * usdPerNomad)})` : tokenAmount(n));

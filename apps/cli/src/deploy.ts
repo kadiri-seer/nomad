@@ -30,7 +30,7 @@ const CLOUD_TOOLS: Record<string, string> = {
   zerolux: "Zero Lux"
 };
 /** Servers that trade or move money: an agent that uses them is set up as one with its own instructions, which can trade. */
-const TRADING = new Set(["rushr", "qhooks", "stoa", "oak", "zolva", "hedgehood", "robinhood-trading", "virtuals", "upoch"]);
+const TRADING = new Set(["rushr", "qhooks", "stoa", "oak", "zolva", "hedgehood", "robinhood-trading", "virtuals"]);
 
 export type DeployDraft = {
   v: 1;

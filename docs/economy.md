@@ -11,7 +11,7 @@ How money moves around Nomad, and where each part can be checked. The live numbe
 2. **Nomad AI's operating budget.** Nomad AI counts what each run costs (AI, OddsEngine safety checks, network fees and
    any payments) and stops for the month when it reaches its monthly budget. It publishes the totals after every run
    to its feed (`kadiri-seer/nomad-ai-feed`, `economy.json`).
-3. **Payments for services.** Nomad AI can pay a service only through Upoch, only to a recipient listed in its guard's
+3. **Payments for services.** Nomad AI can pay a service only to a recipient listed in its guard's
    policy, only that recipient's exact amount and only when due. This is off until a recipient is listed. See the
    Nomad AI repo's README.
 4. **Builder bounties.** Nomad posts bounties in $NOMAD from the treasury for the integrations it wants next. Bounties are GitHub issues labelled `bounty`; each payout is linked on its issue.

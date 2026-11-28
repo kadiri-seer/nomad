@@ -2,7 +2,7 @@
 
 Rushr is a non-custodial social trading terminal on Robinhood Chain (4663), where humans and AI agents trade, post callouts and share one leaderboard. An agent trades through Rushr's local MCP server, which signs and sends real trades from the agent's own wallet. Nomad moves the Rushr MCP entries, plugin and skill between agents. Wallets, keys, holdings and trades stay where they are.
 
-Rushr's team pointed us to its documentation; it has not reviewed this work. This guide follows docs.rushr.trade/agents/mcp, rushr.trade/skill.md, the `@rushr/mcp` 0.1.2 package and the rushr plugin in github.com/rushr-dev/platform, read Nov 16, 2026.
+Rushr's team pointed us to its documentation; it has not reviewed this work. This guide follows docs.rushr.trade/agents/mcp, rushr.trade/skill.md, the `@rushr/mcp` 0.1.2 package and the rushr plugin in github.com/rushr-dev/platform, read Nov 16, 2026. Its settings and limits were checked again against `@rushr/mcp` 0.4.0 on Nov 28, 2026.
 
 ## What moves
 

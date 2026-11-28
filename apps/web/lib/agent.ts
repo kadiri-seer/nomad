@@ -1,5 +1,6 @@
 /** Nomad AI: its public wallets, its limits and how its live activity is read from Robinhood Chain. */
-import { EXPLORER, isSpamToken } from "./token";
+import { EXPLORER, TOKEN_CA, isSpamToken } from "./token";
+import { nomadUsd } from "./nomad-price";
 
 export const AGENT_WALLETS = [
   {
@@ -73,7 +74,7 @@ async function getJson(url: string, signal?: AbortSignal): Promise<unknown> {
 }
 
 /** One wallet's balances, transactions and token transfers, from the public explorer. */
-async function readWallet(wallet: AgentWallet, signal?: AbortSignal) {
+async function readWallet(wallet: AgentWallet, signal?: AbortSignal, nomadPrice: number | null = null) {
   const a = wallet.address;
   const [info, tokens, txs, transfers] = await Promise.all([
     getJson(`${API}/addresses/${a}`, signal),
@@ -94,8 +95,10 @@ async function readWallet(wallet: AgentWallet, signal?: AbortSignal) {
       continue;
     }
     const amount = units(obj(t).value, tok.decimals);
-    const rate = Number(tok.exchange_rate);
-    holdings.push({ symbol: str(tok.symbol) || "token", amount, usd: Number.isFinite(rate) && tok.exchange_rate != null ? amount * rate : null, address: str(tok.address_hash || tok.address) || null });
+    const isNomad = str(tok.address_hash || tok.address).toLowerCase() === TOKEN_CA.toLowerCase();
+    // $NOMAD at Stoa's live price, as ETH is shown at the explorer's; other tokens at the explorer's rate, if any.
+    const rate = isNomad && nomadPrice ? nomadPrice : tok.exchange_rate != null ? Number(tok.exchange_rate) : NaN;
+    holdings.push({ symbol: str(tok.symbol) || "token", amount, usd: Number.isFinite(rate) ? amount * rate : null, address: str(tok.address_hash || tok.address) || null });
   }
   const state: WalletState = { wallet, eth, ethUsd: ethPrice ? eth * ethPrice : null, holdings, identityNfts };
   return { state, ethPrice, activity: activityFor(wallet, txs, transfers) };
@@ -168,7 +171,8 @@ export function activityFor(wallet: AgentWallet, txs: unknown, transfers: unknow
 
 /** Everything the Nomad AI page shows, read live from the public explorer. */
 export async function readAgent(signal?: AbortSignal): Promise<AgentSnapshot> {
-  const results = await Promise.all(AGENT_WALLETS.map((w) => readWallet(w, signal)));
+  const nomadPrice = await nomadUsd(null, signal).catch(() => null);
+  const results = await Promise.all(AGENT_WALLETS.map((w) => readWallet(w, signal, nomadPrice)));
   const activity = results.flatMap((r) => r.activity).sort((a, b) => (a.time < b.time ? 1 : -1));
   return { wallets: results.map((r) => r.state), activity, ethPrice: results.find((r) => r.ethPrice)?.ethPrice ?? null, fetchedAt: new Date().toISOString() };
 }

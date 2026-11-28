@@ -204,6 +204,13 @@ describe("Hedgehood setups", () => {
 });
 
 describe("Hedgehood profile", () => {
+  it("warns when a local setup names no account, which its server needs to start", () => {
+    const tool = (env: Record<string, unknown>) => ({ name: "hh", kind: "mcp", mcp: { transport: "stdio", command: "npx", args: ["-y", "@hedgehood-io/mcp"], env, headers: {} } }) as never;
+    const none = applyKnownServerProfile(tool({}), "Codex");
+    expect(none.notes.some((n) => n.level === "warning" && n.message.includes("names no account, and Hedgehood's local server does not start without one"))).toBe(true);
+    const withAccount = applyKnownServerProfile(tool({ HEDGEHOOD_ACCOUNT: { value: HH_ACCOUNT } }), "Codex");
+    expect(withAccount.notes.some((n) => n.message.includes("names no account"))).toBe(false);
+  });
   const tool = (command: string, args: string[], extra: Record<string, unknown> = {}) => ({ name: "x", kind: "mcp", mcp: { transport: "stdio", command, args, env: {}, headers: {}, ...extra } }) as any;
   const remote = (url: string) => ({ name: "x", kind: "mcp", mcp: { transport: "http", url, args: [], env: {}, headers: {} } }) as any;
 

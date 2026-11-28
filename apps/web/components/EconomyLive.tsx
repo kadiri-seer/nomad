@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { addressUrl, fmt, txUrl, usd } from "@/lib/agent";
-import { BOUNTIES_PAGE, ECONOMY_WALLETS, readEconomy, tokenAmount, AGENTS_CONTRACT, type Economy, type Transfer } from "@/lib/economy";
+import { BOUNTIES_PAGE, ECONOMY_WALLETS, nomadAmount, readEconomy, tokenAmount, AGENTS_CONTRACT, type Economy, type Transfer } from "@/lib/economy";
 import { Badge, Notice, Skeleton, formatDate } from "./ui";
+import { dollars } from "@/lib/nomad-price";
 
 const REFRESH_MS = 120_000;
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -17,7 +18,7 @@ function TxLink({ hash }: { hash: string }) {
   );
 }
 
-function TransferTable({ id, rows, who }: { id: string; rows: Transfer[]; who: "from" | "to" }) {
+function TransferTable({ id, rows, who, nomadUsd = null }: { id: string; rows: Transfer[]; who: "from" | "to"; nomadUsd?: number | null }) {
   return (
     <div className="table-wrap">
       <table className="data" id={id}>
@@ -33,7 +34,7 @@ function TransferTable({ id, rows, who }: { id: string; rows: Transfer[]; who: "
           {rows.map((t) => (
             <tr key={`${t.hash}-${t.amount}-${t[who]}`}>
               <td style={{ whiteSpace: "nowrap" }}>{formatDate(t.time)}</td>
-              <td>{tokenAmount(t.amount, t.symbol)}</td>
+              <td>{t.symbol === "$NOMAD" ? nomadAmount(t.amount, nomadUsd) : tokenAmount(t.amount, t.symbol)}</td>
               <td>
                 <a className="mono" href={addressUrl(t[who])} target="_blank" rel="noopener noreferrer">
                   {short(t[who])}
@@ -127,6 +128,7 @@ export function EconomyLive() {
         <div>
           <span className="label">$NOMAD burned</span>
           <b>{data.burned.total != null ? fmt(data.burned.total) : "Unknown"}</b>
+          {data.burned.total != null && data.nomad.usd ? <span className="muted">{dollars(data.burned.total * data.nomad.usd)}</span> : null}
         </div>
       </div>
 
@@ -180,7 +182,7 @@ export function EconomyLive() {
           <p className="muted" style={{ margin: 0 }}>
             QHooks pays Nomad&apos;s share of its fees to this wallet. Anything else sent here shows too, with its sender, so each amount can be checked on the explorer.
           </p>
-          {data.revenue.recent.length ? <TransferTable id="eco-received-list" rows={data.revenue.recent} who="from" /> : <p className="muted" style={{ margin: 0 }}>Nothing has arrived yet.</p>}
+          {data.revenue.recent.length ? <TransferTable id="eco-received-list" rows={data.revenue.recent} who="from" nomadUsd={data.nomad.usd} /> : <p className="muted" style={{ margin: 0 }}>Nothing has arrived yet.</p>}
         </div>
       </section>
 
@@ -224,7 +226,7 @@ export function EconomyLive() {
                     <td>${c.allTime.oddsEngineUsd}</td>
                   </tr>
                   <tr>
-                    <td>Network fees ({c.thisMonth.upochTransactions} Upoch checkpoints and payments this month)</td>
+                    <td>Network fees ({c.thisMonth.upochTransactions} transactions this month)</td>
                     <td>{c.thisMonth.networkFeesUsd != null ? `$${c.thisMonth.networkFeesUsd}` : `${c.thisMonth.networkFeesEth} ETH`}</td>
                     <td>{c.allTime.networkFeesUsd != null ? `$${c.allTime.networkFeesUsd}` : `${c.allTime.networkFeesEth} ETH`}</td>
                   </tr>
@@ -348,7 +350,7 @@ export function EconomyLive() {
           {data.payouts.length > 0 && (
             <>
               <span className="label">$NOMAD sent from the treasury</span>
-              <TransferTable id="eco-payouts" rows={data.payouts} who="to" />
+              <TransferTable id="eco-payouts" rows={data.payouts} who="to" nomadUsd={data.nomad.usd} />
             </>
           )}
         </div>
@@ -358,7 +360,7 @@ export function EconomyLive() {
         <Head id="eco-burns" title="Buybacks and burns" note="Only when finances permit; none are promised" />
         <div className="panel-body stack" style={{ gap: 14 }}>
           <p className="muted" style={{ margin: 0 }}>
-            Burned $NOMAD is sent to the dead address, where no one can move it again. {data.burned.total != null && <>It holds {tokenAmount(data.burned.total)} now.</>}
+            Burned $NOMAD is sent to the dead address, where no one can move it again. {data.burned.total != null && <>It holds {nomadAmount(data.burned.total, data.nomad.usd)} now.</>}
           </p>
           {data.buybacks.length > 0 && (
             <div className="table-wrap">
@@ -395,7 +397,7 @@ export function EconomyLive() {
           {data.burned.recent.length > 0 ? (
             <>
               <span className="label">Recent burns</span>
-              <TransferTable id="eco-burn-list" rows={data.burned.recent} who="from" />
+              <TransferTable id="eco-burn-list" rows={data.burned.recent} who="from" nomadUsd={data.nomad.usd} />
             </>
           ) : (
             data.buybacks.length === 0 && (
@@ -425,11 +427,11 @@ export function EconomyLive() {
                 <Link href="/agents">{data.agents.agents.length}</Link>
               </dd>
               <dt>Burned</dt>
-              <dd>{tokenAmount(data.agents.burned)}</dd>
+              <dd>{nomadAmount(data.agents.burned, data.nomad.usd)}</dd>
               <dt>To treasury</dt>
-              <dd>{tokenAmount(data.agents.toTreasury)}</dd>
+              <dd>{nomadAmount(data.agents.toTreasury, data.nomad.usd)}</dd>
               <dt>To creators</dt>
-              <dd>{tokenAmount(data.agents.toCreators)}</dd>
+              <dd>{nomadAmount(data.agents.toCreators, data.nomad.usd)}</dd>
             </dl>
           )}
         </div>

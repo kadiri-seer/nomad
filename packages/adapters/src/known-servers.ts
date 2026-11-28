@@ -122,7 +122,7 @@ const isOakCommand = (command: string | undefined) => !!command && /(^|[\\/])oak
 
 /**
  * Oak Agent Kit, as Oak documents it (github.com/OakAgentKit/oak and the
- * @oakagentkit/addon 0.3.8 package, read Nov 14, 2026): one local MCP server,
+ * @oakagentkit/addon 0.3.8 package, read Nov 14, 2026; folder rules checked against 0.4.4 on Nov 28): one local MCP server,
  * started as `oak mcp` or `npx -y @oakagentkit/addon@<version> mcp`, or from the
  * Claude Code plugin oak@oak-agent-kit. Its wallet, settings and keychain entry
  * live in ~/.oak and the system keychain, never in the MCP entry.
@@ -146,7 +146,7 @@ const OAK: ServerProfile = {
     out.notes.push({
       level: "warning",
       category: "tools",
-      message: `Oak: if ${platform} runs on another computer, Oak creates a new, empty wallet there the first time it starts. To keep the same wallet, restore it there yourself, in your own terminal and never through an agent, following Oak's backup guide (oak backup).`
+      message: `Oak: if ${platform} runs on another computer, Oak creates a new, empty wallet there the first time it starts. To keep the same wallet, restore it there yourself, in your own terminal and never through an agent, following Oak's backup guide (oak backup). On a Mac or Linux, Oak only starts when ~/.oak is a folder you own, with no links and mode 700 (chmod 700 ~/.oak), and its files are 0600.`
     });
     out.notes.push({
       level: "warning",
@@ -208,6 +208,13 @@ const HEDGEHOOD: ServerProfile = {
       category: "integrations",
       message: "Hedgehood's keys and settings stay on this computer in ~/.hedgehood (the session, payer and owner key files and config.json). Nomad never reads that folder or any key file, and never moves positions, balances or sessions on chain."
     });
+    if (!mcp.env.HEDGEHOOD_ACCOUNT && !Object.keys(mcp.env).some((k) => /^HEDGEHOOD_(SESSION|OWNER)_KEY(_FILE)?$/.test(k))) {
+      out.notes.push({
+        level: "warning",
+        category: "tools",
+        message: `"${t.name}" names no account, and Hedgehood's local server does not start without one: HEDGEHOOD_ACCOUNT (the owner address) or a session or owner key. Here it may come from ~/.hedgehood/config.json, which Nomad does not copy. On another computer, set HEDGEHOOD_ACCOUNT on ${platform} for read-only use, or use Hedgehood's hosted read-only server, https://mcp.hedgehood.io/mcp.`
+      });
+    }
     // A raw key (not a file path) is a wallet private key: never written as a value, even with --include-secrets.
     for (const k of ["HEDGEHOOD_SESSION_KEY", "HEDGEHOOD_PAYER_KEY", "HEDGEHOOD_OWNER_KEY"]) {
       const v = mcp.env[k];
@@ -278,7 +285,7 @@ const amount = (units: string) => {
 /**
  * BrainChain, which verifies AI agent work and settles payments on Robinhood Chain and Base, as it
  * documents its MCP server (docs.usebrainchain.com/agents and github.com/usebrainchain/brainchain-mcp,
- * brainchain-mcp 0.9.3, read Nov 15, 2026): `npx -y brainchain-mcp@<version>` or `brainchain-mcp`.
+ * brainchain-mcp 0.9.3, read Nov 15, 2026; its approve step checked against 0.25.1 on Nov 28): `npx -y brainchain-mcp@<version>` or `brainchain-mcp`.
  * It pays from a wallet whose key is in BRAINCHAIN_PAYER_KEY_FILE (~/.brainchain/payer.key) or
  * BRAINCHAIN_PAYER_KEY, never both; it uses mainnet unless BRAINCHAIN_NETWORK=testnet, and pays in USDG
  * on Robinhood Chain unless BRAINCHAIN_PAY_ON=base. Limits are in base units (6 decimals).
@@ -348,7 +355,7 @@ const BRAINCHAIN: ServerProfile = {
     // Only BrainChain's own package spec is printed in a command the user runs.
     const pkg = mcp.args.find((a) => BRAINCHAIN_PKG.test(a)) ?? "brainchain-mcp";
     const prefix = `${testnet ? "BRAINCHAIN_NETWORK=testnet " : ""}${base ? "BRAINCHAIN_PAY_ON=base " : ""}BRAINCHAIN_PAYER_KEY_FILE=<key file>`;
-    if (!base) out.manualSteps.push(`Paying in USDG needs a one-time approval per wallet. If this wallet has not paid BrainChain in USDG before, run in your own terminal: ${prefix} npx -y ${pkg} approve`);
+    if (!base) out.manualSteps.push(`Paying in USDG needs a one-time approval per wallet. If this wallet has not paid BrainChain in USDG before, run in your own terminal: ${prefix} npx -y ${pkg} approve 5 (the amount in USDG it may spend; without one it approves 100 USDG, max approves any amount, and 0 revokes).`);
     out.manualSteps.push(`Check the wallet before the agent pays: ${prefix} npx -y ${pkg} wallet (it prints the wallet and what it still needs, never the key).`);
     if (isBrainChainCommand(mcp.command)) {
       out.manualSteps.push(`Install BrainChain's MCP server for "${t.name}": npm install -g brainchain-mcp. It needs Node.js 22 or later, and the brainchain-mcp command must be on the PATH ${platform} uses.`);
@@ -404,8 +411,16 @@ const HEY: ServerProfile = {
         category: "tools",
         message: `"${t.name}" is HEY Research Lab's hosted, read-only server${research ? " (the research profile: builder research, without market tools)" : ""}. It needs no key and no wallet; Nomad copies its address.`
       });
-      if (Object.keys(mcp.headers ?? {}).some((h) => h.toLowerCase() === "authorization")) {
-        out.notes.push({ level: "info", category: "tools", message: `"${t.name}" used a HEY API key in its Authorization header. Keys are never copied: set it again on ${platform} as "Bearer <your key>" (the key is on heyresearch.xyz/account), or leave it out to use HEY without a key.` });
+      const auth = Object.keys(mcp.headers ?? {}).filter((h) => h.toLowerCase() === "authorization");
+      if (auth.length) {
+        // A key Nomad held back: the destination reads it alone from HEY_API_KEY (the name HEY's local server uses), not
+        // from a variable named after the header.
+        if (auth.length === 1 && "secretRef" in mcp.headers[auth[0]] && typeof (mcp as Record<string, unknown>).bearerEnv !== "string") {
+          const headers = { ...mcp.headers };
+          delete headers[auth[0]];
+          out.tool = { ...t, mcp: { ...mcp, headers, bearerEnv: "HEY_API_KEY" } as Tool["mcp"] & object };
+        }
+        out.notes.push({ level: "info", category: "tools", message: `"${t.name}" used a HEY API key (hey_...). Keys are never copied: on ${platform}, set HEY_API_KEY to the key alone (it is on heyresearch.xyz/account), or leave it unset to use HEY without a key.` });
       }
       return;
     }
@@ -443,7 +458,7 @@ const RUSHR_LIMITS = ["RUSHR_MAX_TRADE_USD", "RUSHR_DAILY_USD", "RUSHR_DRY_RUN",
 
 /**
  * Rushr, a non-custodial social trading terminal on Robinhood Chain (4663), as Rushr documents it
- * (docs.rushr.trade/agents/mcp, rushr.trade/skill.md and @rushr/mcp 0.1.2, read Nov 16, 2026): the local
+ * (docs.rushr.trade/agents/mcp, rushr.trade/skill.md and @rushr/mcp 0.1.2, read Nov 16, 2026; settings and limits checked against 0.4.0 on Nov 28): the local
  * server `npx -y @rushr/mcp` or `rushr-mcp`, which signs and sends real trades from the agent's own
  * wallet. The wallet is RUSHR_WALLET_FILE (a JSON key file) or RUSHR_PRIVATE_KEY, never both; with
  * neither, ~/.rushr/agent-wallet.json. ~/.rushr also holds the API key and the daily spend ledger.
@@ -1066,76 +1081,13 @@ const MEMORIA: ServerProfile = {
       category: "tools",
       message: `"${t.name}" is Memoria's hosted memory server. Memories stay on Memoria's server and nothing about them is copied; Nomad copies its address. Each key belongs to one agent, so with the same key this agent keeps reading and saving the same memories on ${platform}; a different key is a different agent, which sees only memories shared with it.`
     });
+    out.notes.push({ level: "info", category: "tools", brief: true, message: `Memoria counts every call from "${t.name}", reads included, as one of the agent's prepaid Memoria actions.` });
     if (typeof keyRef === "string") {
       out.manualSteps.push(
         `The "${t.name}" key is this agent's Memoria API key (mem_..., shown once at sign-up); keys are never copied. Memoria refuses every request without a valid key, so the server does not work on ${platform} until ${keyRef} is set. Use the same key to stay the same agent.`
       );
     } else if (!keptKey) {
       out.manualSteps.push(`"${t.name}" has no Memoria API key here, and Memoria refuses every request without one. Add an Authorization header: "Bearer " followed by the agent's key (mem_...).`);
-    }
-  }
-};
-
-/** The upoch command from @upoch/guard (also .cmd or .exe on Windows), alone or as a path. */
-const isUpochCommand = (command: string | undefined) => !!command && /(^|[\\/])upoch(\.cmd|\.exe)?$/i.test(command);
-const isUpochPackage = isPackageArg("@upoch/guard");
-/** Upoch Guard's MCP server: `upoch mcp`, or `npx [-y] @upoch/guard mcp`. Other upoch commands (setup, protect) are not servers. */
-const isUpochServer = (t: Tool) => {
-  const mcp = t.mcp;
-  if (!mcp || mcp.transport !== "stdio") return false;
-  if (isUpochCommand(mcp.command)) return mcp.args.length === 1 && mcp.args[0] === "mcp";
-  const i = mcp.args.findIndex(isUpochPackage);
-  return i >= 0 && mcp.args.slice(i + 1).join(" ") === "mcp";
-};
-
-/**
- * Upoch, checkpoints and recovery for AI agents on Robinhood Chain, as Upoch documents it (upoch.tech/docs/mcp,
- * /docs/recovery and /docs/security-review, @upoch/guard 0.1.4, and the Upoch team's answers, read Nov 19, 2026;
- * Risk Check updated from @upoch/guard 0.2.0 and the team's note, Nov 20, 2026):
- * the local MCP server `upoch mcp` from @upoch/guard (Node.js 24 or later), which checkpoints, restores and rolls
- * back an agent's work. Everything lives in one folder, UPOCH_HOME (default ~/.upoch): the owner and executor
- * keys, the checkpoint encryption key and the storage token in secrets.json, plus config.json, session.json and
- * journal.jsonl. That folder is key material: never read or copied. Restoring it is what carries the agent's keys
- * to a new computer. Upoch does not coordinate two copies of one agent yet, so the agent runs in one app at a
- * time. Risk Check (payment rules set with `upoch rules`, kept in config.json) runs in this server from
- * @upoch/guard 0.2.0. The contracts have had no independent audit.
- */
-const UPOCH: ServerProfile = {
-  id: "upoch",
-  vendor: "Upoch",
-  label: "Upoch (checkpoints and recovery for AI agents on Robinhood Chain)",
-  matches: isUpochServer,
-  keyVars: [],
-  emptyOkEnv: [],
-  limitVars: [],
-  looserDefaults: {},
-  apply(t, out, platform) {
-    const mcp = t.mcp!;
-    const v = mcp.env.UPOCH_HOME;
-    const home = v && "value" in v ? v.value.trim() : undefined;
-    const where = home ? home : v ? "the folder UPOCH_HOME names" : "~/.upoch";
-    out.notes.push({
-      level: "info",
-      category: "tools",
-      message: `"${t.name}" runs Upoch Guard on this computer: it checkpoints the agent's work on Robinhood Chain and can restore or roll it back. Its keys and settings stay in ${where}; Nomad never reads, copies or moves that folder.`
-    });
-    out.notes.push({
-      level: "warning",
-      category: "tools",
-      message: `Upoch does not coordinate two copies of the same agent yet. Stop "${t.name}" in the app you moved it from before ${platform} starts it.`
-    });
-    out.notes.push({
-      level: "info",
-      category: "tools",
-      message: `Upoch's contracts have had an internal review but no independent audit yet, and Upoch suggests low-value workflows first. Risk Check (spending limits) runs in "${t.name}" from @upoch/guard 0.2.0, with its rules kept alongside the keys.`
-    });
-    out.manualSteps.push(
-      `If ${platform} runs on another computer, copy ${where} there yourself (keep it readable only by you) before ${platform} first starts "${t.name}": that folder carries the agent's Upoch keys and Risk Check rules. Without it Upoch is not set up there, and a new setup registers a different agent.`
-    );
-    if (isUpochCommand(mcp.command)) {
-      out.manualSteps.push(`Install Upoch Guard for "${t.name}": npm install -g @upoch/guard. It needs Node.js 24 or later, and the upoch command must be on the PATH ${platform} uses.`);
-    } else {
-      out.manualSteps.push(`"${t.name}" runs Upoch Guard through npx: ${platform} needs Node.js 24 or later on its PATH.`);
     }
   }
 };
@@ -1211,7 +1163,8 @@ const ODDSENGINE: ServerProfile = {
     out.notes.push({
       level: "info",
       category: "tools",
-      message: `"${t.name}" is OddsEngine's hosted server, powered by OddsEngine (${ODDSENGINE_CONNECT_URL}). Its crypto safety tools (scan_token, check_before_sign and the wallet checks) only read and never move funds; its AI tools (chat, compare) answer with other companies' models. Every call is paid from your OddsEngine balance.`
+      brief: true,
+      message: `"${t.name}" is OddsEngine's hosted server, powered by OddsEngine (${ODDSENGINE_CONNECT_URL}). Its crypto safety tools (scan_token, check_before_sign and the wallet checks) only read and never move funds. Its other tools spend more of your OddsEngine balance per call: AI chat and model comparison with other companies' models, image, voice, 3D and video generation, and GPU rental. Every call is paid from your OddsEngine balance.`
     });
     out.notes.push({
       level: "info",
@@ -1388,6 +1341,13 @@ const isBullScript = (a: string) => /(^|[\\/])bull-mcp\.mjs$/.test(a);
  * the wallet to sign a message each time. The local server (`node bull-mcp.mjs`, a file from bull.family) reads
  * BULL_AGENT_KEY, the agent's wallet key, and signs and sends escrow transactions itself. The key is never copied.
  */
+/** Bull's local server's limits and their defaults (bull-mcp.mjs 2026-11-27-b621e823). */
+const BULL_LIMITS: [string, string, string][] = [
+  ["BULL_MAX_ETH", "1", "ETH a transaction"],
+  ["BULL_MAX_USDG", "1000", "USDG a deal"],
+  ["BULL_MCP_MAX_APPROVE", "no real cap (10^30)", "on approvals"]
+];
+
 const BULL: ServerProfile = {
   id: "bull",
   vendor: "Bull",
@@ -1400,7 +1360,7 @@ const BULL: ServerProfile = {
   // BULL_AGENT_KEY is handled in apply(): it is a raw key, and the same wallet keeps the agent's record on Bull.
   keyVars: [],
   emptyOkEnv: [],
-  limitVars: [],
+  limitVars: BULL_LIMITS.map(([k]) => k),
   looserDefaults: {},
   apply(t, out, platform) {
     const mcp = t.mcp!;
@@ -1415,6 +1375,12 @@ const BULL: ServerProfile = {
       return;
     }
     out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" runs Bull's server on this computer. With BULL_AGENT_KEY it signs and sends escrow transactions from the agent's wallet by itself. ${audit}` });
+    const literal = (k: string) => {
+      const v = mcp.env[k];
+      return v && "value" in v && v.value.trim() ? v.value.trim() : null;
+    };
+    const limits = BULL_LIMITS.map(([k, def, what]) => `${literal(k) ?? def} ${what}${literal(k) ? "" : " (default)"}`).join("; ");
+    out.notes.push({ level: "info", category: "tools", brief: true, message: `Limits for "${t.name}" on ${platform}: ${limits}.` });
     if (mcp.env.BULL_AGENT_KEY) {
       out.unsupported.push({
         category: "tools",
@@ -1423,11 +1389,11 @@ const BULL: ServerProfile = {
         alternative: `Set BULL_AGENT_KEY on ${platform} to the same wallet's key to keep its record on Bull: deals and reputation belong to the wallet.`
       });
     } else {
-      out.notes.push({ level: "info", category: "tools", message: `"${t.name}" had no BULL_AGENT_KEY, so on ${platform} it can plan and read but not send.` });
+      out.notes.push({ level: "warning", category: "tools", message: `"${t.name}" had no BULL_AGENT_KEY, and Bull's local server does not start without one. Set it on ${platform}, or use Bull's hosted server (https://www.bull.family/api/mcp), which needs no key.` });
     }
     const script = mcp.args.find(isBullScript)!;
     out.manualSteps.push(
-      `"${t.name}" runs ${script}, a file Nomad does not copy. If ${platform} runs on another computer, put Bull's file at the same path there: take a pinned copy listed at https://www.bull.family/sdk/versions.json, check its sha256, and install viem next to it (npm i viem).`
+      `"${t.name}" runs ${script}, a file Nomad does not copy. If ${platform} runs on another computer, put Bull's file at the same path there: take a pinned copy listed at https://www.bull.family/sdk/versions.json, check its sha256, and install viem next to it (npm i viem). For Bull's Solana tools, also put bull-mcp-solana.mjs beside it; without it the server starts with no Solana tools.`
     );
   }
 };
@@ -1457,6 +1423,7 @@ const ZEROLUX: ServerProfile = {
     out.notes.push({
       level: "info",
       category: "tools",
+      brief: true,
       message: `"${t.name}" can hire Zero Lux agents: it asks the agent's wallet to sign each USDG payment. Check this agent's instructions on ${platform} for when it may pay.`
     });
   }
@@ -1500,7 +1467,15 @@ const AUTONOMO: ServerProfile = {
     out.notes.push({ level: "info", category: "tools", message: `"${t.name}" is Autonomo's MCP server (autonomo-mcp). It finds paid APIs and checks their prices for free, and pays per call from the agent's wallet in USDG or $AUTONOMO on Robinhood Chain, or USDC on Base.` });
     const limits = AUTONOMO_LIMITS.map(([k, def, what]) => `${literal(k) ?? def} ${what}${literal(k) ? "" : " (default)"}`).join("; ");
     const pay = literal("AUTONOMO_PAY_WITH");
-    out.notes.push({ level: "info", category: "tools", message: `Spending limits for "${t.name}" on ${platform}: ${limits}. Pays with ${pay ?? "auto (USDG, then $AUTONOMO, then USDC on Base), the default"}.` });
+    out.notes.push({ level: "info", category: "tools", brief: true, message: `Spending limits for "${t.name}" on ${platform}: ${limits}. Pays with ${pay ?? "auto (USDG, then $AUTONOMO, then USDC on Base), the default"}.` });
+    const payMode = (pay ?? "auto").toLowerCase();
+    if (payMode === "auto" || payMode === "autonomo") {
+      out.notes.push({
+        level: "warning",
+        category: "tools",
+        message: `The first time "${t.name}" pays in $AUTONOMO${payMode === "auto" ? " (with auto, when the wallet has too little USDG)" : ""}, it approves Permit2 for an unlimited amount of the wallet's $AUTONOMO. Keep only a little $AUTONOMO in that wallet, or set AUTONOMO_PAY_WITH=usdg.`
+      });
+    }
     if (mcp.env.AUTONOMO_WALLET_KEY) {
       out.unsupported.push({
         category: "tools",
@@ -1588,7 +1563,7 @@ const KUDO: ServerProfile = {
   }
 };
 
-const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, UPOCH, ODDSENGINE, ROBINHOOD_TRADING, ROBINHOOD_BANKING, VIRTUALS, BULL, ZEROLUX, AUTONOMO, KUDO];
+const PROFILES: ServerProfile[] = [PRIORS, OAK, HEDGEHOOD, BRAINCHAIN, HEY, RUSHR, QHOOKS, TOKYO, OSTRA, STOA, ZOLVA, MEMORIA, ODDSENGINE, ROBINHOOD_TRADING, ROBINHOOD_BANKING, VIRTUALS, BULL, ZEROLUX, AUTONOMO, KUDO];
 
 /** Apply the profile of a known server, if any. Returns a copy; the input is not changed. */
 export function applyKnownServerProfile(tool: Tool, platformName = "the destination"): KnownServerProfileResult {

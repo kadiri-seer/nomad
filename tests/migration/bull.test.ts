@@ -80,10 +80,13 @@ describe("Bull recognition", () => {
     expect(applyKnownServerProfile(remote(BULL_URL)).tool.mcp!.url).toBe(BULL_URL);
   });
 
-  it("says when the local server has no key, so it can only plan", () => {
+  it("warns that the local server does not start without a key, and lists its limits", () => {
     const r = applyKnownServerProfile(local("node", ["bull-mcp.mjs"]), "Codex");
-    expect(r.notes.map((n) => n.message).join("\n")).toContain("had no BULL_AGENT_KEY, so on Codex it can plan and read but not send");
+    expect(r.notes.filter((n) => n.level === "warning").map((n) => n.message).join("\n")).toContain("had no BULL_AGENT_KEY, and Bull's local server does not start without one. Set it on Codex, or use Bull's hosted server");
     expect(r.unsupported).toEqual([]);
+    expect(r.notes.map((n) => n.message).join("\n")).toContain('Limits for "x" on Codex: 1 ETH a transaction (default); 1000 USDG a deal (default); no real cap (10^30) on approvals (default).');
+    const set = applyKnownServerProfile(local("node", ["bull-mcp.mjs"], { BULL_MAX_USDG: { value: "50" } }), "Codex");
+    expect(set.notes.map((n) => n.message).join("\n")).toContain("50 USDG a deal;");
   });
 
   it("ignores look-alikes", () => {

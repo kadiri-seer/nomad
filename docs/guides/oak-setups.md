@@ -2,7 +2,7 @@
 
 Oak Agent Kit is a local wallet and tools for Robinhood Chain projects, used by an agent through one MCP server. Nomad moves the Oak MCP entry between agents. The wallet, its settings and everything on chain stay where they are.
 
-Oak is independent and is not affiliated with Robinhood. Oak and its team have not been contacted and have not reviewed this work. This guide follows Oak's documentation and the `@oakagentkit/addon` 0.3.8 package, read Nov 14, 2026.
+Oak is independent and is not affiliated with Robinhood. Oak and its team have not been contacted and have not reviewed this work. This guide follows Oak's documentation and the `@oakagentkit/addon` 0.3.8 package, read Nov 14, 2026, with its folder rules checked again against 0.4.4 on Nov 28, 2026.
 
 ## What moves
 

@@ -63,8 +63,7 @@ node nomad/contracts/deploy.mjs
    v0.8.28, and upload `artifacts/NomadAgents.standard-input.json` or `artifacts/NomadPaymaster.standard-input.json`. The page shows the constructor arguments to
    paste.
 3. Redeploy the site so it picks up the new settings.
-4. For encrypted paid copies, set `FILEBASE_IPFS_TOKEN` in Vercel to a Filebase IPFS RPC API key (the same kind
-   of key Upoch uses) and redeploy. Without it, creators can still mint with a public link.
+4. For encrypted paid copies, set `FILEBASE_IPFS_TOKEN` in Vercel to a Filebase IPFS RPC API key and redeploy. Without it, creators can still mint with a public link.
 5. When you are ready, open minting from the treasury wallet: `setMintingOpen(true)` on the contract's Blockscout
    page (Write contract).
 

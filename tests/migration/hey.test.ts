@@ -66,7 +66,9 @@ describe("HEY Research setups", () => {
     expect(research.url).toBe(HEY_RESEARCH_URL);
     // The self-declared integration name is not a secret and carries over; the key is forwarded, never written.
     expect(research.http_headers).toEqual({ "x-hey-integration": "kestrel/1.0" });
-    expect(research.env_http_headers).toEqual({ Authorization: "Authorization" });
+    // The held-back key is read alone from HEY_API_KEY, not from a variable named after the header.
+    expect(research.bearer_token_env_var).toBe("HEY_API_KEY");
+    expect(research.env_http_headers).toBeUndefined();
     const local = cfg.mcp_servers["hey-local"];
     expect(local.command).toBe("npx");
     expect(local.args).toEqual(["-y", "@hey-research-lab/mcp@0.3.5"]);
@@ -74,7 +76,7 @@ describe("HEY Research setups", () => {
     expect(local.env_vars).toEqual(["HEY_API_KEY"]);
     expect(notes(plan)).toContain(`"hey-research" is HEY Research Lab's hosted, read-only server. It needs no key and no wallet`);
     expect(notes(plan)).toContain(`"hey-research-research" is HEY Research Lab's hosted, read-only server (the research profile`);
-    expect(notes(plan)).toContain(`set it again on Codex as "Bearer <your key>"`);
+    expect(notes(plan)).toContain(`"hey-research-research" used a HEY API key (hey_...). Keys are never copied: on Codex, set HEY_API_KEY to the key alone`);
     expect(notes(plan)).toContain(`"hey-local" used a HEY API key (HEY_API_KEY). Keys are never copied`);
     expect(notes(plan)).toContain(`"hey-local" serves HEY's research profile (HEY_MCP_PROFILE=research)`);
     expect(steps(plan)).toContain(`"hey-local" runs HEY Research Lab's server through npx: Codex needs Node.js 20 or later`);

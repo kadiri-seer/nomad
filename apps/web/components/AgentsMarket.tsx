@@ -4,11 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import { encodeFunctionData, erc20Abi, formatUnits, parseUnits, type Abi } from "viem";
 import { addressUrl, fmt, txUrl } from "@/lib/agent";
 import { AGENTS_ABI } from "@/lib/agents-contract";
-import { AGENTS_CONTRACT, readAgents, tokenAmount, NOMAD_DECIMALS, isEncryptedUri, type AgentsSummary, type MintedAgent } from "@/lib/economy";
+import { AGENTS_CONTRACT, nomadAmount, readAgents, tokenAmount, NOMAD_DECIMALS, isEncryptedUri, type AgentsSummary, type MintedAgent } from "@/lib/economy";
 import { GATEWAYS, MAX_PACKAGE_BYTES, decryptPackage, encryptPackage, openMessage, sha256Hex, storeMessage } from "@/lib/agent-package";
 import { TOKEN_CA } from "@/lib/token";
 import { connect, getWallet, readContract, send, sha256File, signMessage, waitFor, walletMessage, type Eip1193 } from "@/lib/wallet";
 import { Badge, Notice, Skeleton, formatDate } from "./ui";
+import { useNomadUsd } from "./useNomadUsd";
 
 const ABI = AGENTS_ABI as unknown as Abi;
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -62,6 +63,7 @@ async function downloadPackage(eth: Eip1193, account: string, a: MintedAgent, sa
 }
 
 function AgentCard({ a, account, contract, onDone }: { a: MintedAgent; account: string | null; contract: string; onDone: () => void }) {
+  const usdPerNomad = useNomadUsd();
   const [status, setStatus] = useState<Status>(null);
   const [busy, setBusy] = useState(false);
   const mine = account && a.creator.toLowerCase() === account.toLowerCase();
@@ -121,7 +123,7 @@ function AgentCard({ a, account, contract, onDone }: { a: MintedAgent; account: 
           )}
         </dd>
         <dt>Copy</dt>
-        <dd>{a.price > 0 ? tokenAmount(a.price) : "Free"}</dd>
+        <dd>{a.price > 0 ? nomadAmount(a.price, usdPerNomad) : "Free"}</dd>
         <dt>Copies</dt>
         <dd>{a.copies}</dd>
         <dt>Minted</dt>
@@ -140,8 +142,8 @@ function AgentCard({ a, account, contract, onDone }: { a: MintedAgent; account: 
           <button type="button" className="btn btn-ghost btn-sm" disabled={busy || !account} onClick={download} title="For the owner, and wallets with a copy">
             Download
           </button>
-        ) : a.uri ? (
-          <a href={a.uri} target="_blank" rel="noopener noreferrer nofollow">
+        ) : a.uri && /^(https?|ipfs):\/\//i.test(a.uri) ? (
+          <a href={a.uri.replace(/^ipfs:\/\//i, "https://ipfs.io/ipfs/")} target="_blank" rel="noopener noreferrer nofollow">
             Package link
           </a>
         ) : (
@@ -171,6 +173,7 @@ function AgentCard({ a, account, contract, onDone }: { a: MintedAgent; account: 
 }
 
 function MintForm({ account, contract, settings, onDone }: { account: string | null; contract: string; settings: Settings | null; onDone: () => void }) {
+  const usdPerNomad = useNomadUsd();
   const [file, setFile] = useState<File | null>(null);
   const [hash, setHash] = useState<`0x${string}` | null>(null);
   const [name, setName] = useState("");
@@ -256,7 +259,7 @@ function MintForm({ account, contract, settings, onDone }: { account: string | n
           Mint an agent
         </h3>
         <span className="muted" style={{ fontSize: "0.85rem" }}>
-          {settings ? (settings.open ? `Fee: ${tokenAmount(Number(formatUnits(settings.fee, NOMAD_DECIMALS)))}` : "Minting is closed right now") : "Connect a wallet to see the fee"}
+          {settings ? (settings.open ? `Fee: ${nomadAmount(Number(formatUnits(settings.fee, NOMAD_DECIMALS)), usdPerNomad)}` : "Minting is closed right now") : "Connect a wallet to see the fee"}
         </span>
       </div>
       <div className="panel-body">

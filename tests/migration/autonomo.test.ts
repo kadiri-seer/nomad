@@ -101,7 +101,13 @@ describe("Autonomo recognition", () => {
     expect(text).toContain("pays the gateways at https://autonomo.fun.evil.example (AUTONOMO_BASE_URL)");
     expect(text).toContain("had no AUTONOMO_WALLET_KEY, so on Codex it finds APIs and checks prices, but cannot pay");
     const own = applyKnownServerProfile(local("npx", ["-y", "autonomo-mcp"], { AUTONOMO_BASE_URL: { value: "https://autonomo.fun" } }), "Codex");
-    expect(own.notes.some((n) => n.level === "warning")).toBe(false);
+    expect(own.notes.some((n) => n.level === "warning" && n.message.includes("AUTONOMO_BASE_URL"))).toBe(false);
+  });
+  it("warns about the unlimited Permit2 approval when it may pay in $AUTONOMO, not when it pays only in USDG", () => {
+    const auto = applyKnownServerProfile(local("npx", ["-y", "autonomo-mcp"]), "Codex");
+    expect(auto.notes.filter((n) => n.level === "warning").map((n) => n.message).join("\n")).toContain("approves Permit2 for an unlimited amount of the wallet's $AUTONOMO");
+    const usdg = applyKnownServerProfile(local("npx", ["-y", "autonomo-mcp"], { AUTONOMO_PAY_WITH: { value: "usdg" } }), "Codex");
+    expect(usdg.notes.some((n) => n.message.includes("Permit2"))).toBe(false);
   });
   it("only Autonomo's own skill gets the note", () => {
     expect(knownSkillNotes([{ name: "autonomo", frontmatter: { metadata: { author: "autonomo", homepage: "https://autonomo.fun" } } }], "codex", "Codex")).toHaveLength(1);

@@ -289,17 +289,9 @@ Checked with real applications: `scripts/check-memoria.mjs` (Real apps workflow)
 
 Not verified: saving and finding memories with a real key (that needs a Memoria account).
 
-## Upoch setups (added)
+## Upoch setups (removed on 28 November 2026)
 
-Written Nov 19, 2026. Upoch saves checkpoints of an agent's work on Robinhood Chain for recovery and rollback, through a local MCP server, Upoch Guard (`upoch mcp`), whose keys live in `~/.upoch` or `UPOCH_HOME`. The Upoch team answered Nomad's questions (one app at a time; restoring `~/.upoch` carries the keys and, from `@upoch/guard` 0.2.0, the Risk Check rules, which run in the MCP server) and reviewed this work on Nov 20, 2026. See [docs/guides/upoch-setups.md](guides/upoch-setups.md).
-
-Tested (automated, every push):
-- Upoch setups moving from Claude Code to Codex and back, and from Codex to OpenClaw (`tests/migration/upoch.test.ts`): `upoch mcp` and the `npx @upoch/guard mcp` form with its pin as written, `UPOCH_HOME` as a path, the one-app-at-a-time warning, the steps for another computer and for Node.js 24, and the notes on Risk Check and the audit. A planted `~/.upoch` with fake keys is never read: nothing from it appears in destinations, plans, receipts or Nomad's library, and the sources are unchanged.
-- Which entries count as Upoch, and 10 look-alikes that do not (other upoch commands such as `upoch setup` included), which get no note.
-
-Checked with real applications: `scripts/check-upoch.mjs` (Real apps workflow) checks npm still publishes `@upoch/guard` with the `upoch` command and its Node.js 24 requirement, then moves a setup with a planted `~/.upoch` to the real Codex, which lists the server as written, and OpenClaw, which accepts its config, with nothing from that folder in what Nomad wrote. Nothing from Upoch is installed or run. The Codex part was run here with Codex CLI 0.170.0 and passed.
-
-Not verified: checkpoints, restores and rollbacks themselves (they need an Upoch setup with ETH on Robinhood Chain).
+Nomad no longer recognizes Upoch setups: an Upoch server moves like any other local server, without Upoch's notes.
 
 ## OddsEngine setups (added)
 

@@ -8,7 +8,7 @@ import { scanText } from "@nomad/security";
 import type { Tool } from "@nomad/schema";
 import { emptyDir, read, setup, treeHash, type Env } from "../helpers";
 import { planText, summaryText } from "../../apps/cli/src/format";
-import { FAKE_ODDSENGINE_KEY, FAKE_ODDSENGINE_SECRETS, ODDSENGINE_KEY_URL, ODDSENGINE_URL, buildClaudeCodeOddsEngine, buildCursorOddsEngineKeyInAddress } from "../fixtures/oddsengine";
+import { FAKE_ODDSENGINE_KEY, FAKE_ODDSENGINE_ODD_KEY, FAKE_ODDSENGINE_SECRETS, ODDSENGINE_KEY_URL, ODDSENGINE_URL, buildClaudeCodeOddsEngine, buildCursorOddsEngineKeyInAddress } from "../fixtures/oddsengine";
 
 /**
  * OddsEngine setups (a hosted server with crypto safety checks and AI models, paid per call; every call needs
@@ -149,6 +149,16 @@ describe("OddsEngine setups", () => {
 describe("OddsEngine recognition", () => {
   const remote = (url: string, headers: Record<string, unknown> = {}, enabled = true): Tool =>
     ({ name: "x", kind: "mcp", enabled, mcp: { transport: "http", url, args: [], env: {}, headers } }) as unknown as Tool;
+
+  it("a key of any shape in the address is taken out, never copied", async () => {
+    const cur = buildCursorOddsEngineKeyInAddress(join(src, "odd"), FAKE_ODDSENGINE_ODD_KEY);
+    const dest = emptyDir(env.home, "odd2x/.codex");
+    const { plan, receipt } = await migrate({ adapter: "cursor", root: cur, nativeId: "main" }, { adapter: "codex", root: dest });
+    expect((parseToml(read(join(dest, "config.toml"))) as any).mcp_servers.oddsengine.url).toBe(ODDSENGINE_URL);
+    expect(notes(plan)).toContain(`The OddsEngine key was part of "oddsengine"'s address.`);
+    expect(notes(plan)).not.toContain("secrets were kept");
+    for (const t of [allText(dest), JSON.stringify(plan), JSON.stringify(receipt), allText(env.nomadHome)]) expect(t).not.toContain(FAKE_ODDSENGINE_ODD_KEY);
+  });
 
   it("recognises OddsEngine's server, with or without a key in the address", () => {
     for (const u of [ODDSENGINE_URL, `${ODDSENGINE_URL}/`, "https://API.ODDSENGINE.live/mcp", `${ODDSENGINE_URL}/k/[REDACTED:oddsengine-key]`, ODDSENGINE_KEY_URL]) expect(knownServerId(remote(u)), u).toBe("oddsengine");

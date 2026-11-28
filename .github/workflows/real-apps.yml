@@ -30,7 +30,6 @@ on:
       - "scripts/check-stoa.mjs"
       - "scripts/check-zolva.mjs"
       - "scripts/check-memoria.mjs"
-      - "scripts/check-upoch.mjs"
       - "scripts/check-oddsengine.mjs"
       - "scripts/check-your-nomad.mjs"
       - "packages/mcp/**"
@@ -95,10 +94,6 @@ jobs:
       # real Codex (bearer_token_env_var = MEMORIA_API_KEY) and OpenClaw, with the key nowhere.
       - name: Check Memoria
         run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-memoria.mjs
-      # Nothing from Upoch is installed or run: npm still names the upoch command, and a setup with a planted
-      # (fake) ~/.upoch moves to the real Codex and OpenClaw, with nothing from that folder in what Nomad wrote.
-      - name: Check Upoch
-        run: NOMAD_APPS_BIN="$RUNNER_TEMP/apps/node_modules/.bin" node scripts/check-upoch.mjs
       # OddsEngine's server refuses a tool call with no key, and a setup with a (fake) key in its address moves to the
       # real Codex (plain address, bearer_token_env_var = ODDSENGINE_API_KEY) and OpenClaw, with the key nowhere.
       - name: Check OddsEngine
