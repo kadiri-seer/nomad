@@ -305,7 +305,7 @@ describe("sponsors: entering and picking", () => {
 
 describe("Nomad's team", () => {
   it("lists both team addresses, the first as the arbiter", () => {
-    expect(REVIEWERS).toEqual(["0x742e2cB0D250c22D71a1df00Cf9D2c40214544a4", "0xA0eB8754d83116ae0d987C520DE64b2C56f042FC"]);
+    expect(REVIEWERS).toEqual(["0x742e2cB0D250c22D71a1df00Cf9D2c40214544a4", "0xad44DE6F62a0386Edc53fB66eaD6F4f61b7014eE"]);
   });
 
   it("a second team member approves and picks like the first, but only the first is the arbiter that releases prizes", async () => {

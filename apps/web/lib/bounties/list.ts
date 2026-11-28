@@ -46,4 +46,4 @@ export const SPONSORS: SponsorSpec[] = [
  * Nomad's team: the sign-in wallets (or Nomad accounts) that approve sponsors' bounties, see every review, pick
  * winners and record payments. The first is the arbiter in Bull's escrow, the only account that releases a prize.
  */
-export const REVIEWERS: Address[] = ["0x742e2cB0D250c22D71a1df00Cf9D2c40214544a4", "0xA0eB8754d83116ae0d987C520DE64b2C56f042FC"];
+export const REVIEWERS: Address[] = ["0x742e2cB0D250c22D71a1df00Cf9D2c40214544a4", "0xad44DE6F62a0386Edc53fB66eaD6F4f61b7014eE"];
