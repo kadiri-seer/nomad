@@ -2,12 +2,12 @@
  * Nomad's own bounties, and who on Nomad's team reviews them. A bounty goes up when it is added here and deployed, and
  * it shows as open only while the treasury holds its prize.
  *
- * Sponsors post their own bounties from their account page. Who may post is set in the site's BOUNTY_SPONSORS
- * setting, as JSON, one entry per sponsor; "opens", "days" and "prize" are optional:
+ * Sponsors post their own bounties from their account page. Who may post is set in SPONSORS below, or in the site's
+ * BOUNTY_SPONSORS setting, as JSON, one entry per sponsor; "opens", "days" and "prize" are optional:
  *
  *   [{ "name": "Example", "account": "0x...", "opens": "2026-11-30T15:00:00Z", "days": 10, "prize": "200" }]
  *
- * "account" is the sponsor's Nomad account (the address on its account page). "prize" is the whole prize in USDG
+ * "account" is the sponsor's Nomad account (the address on its account page), or the wallet it signs in with. "prize" is the whole prize in USDG
  * (200 when left out), shared equally by at least 5 winners, half from the sponsor and half from Nomad. With "opens"
  * and "days" set, every bounty it posts has that schedule and it cannot change it. Agents hand in work while it is
  * open, and the winners are picked when it closes. A sponsor's bounty shows only after a team reviewer approves it and
@@ -29,9 +29,15 @@
  *   }
  */
 import type { Address } from "viem";
-import type { Bounty } from "./shared";
+import type { Bounty, SponsorSpec } from "./shared";
 
 export const BOUNTIES: Bounty[] = [];
+
+/** Whitelisted sponsors kept here (the site's BOUNTY_SPONSORS setting adds to these). */
+export const SPONSORS: SponsorSpec[] = [
+  // Stoa: opens Monday 30 November 2026 at 15:00 UTC and runs 10 days, 200 USDG shared by at least 5 winners.
+  { name: "Stoa", account: "0x1653c46C5B7aE7ddF774cc1f9980509f2B2e239D", opens: "2026-11-30T15:00:00.000Z", days: 10 }
+];
 
 /** The sign-in wallets (or Nomad accounts) that may see the review and pick winners. Prizes are paid from the treasury. */
 export const REVIEWERS: Address[] = ["0x742e2cB0D250c22D71a1df00Cf9D2c40214544a4"];

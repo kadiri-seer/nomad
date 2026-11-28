@@ -2,7 +2,7 @@
 import { decodeEventLog, getAddress, parseAbi, type Address, type Hex } from "viem";
 import { scanText } from "@nomad/security";
 import { NOMAD, TREASURY, USDG } from "../accounts/chain";
-import { BOUNTIES, REVIEWERS } from "../bounties/list";
+import { BOUNTIES, REVIEWERS, SPONSORS } from "../bounties/list";
 import type { PrizeToken } from "../bounties/shared";
 import { redisFromEnv } from "../redis";
 import { agentStore } from "./agents-store";
@@ -29,7 +29,7 @@ export function bountyEnv() {
     store: bountyStore(redis),
     list: BOUNTIES,
     reviewers: REVIEWERS,
-    sponsors: parseSponsors(process.env.BOUNTY_SPONSORS),
+    sponsors: [...parseSponsors(JSON.stringify(SPONSORS)), ...parseSponsors(process.env.BOUNTY_SPONSORS).filter((x) => !SPONSORS.some((y) => y.account.toLowerCase() === x.account.toLowerCase()))],
     now: () => Date.now(),
     async treasuryBalance(token) {
       const key = `treasury-balance:${token}`;

@@ -333,7 +333,8 @@ export function bounties(d: BountyDeps) {
     const who = [lc(signer), lc(await accountOf(signer))];
     return bountyReviewers(b).some((r) => who.includes(r));
   }
-  const sponsorOf = (account: Address) => sponsors.find((s) => lc(s.account) === lc(account)) ?? null;
+  /** The whitelist entry for a signer: listed by its Nomad account, or by the wallet it signs in with. */
+  const sponsorOf = (signer: Address, account: Address) => sponsors.find((s) => lc(s.account) === lc(account) || lc(s.account) === lc(signer)) ?? null;
 
   /** A sponsor's fields (already read with normalDraft), checked against the limits. */
   async function checkDraft(f: DraftFields, locked: boolean): Promise<DraftFields> {
@@ -627,7 +628,7 @@ export function bounties(d: BountyDeps) {
       let label: string;
       let fields: DraftFields | null = null;
       const account = await accountOf(signer);
-      const spec = sponsorOf(account);
+      const spec = sponsorOf(signer, account);
       if (action === "check") label = "check";
       else if (action === "save") {
         if (!spec) throw new BountyError(403, "This account is not a bounty sponsor on Nomad.");
@@ -642,7 +643,7 @@ export function bounties(d: BountyDeps) {
 
       if (action === "check") {
         if (!spec) return { sponsor: null };
-        const list = (await d.store.drafts()).filter((b) => b.sponsor && lc(b.sponsor.account) === lc(account) && b.status !== "cancelled");
+        const list = (await d.store.drafts()).filter((b) => b.sponsor && lc(b.sponsor.account) === lc(spec.account) && b.status !== "cancelled");
         return { sponsor: { name: spec.name, account: spec.account, preset: presetOf(spec), prize: spec.prize ?? SPONSOR_PRIZE }, bounties: await Promise.all(list.map(mine)) };
       }
       if (!spec) throw new BountyError(403, "This account is not a bounty sponsor on Nomad.");
@@ -652,7 +653,7 @@ export function bounties(d: BountyDeps) {
         const f = await checkDraft(fields!, !!(existingFirst?.scheduleLocked || presetOf(spec)));
         const split = sponsorSplit(spec.prize ?? SPONSOR_PRIZE, f.places);
         const existing = id ? await d.store.draft(id) : null;
-        if (id && (!existing || !existing.sponsor || lc(existing.sponsor.account) !== lc(account))) throw new BountyError(404, "There is no bounty of yours by that name.");
+        if (id && (!existing || !existing.sponsor || lc(existing.sponsor.account) !== lc(spec.account))) throw new BountyError(404, "There is no bounty of yours by that name.");
         if (existing && (existing.status === "cancelled" || (existing.status === "approved" && d.now() >= opensAt(existing)))) throw new BountyError(409, "This bounty can no longer be changed.");
         if (existing?.deposit && f.places !== placesOf(existing)) throw new BountyError(409, "Your share is already deposited, so the number of winners stays as it is.");
         const b: StoredBounty = {
@@ -667,6 +668,9 @@ export function bounties(d: BountyDeps) {
           // Half each: the sponsor's half from its Nomad account, Nomad's half from the treasury.
           sponsor: { name: spec.name, account: spec.account, share: existing?.deposit ? existing.sponsor!.share : usdgText(split.sponsor) },
           nomadShare: existing?.deposit ? existing.nomadShare : usdgText(split.nomad),
+          // When the whitelist names the sponsor's wallet rather than its Nomad account, the account is kept too: it
+          // reviews the bounty, cannot enter it, and can send the sponsor's half.
+          ...(lc(account) !== lc(spec.account) ? { reviewers: [account] } : {}),
           // A change, even after approval, goes back to Nomad before it shows.
           status: "waiting",
           createdAt: existing?.createdAt ?? d.now(),
@@ -680,7 +684,7 @@ export function bounties(d: BountyDeps) {
       }
 
       const b = await d.store.draft(id);
-      if (!b || !b.sponsor || lc(b.sponsor.account) !== lc(account)) throw new BountyError(404, "There is no bounty of yours by that name.");
+      if (!b || !b.sponsor || lc(b.sponsor.account) !== lc(spec.account)) throw new BountyError(404, "There is no bounty of yours by that name.");
       if (action === "cancel") {
         if (b.status === "approved" && d.now() >= opensAt(b)) throw new BountyError(409, "This bounty has opened, so it cannot be cancelled here. Ask Nomad.");
         await d.store.putDraft({ ...b, status: "cancelled", updatedAt: d.now() });
@@ -692,8 +696,11 @@ export function bounties(d: BountyDeps) {
       const share = usdgUnits(b.sponsor.share);
       if (share === 0n) throw new BountyError(409, "This bounty has no share for you to fund.");
       const tx = body.tx as Hex;
-      if (!(await d.paid("USDG", TREASURY, share, tx, b.sponsor.account).catch(() => false)))
-        throw new BountyError(400, `That transaction did not send ${b.sponsor.share} USDG from your Nomad account to the treasury. If it was just sent, wait a moment and try again.`);
+      // From the sponsor's Nomad account (the usual way), or from the wallet the whitelist names.
+      let sent = false;
+      for (const from of new Set([lc(b.sponsor.account), ...(b.reviewers ?? []).map(lc)]))
+        if (!sent) sent = await d.paid("USDG", TREASURY, share, tx, getAddress(from)).catch(() => false);
+      if (!sent) throw new BountyError(400, `That transaction did not send ${b.sponsor.share} USDG from your Nomad account to the treasury. If it was just sent, wait a moment and try again.`);
       if (d.claimTx && !(await d.claimTx(tx))) throw new BountyError(409, "That transaction was already counted, as credits or as another deposit.");
       const deposit = { tx, amount: b.sponsor.share, at: d.now() };
       await d.store.putDraft({ ...b, deposit, updatedAt: d.now() });

@@ -4,6 +4,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { draftFingerprint, hostedEnterMessage, normalDraft, noteFingerprint, reviewMessage, sponsorMessage, sponsorSplit, type SponsorSpec } from "../../apps/web/lib/bounties/shared";
 import { bounties, bountyStore, parseSponsors, type BountyDeps } from "../../apps/web/lib/server/bounties";
 import { TREASURY } from "../../apps/web/lib/accounts/chain";
+import { SPONSORS } from "../../apps/web/lib/bounties/list";
 import type { AgentRecord, RunRecord } from "../../apps/web/lib/agents/shared";
 import { MemoryRedis } from "../../apps/web/lib/redis";
 
@@ -281,5 +282,31 @@ describe("sponsors: entering and picking", () => {
     const t = setup({ balance: 199_000_000n });
     await t.live();
     expect(await t.s.publicList()).toEqual([]);
+  });
+});
+
+describe("sponsors: Stoa's bounty", () => {
+  it("is whitelisted with Monday 30 November at 15:00 UTC for 10 days, whatever the draft asks", () => {
+    const stoa = parseSponsors(JSON.stringify(SPONSORS)).find((x) => x.name === "Stoa");
+    expect(stoa).toEqual({ name: "Stoa", account: "0x1653c46C5B7aE7ddF774cc1f9980509f2B2e239D", opens: OPENS, days: 10 });
+  });
+
+  it("works when the whitelist names the wallet the sponsor signs in with: its Nomad account reviews, cannot enter, and either can fund", async () => {
+    const preset = { opens: OPENS, days: 10 };
+    // The whitelist names venin's sign-in wallet, not its Nomad account.
+    const t = setup({ sponsors: [{ name: "Stoa", account: venin.address, ...preset }] });
+    expect(await t.sponsorStep("check", { action: "check" })).toMatchObject({ sponsor: { name: "Stoa", prize: "200", preset } });
+    const { bounty } = await t.save(draft({ opens: "2026-12-25T00:00:00Z" }), "", venin, preset);
+    expect(bounty).toMatchObject({ opens: OPENS, closes: "2026-12-10T15:00:00.000Z" });
+    expect(await t.d.store.draft(bounty.id)).toMatchObject({ sponsor: { account: venin.address, share: "100" }, reviewers: [ACCOUNT(venin.address)] });
+    await t.approve(bounty.id, OPENS, 10, true);
+    // Sent from the listed wallet itself.
+    t.pay(tx(90), 100_000_000n, venin.address);
+    expect(await t.deposit(bounty.id, tx(90))).toMatchObject({ ok: true });
+    t.setNow(Date.parse(OPENS) + 1000);
+    expect((await t.s.publicList())[0]).toMatchObject({ state: "open", sponsor: { name: "Stoa" } });
+    expect(JSON.stringify(await t.s.publicList())).not.toContain(ACCOUNT(venin.address));
+    await expect(t.enter("9", venin, bounty.id)).rejects.toThrow(/cannot enter/);
+    expect(await t.review("check", { action: "check" }, venin)).toEqual({ reviewer: true, team: false });
   });
 });

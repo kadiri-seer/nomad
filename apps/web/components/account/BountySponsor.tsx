@@ -8,13 +8,17 @@
  */
 import { useEffect, useState } from "react";
 import { parseUnits } from "viem";
+import { TREASURY } from "@/lib/accounts/chain";
 import { topUpUsdgCalls } from "@/lib/accounts/client";
 import { BOUNTY_DAYS, draftFingerprint, normalDraft, SPONSOR_MAX_PLACES, SPONSOR_MIN_PLACES, sponsorSplit, usdgText, type StoredBounty } from "@/lib/bounties/shared";
+import { CopyButton } from "../CopyButton";
 import { Sheet } from "./Sheet";
-import { daysOf, fail, scheduleLine, signedStep } from "./bounty-sign";
+import { daysOf, fail, scheduleLine, short, signedStep } from "./bounty-sign";
 import type { Client, Confirm } from "./types";
 
 type Mine = StoredBounty & { state: string | null; entries: number; awards: number };
+const keyOf = (b: { id: string }) => `nomad-sponsor-deposit:${b.id}`;
+
 type Me = { sponsor: { name: string; account: string; preset: { opens: string; days: number } | null; prize: string } | null; bounties?: Mine[] };
 
 /** What a sponsor's bounty is doing, in a few words. */
@@ -56,7 +60,44 @@ export function BountySponsor({ client, onConfirm }: { client: Client; onConfirm
     }
   };
 
-  const fund = (b: Mine) =>
+  /** Records a sent half, retrying while the chain catches up. A half sent from this browser is never sent twice. */
+  const record = async (b: Mine, txHash: string) => {
+    for (let i = 0; ; i++) {
+      try {
+        await signedStep(client, "sponsor", `deposit ${b.id} ${txHash.toLowerCase()}`, { action: "deposit", bounty: b.id, tx: txHash });
+        break;
+      } catch (e) {
+        if (i >= 4) throw new Error(`Sent in ${txHash.slice(0, 10)}..., but Nomad could not read it yet. Tap Fund your half again in a minute to record it. Nothing is sent twice.`);
+        await new Promise((r) => setTimeout(r, 4000));
+      }
+    }
+    try {
+      localStorage.removeItem(keyOf(b));
+    } catch {
+      /* nothing kept */
+    }
+    await load();
+  };
+  const recordSent = async (b: Mine, txHash: string) => {
+    setBusy(true);
+    try {
+      await record(b, txHash);
+      setNotice("Your half is in. The bounty opens on its start date.");
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const fund = (b: Mine) => {
+    let sent: string | null = null;
+    try {
+      sent = localStorage.getItem(keyOf(b));
+    } catch {
+      /* no storage */
+    }
+    if (sent && /^0x[0-9a-fA-F]{64}$/.test(sent)) return recordSent(b, sent);
     onConfirm({
       title: "Fund your half",
       amount: `${b.sponsor!.share} USDG`,
@@ -69,20 +110,20 @@ export function BountySponsor({ client, onConfirm }: { client: Client; onConfirm
       note: "Nomad holds the prize in its treasury until the winners are paid. If the bounty is cancelled before it opens, your half is sent back.",
       build: async () => topUpUsdgCalls(parseUnits(b.sponsor!.share, 6)),
       after: async (txHash) => {
-        // The transfer is read on chain; retry while the chain catches up.
-        for (let i = 0; ; i++) {
-          try {
-            await signedStep(client, "sponsor", `deposit ${b.id} ${txHash.toLowerCase()}`, { action: "deposit", bounty: b.id, tx: txHash });
-            break;
-          } catch (e) {
-            if (i >= 4) return `Sent, but Nomad could not read it yet. Open this page again in a minute and tap Fund your half to record it.`;
-            await new Promise((r) => setTimeout(r, 4000));
-          }
+        try {
+          localStorage.setItem(keyOf(b), txHash);
+        } catch {
+          /* recorded right away below */
         }
-        await load();
+        try {
+          await record(b, txHash);
+        } catch (e) {
+          return (e as Error).message;
+        }
       },
       done: { title: "Half funded", body: "Your bounty opens on its start date." }
     });
+  };
 
   return (
     <section className="acct-card">
@@ -105,6 +146,9 @@ export function BountySponsor({ client, onConfirm }: { client: Client; onConfirm
               <button type="button" className="acct-primary" disabled={busy} onClick={() => fund(b)}>
                 Fund your half
               </button>
+            )}
+            {b.status === "approved" && b.sponsor && Number(b.sponsor.share) > 0 && !b.deposit && b.sponsor.account.toLowerCase() !== client.account.address.toLowerCase() && (
+              <OtherWallet b={b} busy={busy} onRecord={(tx) => recordSent(b, tx)} />
             )}
             {(b.status !== "approved" || b.state === "upcoming") && (
               <>
@@ -238,5 +282,34 @@ function DraftSheet({ client, sponsor, existing, onClose, onSaved }: { client: C
       </button>
       <p className="acct-small">Agents hand in their work while it is open. When it closes, you and Nomad pick the winners. You cannot enter your own bounty, and any change after approval goes back to Nomad.</p>
     </Sheet>
+  );
+}
+
+/** For a sponsor whose USDG is in the wallet the whitelist names: it sends its half from there, then pastes the transaction. */
+function OtherWallet({ b, busy, onRecord }: { b: Mine; busy: boolean; onRecord: (tx: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [tx, setTx] = useState("");
+  if (!open)
+    return (
+      <button type="button" className="acct-quiet" onClick={() => setOpen(true)}>
+        Sending from {short(b.sponsor!.account)} instead?
+      </button>
+    );
+  const ok = /^0x[0-9a-fA-F]{64}$/.test(tx.trim());
+  return (
+    <div className="acct-stack">
+      <p className="acct-small">Send exactly {b.sponsor!.share} USDG on Robinhood Chain from {short(b.sponsor!.account)} to Nomad&apos;s treasury, then paste the transaction here.</p>
+      <div className="acct-between">
+        <code className="acct-address">{TREASURY}</code>
+        <CopyButton text={TREASURY} className="acct-quiet" />
+      </div>
+      <label className="acct-field">
+        <span>Transaction hash</span>
+        <input value={tx} onChange={(e) => setTx(e.target.value)} placeholder="0x..." spellCheck={false} />
+      </label>
+      <button type="button" className="acct-secondary" disabled={busy || !ok} onClick={() => onRecord(tx.trim())}>
+        Record it
+      </button>
+    </div>
   );
 }
