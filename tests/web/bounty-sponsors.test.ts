@@ -190,6 +190,24 @@ describe("sponsors: approval and schedule", () => {
     expect((await t.d.store.draft(id))!).toMatchObject({ status: "returned", note });
   });
 
+  it("the team sees each approved bounty and whether it shows on the site yet", async () => {
+    const t = setup({ balance: 150_000_000n });
+    const id = (await t.save(draft())).bounty.id;
+    await t.approve(id);
+    type P = { bounties: unknown[]; approved: { id: string; halfIn: boolean; showing: boolean; wholePrize: string; state: string }[] };
+    expect(((await t.review("pending", { action: "pending" })) as P).approved).toMatchObject([{ id, halfIn: false, showing: false, wholePrize: "200", state: "upcoming" }]);
+    t.pay(tx(60), 100_000_000n);
+    await t.deposit(id, tx(60));
+    // The half is in, but the treasury holds 150 of the 200.
+    expect(((await t.review("pending", { action: "pending" })) as P).approved[0]).toMatchObject({ halfIn: true, showing: false });
+    const t2 = setup({ balance: 200_000_000n });
+    const id2 = (await t2.save(draft())).bounty.id;
+    await t2.approve(id2);
+    t2.pay(tx(61), 100_000_000n);
+    await t2.deposit(id2, tx(61));
+    expect(((await t2.review("pending", { action: "pending" })) as P).approved[0]).toMatchObject({ halfIn: true, showing: true });
+  });
+
   it("a schedule set in advance for a sponsor applies to every bounty it posts", async () => {
     const preset = { opens: OPENS, days: 10 };
     const t = setup({ sponsors: [{ name: PARTNER, account: ACCOUNT(venin.address), ...preset }] });

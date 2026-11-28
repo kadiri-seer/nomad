@@ -18,6 +18,7 @@ import { daysOf, fail, scheduleLine, short, signedStep } from "./bounty-sign";
 import type { Client } from "./types";
 
 type Reviewed = Bounty & { state: string; result: BountyResult | null; entries: Entry[]; team: boolean };
+type Approved = StoredBounty & { state: string; entries: number; halfIn: boolean; showing: boolean; wholePrize: string };
 const LOCK_PAGE = "https://www.thenomad.website/bounties/lock";
 const lc = (a: string) => a.toLowerCase();
 
@@ -46,12 +47,17 @@ export function BountyReview({ client }: { client: Client }) {
 function ReviewSheet({ client, team, onClose }: { client: Client; team: boolean; onClose: () => void }) {
   const [list, setList] = useState<Reviewed[] | null>(null);
   const [pending, setPending] = useState<StoredBounty[]>([]);
+  const [approved, setApproved] = useState<Approved[]>([]);
   const [busy, setBusy] = useState(false);
 
   const step = <T,>(label: string, body: Record<string, unknown>) => signedStep<T>(client, "review", label, body);
   const refresh = async () => {
     setList((await step<{ bounties: Reviewed[] }>("list", { action: "list" })).bounties);
-    if (team) setPending((await step<{ bounties: StoredBounty[] }>("pending", { action: "pending" })).bounties);
+    if (team) {
+      const p = await step<{ bounties: StoredBounty[]; approved?: Approved[] }>("pending", { action: "pending" });
+      setPending(p.bounties);
+      setApproved(p.approved ?? []);
+    }
   };
   useEffect(() => {
     refresh().catch((e) => {
@@ -91,8 +97,29 @@ function ReviewSheet({ client, team, onClose }: { client: Client; team: boolean;
         <Approval key={b.id} b={b} busy={busy} act={act} step={step} />
       ))}
 
-      {list && list.length === 0 && pending.length === 0 && <p className="acct-body">No bounty is waiting for a decision.</p>}
-      {list && list.length > 0 && pending.length > 0 && <h3 className="acct-h3">Winners</h3>}
+      {approved.length > 0 && <h3 className="acct-h3">Approved</h3>}
+      {approved.map((b) => (
+        <div key={b.id} className="acct-stack bounty-review">
+          <div className="acct-between">
+            <strong>{b.title}</strong>
+            <span className="acct-small">
+              {b.prize.amount} USDG x {placesOf(b)}
+            </span>
+          </div>
+          <p className="acct-small">
+            With {b.sponsor?.name ?? "a sponsor"}. {scheduleLine(b.opens, daysOf(b))}.
+          </p>
+          <p className="acct-small">{approvedLine(b)}</p>
+          {b.showing && (
+            <a className="acct-small" href={`/bounties/${b.id}`}>
+              See its page
+            </a>
+          )}
+        </div>
+      ))}
+
+      {list && list.length === 0 && pending.length === 0 && approved.length === 0 && <p className="acct-body">No bounty is waiting for a decision.</p>}
+      {list && list.length > 0 && (pending.length > 0 || approved.length > 0) && <h3 className="acct-h3">Winners</h3>}
       {list?.map((b) => {
         const awards = b.result?.awards ?? [];
         const places = placesOf(b);
@@ -270,4 +297,14 @@ function Approval({ b, busy, act, step }: { b: StoredBounty; busy: boolean; act:
       </button>
     </div>
   );
+}
+
+/** Where an approved bounty stands, in one line. */
+function approvedLine(b: Approved) {
+  if (!b.halfIn) return `Waiting for ${b.sponsor?.name ?? "the sponsor"}'s ${b.sponsor?.share ?? ""} USDG. Not on the site yet.`;
+  if (!b.showing) return `${b.sponsor?.name ?? "The sponsor"}'s half is in. Not on the site yet: the treasury needs to hold the whole ${b.wholePrize} USDG, with Nomad's ${b.nomadShare ?? ""}.`;
+  if (b.state === "upcoming") return "Funded. It shows as upcoming and opens on its start date.";
+  if (b.state === "open") return `Open, ${b.entries} ${b.entries === 1 ? "entry" : "entries"} so far.`;
+  if (b.state === "judging") return "Closed. Pick the winners below.";
+  return "Winners picked. Lock and pay them below.";
 }

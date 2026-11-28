@@ -752,7 +752,20 @@ export function bounties(d: BountyDeps) {
 
       if (body.action === "pending" || body.action === "approve" || body.action === "return") {
         if (!team) throw new BountyError(403, "Only the Nomad team approves bounties.");
-        if (body.action === "pending") return { bounties: (await d.store.drafts()).filter((b) => b.status === "waiting").sort((a, b) => a.updatedAt - b.updatedAt) };
+        if (body.action === "pending") {
+          const drafts = await d.store.drafts();
+          const f = await funded(list);
+          // Approved sponsors' bounties until they are paid: where each stands, and whether it shows on the site yet.
+          const approved = [];
+          for (const b of drafts.filter((x) => x.status === "approved").sort((x, y) => opensAt(x) - opensAt(y))) {
+            const result = await d.store.result(b.id);
+            const state = bountyState(b, result, d.now());
+            if (state === "paid") continue;
+            const halfIn = sponsorFunded(b);
+            approved.push({ ...b, state, entries: (await d.store.entries(b.id)).length, halfIn, showing: halfIn && f.has(b.id), wholePrize: usdgText(totalUnits(b)) });
+          }
+          return { bounties: drafts.filter((b) => b.status === "waiting").sort((a, b) => a.updatedAt - b.updatedAt), approved };
+        }
         const b = await d.store.draft(id);
         if (!b || b.status !== "waiting") throw new BountyError(409, "That bounty is not waiting for approval.");
         if (body.action === "return") {
