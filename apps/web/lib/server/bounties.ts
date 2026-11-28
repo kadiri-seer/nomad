@@ -182,6 +182,7 @@ export function parseSponsors(raw: string | undefined): SponsorSpec[] {
     const days = Number(o.days);
     if (Number.isInteger(days) && days >= 1 && days <= SPONSOR_MAX_DAYS) spec.days = days;
     if (typeof o.prize === "string" && /^\d{1,6}(\.\d{1,2})?$/.test(o.prize) && Number(o.prize) > 0) spec.prize = o.prize;
+    if (o.noInjectionScan === true) spec.noInjectionScan = true;
     out.push(spec);
   }
   return out;
@@ -294,7 +295,7 @@ export function bounties(d: BountyDeps) {
     if (text.length < MIN_SUBMISSION_CHARS) return "the work is too short";
     if (text.length > MAX_SUBMISSION_CHARS) return `the work is longer than ${MAX_SUBMISSION_CHARS} characters`;
     if (d.secrets(text) > 0) return "the work contains what looks like a key or secret";
-    if ((await d.venin(`bounties/${b.id}/submission.md`, text).catch(() => 0)) > 0) return "Venin found planted instructions in it";
+    if (!b.noInjectionScan && (await d.venin(`bounties/${b.id}/submission.md`, text).catch(() => 0)) > 0) return "Venin found planted instructions in it";
     if (services && b.services?.length) {
       const used = new Set(services.map(lc));
       const missing = b.services.filter((s) => !used.has(lc(s)));
@@ -668,6 +669,7 @@ export function bounties(d: BountyDeps) {
           // Half each: the sponsor's half from its Nomad account, Nomad's half from the treasury.
           sponsor: { name: spec.name, account: spec.account, share: existing?.deposit ? existing.sponsor!.share : usdgText(split.sponsor) },
           nomadShare: existing?.deposit ? existing.nomadShare : usdgText(split.nomad),
+          ...(spec.noInjectionScan ? { noInjectionScan: true } : {}),
           // When the whitelist names the sponsor's wallet rather than its Nomad account, the account is kept too: it
           // reviews the bounty, cannot enter it, and can send the sponsor's half.
           ...(lc(account) !== lc(spec.account) ? { reviewers: [account] } : {}),

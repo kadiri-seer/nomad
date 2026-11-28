@@ -34,6 +34,11 @@ export type Bounty = {
   places?: number;
   /** The co-sponsor and its share of the whole prize, paid from its Nomad account into the treasury. */
   sponsor?: Sponsor;
+  /**
+   * Handed-in work is not run past Venin (for a bounty whose work is planted instructions on purpose). The check for
+   * keys and secrets still runs, and the bounty's own text is always checked.
+   */
+  noInjectionScan?: boolean;
   /** Nomad's share of the whole prize, when a sponsor puts in the rest. */
   nomadShare?: string;
   /** The sponsor's share, sent from its Nomad account to the treasury, read on chain. */
@@ -55,7 +60,7 @@ export type StoredBounty = Bounty & {
 };
 
 /** A whitelisted sponsor, from the site's settings: its Nomad account, and optionally a schedule set in advance. */
-export type SponsorSpec = { name: string; account: Address; opens?: string; days?: number; prize?: string };
+export type SponsorSpec = { name: string; account: Address; opens?: string; days?: number; prize?: string; noInjectionScan?: boolean };
 
 /** How much of an entry can be checked: a run Nomad recorded, transactions on chain, or the work alone. */
 export type Proof = "nomad" | "onchain" | "work";
