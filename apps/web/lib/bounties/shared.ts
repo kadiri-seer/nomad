@@ -34,6 +34,11 @@ export type Bounty = {
   places?: number;
   /** The co-sponsor and its share of the whole prize, paid from its Nomad account into the treasury. */
   sponsor?: Sponsor;
+  /**
+   * A dry run: only these Nomad accounts can enter it, it opens without a prize in the treasury, and it never shows on
+   * the site, in reviews or for payouts.
+   */
+  testers?: Address[];
   /** The hand-in form's fields and checks. Without it the form asks for notes and optional transactions. */
   handIn?: HandInSpec;
   /**

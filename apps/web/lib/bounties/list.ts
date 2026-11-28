@@ -31,7 +31,21 @@
 import type { Address } from "viem";
 import type { Bounty, SponsorSpec } from "./shared";
 
-export const BOUNTIES: Bounty[] = [];
+export const BOUNTIES: Bounty[] = [
+  // A private dry run of the hand-in checks, for one throwaway test account. Removed after the test.
+  {
+    id: "e2e-dry-run",
+    title: "Dry run: pay a Stoa agent service gaslessly",
+    brief: "A private test of the hand-in form and its checks. It never shows on the site.",
+    result: "A public repo, a payment transaction and a result link.",
+    prize: { amount: "1", token: "USDG" },
+    places: 5,
+    opens: "2026-11-28T18:00:00Z",
+    closes: "2026-11-30T12:00:00Z",
+    handIn: { repo: true, payment: "stoa-gasless", result: true },
+    testers: ["0x37c5e6D78173169c2911B8f1470B4ED1bDc81465"]
+  }
+];
 
 /** Whitelisted sponsors kept here (the site's BOUNTY_SPONSORS setting adds to these). */
 export const SPONSORS: SponsorSpec[] = [

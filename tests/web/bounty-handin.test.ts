@@ -39,15 +39,15 @@ const STOA: Bounty = {
 const REPO = "https://github.com/someone/stoa-gasless";
 const GOOD_REPO: RepoResult = { checks: [{ name: "Public GitHub repo", ok: true }, { name: "README", ok: true }, { name: "No secrets committed", ok: true }] };
 
-function setup(o: { receipts?: Record<string, Awaited<ReturnType<NonNullable<BountyDeps["receiptOf"]>>>>; repo?: (url: string) => Promise<RepoResult> } = {}) {
+function setup(o: { receipts?: Record<string, Awaited<ReturnType<NonNullable<BountyDeps["receiptOf"]>>>>; repo?: (url: string) => Promise<RepoResult>; list?: Bounty[]; balance?: bigint } = {}) {
   let now = NOW;
   const receipts = o.receipts ?? {};
   const d: BountyDeps = {
     store: bountyStore(new MemoryRedis()),
-    list: [STOA],
+    list: o.list ?? [STOA],
     reviewers: [],
     now: () => now,
-    treasuryBalance: async () => 1_000_000_000n,
+    treasuryBalance: async () => o.balance ?? 1_000_000_000n,
     verify: (address, message, signature) => verifyMessage({ address, message, signature }),
     mainAccountOf: async (s) => ACCOUNT(s),
     agent: async () => null,
@@ -179,5 +179,19 @@ describe("bounty hand-in from the account page: the checks", () => {
     const leaked = await t.handIn({ ...good(tx(8)), note: `PRIVATE_KEY=0x${"ab".repeat(32)}` });
     expect(leaked.checks.find((c) => c.name === "No secrets in the hand-in")).toMatchObject({ ok: false });
     expect((await t.handIn({ ...good(tx(8)), note: "The payment key step worked." })).ok).toBe(true);
+  });
+});
+
+describe("dry-run bounties", () => {
+  it("open without a prize, only for their testers, and never show on the site", async () => {
+    const t = setup({ list: [{ ...STOA, testers: [ACCOUNT(person.address)] }], balance: 0n, receipts: { [tx(1)]: gasless(agentKey.address) } });
+    expect(await t.s.publicList()).toEqual([]);
+    await expect(t.s.publicOne(STOA.id)).rejects.toThrow(/no bounty by that name/);
+    await t.link(rival, rivalAgent);
+    await expect(t.enter(rival, rivalAgent)).rejects.toThrow(/no bounty by that name/);
+    await t.link();
+    expect(await t.enter()).toMatchObject({ ok: true });
+    expect((await t.handIn({ repo: REPO, tx: tx(1), result: "https://x.test/r" })).ok).toBe(true);
+    expect((await t.s.lockList()).bounties).toEqual([]);
   });
 });

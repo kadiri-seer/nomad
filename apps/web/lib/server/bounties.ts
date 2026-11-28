@@ -274,7 +274,7 @@ export function bounties(d: BountyDeps) {
   async function funded(list?: Bounty[]): Promise<Set<string>> {
     const out = new Set<string>();
     // A sponsor's bounty counts only once its share is in, so an unfunded one never holds back the others.
-    const rows = await Promise.all((list ?? (await all())).filter(sponsorFunded).map(async (b) => ({ b, r: await d.store.result(b.id) })));
+    const rows = await Promise.all((list ?? (await all())).filter((b) => sponsorFunded(b) && !b.testers).map(async (b) => ({ b, r: await d.store.result(b.id) })));
     const unpaid = rows
       .map(({ b, r }) => {
         const awards = r?.awards ?? [];
@@ -303,6 +303,7 @@ export function bounties(d: BountyDeps) {
     const result = await d.store.result(b.id);
     const state = bountyState(b, result, d.now());
     if (state === "decided" || state === "paid") return { state, result };
+    if (b.testers) return { state, result };
     const f = fundedSet ?? (await funded());
     return { state: f.has(b.id) && sponsorFunded(b) ? state : "hidden", result };
   }
@@ -327,6 +328,7 @@ export function bounties(d: BountyDeps) {
   const bountyReviewers = (b: Bounty) => [...(b.reviewers ?? []), ...(b.sponsor ? [b.sponsor.account] : [])].map(lc);
 
   async function createEntry(b: Bounty, e: Entry) {
+    if (b.testers && !b.testers.map(lc).includes(lc(e.owner))) throw new BountyError(404, "There is no bounty by that name.");
     if (bountyReviewers(b).includes(lc(e.owner))) throw new BountyError(403, "A bounty's sponsor and reviewers cannot enter it.");
     if ((await openEntriesOf(e.owner)) >= MAX_OPEN_ENTRIES) throw new BountyError(409, `An account can be in at most ${MAX_OPEN_ENTRIES} open bounties at a time.`);
     if (!(await d.store.create(e))) throw new BountyError(409, "Your account has already entered this bounty. Each account gets one entry.");
@@ -453,6 +455,7 @@ export function bounties(d: BountyDeps) {
       const f = await funded(list);
       const out = [];
       for (const b of list) {
+        if (b.testers) continue;
         const { state, result } = await stateOf(b, f);
         if (state === "hidden") continue;
         const { reviewers: _r, ...shown } = b;
@@ -466,7 +469,7 @@ export function bounties(d: BountyDeps) {
     async publicOne(id: string) {
       const b = await byId(id);
       const { state, result } = await stateOf(b);
-      if (state === "hidden") throw new BountyError(404, "There is no bounty by that name.");
+      if (state === "hidden" || b.testers) throw new BountyError(404, "There is no bounty by that name.");
       const winners = [];
       for (const a of result?.awards ?? []) {
         const e = await d.store.entry(b.id, a.winner);
@@ -744,6 +747,7 @@ export function bounties(d: BountyDeps) {
     async lockList() {
       const out = [];
       for (const b of await all()) {
+        if (b.testers) continue;
         const result = await d.store.result(b.id);
         for (const a of result?.awards ?? []) {
           if (a.paidTx) continue;
@@ -993,7 +997,7 @@ export function bounties(d: BountyDeps) {
       if (body.action === "list") {
         const out = [];
         const theirs = [];
-        for (const b of list) if (await reviews(signer, b)) theirs.push(b);
+        for (const b of list) if (!b.testers && (await reviews(signer, b))) theirs.push(b);
         if (!team && !theirs.length) throw new BountyError(403, "Only the Nomad team and a bounty's sponsor can review it.");
         for (const b of theirs) {
           const result = await d.store.result(b.id);
