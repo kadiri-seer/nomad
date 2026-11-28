@@ -14,7 +14,6 @@ import {
   closesAt,
   COPY_SIMILARITY,
   draftFingerprint,
-  entrantsOf,
   entryStatus,
   hostedEnterMessage,
   linkMessage,
@@ -33,7 +32,10 @@ import {
   similarity,
   SPONSOR_MAX_DAYS,
   SPONSOR_MAX_PLACES,
-  SPONSOR_MAX_PRIZE,
+  SPONSOR_MIN_PLACES,
+  SPONSOR_PRIZE,
+  sponsorSplit,
+  usdgText,
   sponsorMessage,
   submitMessage,
   type Award,
@@ -153,18 +155,12 @@ const SIGNATURE_MAX_AGE_MS = 10 * 60_000;
 const DAY_MS = 86_400_000;
 const isHash = (s: unknown): s is Hex => typeof s === "string" && /^0x[0-9a-fA-F]{64}$/.test(s);
 const lc = (a: string) => a.toLowerCase();
-const VENIN_PROBLEM = "Venin found planted instructions in it";
 
 /** One winner's prize, in the token's smallest unit. */
 export const prizeUnits = (b: Bounty) => parseUnits(b.prize.amount, PRIZE_DECIMALS[b.prize.token]);
 /** The whole prize: one prize for each place. */
 export const totalUnits = (b: Bounty) => prizeUnits(b) * BigInt(placesOf(b));
 const usdgUnits = (s: string) => parseUnits(s, 6);
-const fmtUsdg = (u: bigint) => {
-  const whole = u / 1_000_000n;
-  const frac = (u % 1_000_000n).toString().padStart(6, "0").replace(/0+$/, "");
-  return frac ? `${whole}.${frac}` : `${whole}`;
-};
 
 /** The whitelisted sponsors in the site's settings (BOUNTY_SPONSORS, JSON). Anything malformed is left out. */
 export function parseSponsors(raw: string | undefined): SponsorSpec[] {
@@ -185,7 +181,7 @@ export function parseSponsors(raw: string | undefined): SponsorSpec[] {
     if (typeof o.opens === "string" && Number.isFinite(Date.parse(o.opens))) spec.opens = new Date(Date.parse(o.opens)).toISOString();
     const days = Number(o.days);
     if (Number.isInteger(days) && days >= 1 && days <= SPONSOR_MAX_DAYS) spec.days = days;
-    if (typeof o.maxPrize === "string" && /^\d{1,7}(\.\d{1,6})?$/.test(o.maxPrize)) spec.maxPrize = o.maxPrize;
+    if (typeof o.prize === "string" && /^\d{1,6}(\.\d{1,2})?$/.test(o.prize) && Number(o.prize) > 0) spec.prize = o.prize;
     out.push(spec);
   }
   return out;
@@ -298,7 +294,7 @@ export function bounties(d: BountyDeps) {
     if (text.length < MIN_SUBMISSION_CHARS) return "the work is too short";
     if (text.length > MAX_SUBMISSION_CHARS) return `the work is longer than ${MAX_SUBMISSION_CHARS} characters`;
     if (d.secrets(text) > 0) return "the work contains what looks like a key or secret";
-    if ((await d.venin(`bounties/${b.id}/submission.md`, text).catch(() => 0)) > 0) return VENIN_PROBLEM;
+    if ((await d.venin(`bounties/${b.id}/submission.md`, text).catch(() => 0)) > 0) return "Venin found planted instructions in it";
     if (services && b.services?.length) {
       const used = new Set(services.map(lc));
       const missing = b.services.filter((s) => !used.has(lc(s)));
@@ -311,10 +307,9 @@ export function bounties(d: BountyDeps) {
     return null;
   }
 
-  async function record(b: Bounty, e: Entry, problem: string | null, submission: Entry["submission"]) {
+  async function record(e: Entry, problem: string | null, submission: Entry["submission"]) {
     if (problem) {
-      // On a bounty about getting past a scanner, Venin turning work away is part of the game, not a failed try.
-      if (!(b.freeScanRejects && problem === VENIN_PROBLEM)) e.tries += 1;
+      e.tries += 1;
       e.problem = problem;
     } else {
       e.problem = undefined;
@@ -341,22 +336,14 @@ export function bounties(d: BountyDeps) {
   const sponsorOf = (account: Address) => sponsors.find((s) => lc(s.account) === lc(account)) ?? null;
 
   /** A sponsor's fields (already read with normalDraft), checked against the limits. */
-  async function checkDraft(spec: SponsorSpec, f: DraftFields, locked: boolean): Promise<DraftFields> {
+  async function checkDraft(f: DraftFields, locked: boolean): Promise<DraftFields> {
     const len = (v: string, min: number, max: number, label: string) => {
       if (v.length < min || v.length > max) throw new BountyError(400, `${label} must be ${min} to ${max} characters.`);
     };
     len(f.title, 3, 80, "The title");
     len(f.brief, 20, 1200, "What to do");
     len(f.result, 10, 400, "What to hand in");
-    const money = /^\d{1,7}(\.\d{1,6})?$/;
-    if (!money.test(f.prize)) throw new BountyError(400, "The prize must be an amount of USDG.");
-    if (!money.test(f.share)) throw new BountyError(400, "Your share must be an amount of USDG.");
-    if (!Number.isInteger(f.places) || f.places < 1 || f.places > SPONSOR_MAX_PLACES) throw new BountyError(400, `Winners must be 1 to ${SPONSOR_MAX_PLACES}.`);
-    if (usdgUnits(f.prize) <= 0n) throw new BountyError(400, "The prize must be more than 0.");
-    const total = usdgUnits(f.prize) * BigInt(f.places);
-    const max = spec.maxPrize ?? SPONSOR_MAX_PRIZE;
-    if (total > usdgUnits(max)) throw new BountyError(400, `The whole prize can be at most ${max} USDG.`);
-    if (usdgUnits(f.share) > total) throw new BountyError(400, "Your share cannot be more than the whole prize.");
+    if (!Number.isInteger(f.places) || f.places < SPONSOR_MIN_PLACES || f.places > SPONSOR_MAX_PLACES) throw new BountyError(400, `Winners must be ${SPONSOR_MIN_PLACES} to ${SPONSOR_MAX_PLACES}.`);
     if (!locked) {
       if (!f.opens) throw new BountyError(400, "Choose when it opens.");
       if (Date.parse(f.opens) < d.now()) throw new BountyError(400, "It must open in the future.");
@@ -412,12 +399,11 @@ export function bounties(d: BountyDeps) {
       return out;
     },
 
-    /** One bounty; once decided, its winning work and the proof behind it (unless it is held). Other entries stay private. */
+    /** One bounty; once decided, its winning work and the proof behind it. Other entries stay private. */
     async publicOne(id: string) {
       const b = await byId(id);
       const { state, result } = await stateOf(b);
       if (state === "hidden") throw new BountyError(404, "There is no bounty by that name.");
-      const held = !!b.privateUntilReleased && !result?.releasedAt;
       const winners = [];
       for (const a of result?.awards ?? []) {
         const e = await d.store.entry(b.id, a.winner);
@@ -426,20 +412,19 @@ export function bounties(d: BountyDeps) {
           agentName: e.agentName,
           ...(e.agentId ? { agentId: e.agentId } : {}),
           ...(e.wallet ? { wallet: e.wallet } : {}),
-          submission: held ? null : e.submission,
+          submission: e.submission,
           paidTx: a.paidTx ?? null,
           ...(a.paidVia ? { paidVia: a.paidVia } : {}),
           ...(a.escrow ? { escrow: { id: a.escrow.id, expiresAt: a.escrow.expiresAt } } : {})
         });
       }
       const { reviewers: _r, ...shown } = b;
-      return { ...shown, state, entries: (await d.store.entries(b.id)).length, winners, held };
+      return { ...shown, state, entries: (await d.store.entries(b.id)).length, winners };
     },
 
     /** A hosted agent enters: signed by its creator's Google wallet. Its next runs get the brief. */
     async enterHosted(body: { bounty?: unknown; agentId?: unknown; at?: unknown; signature?: unknown }) {
       const b = await openBounty(String(body.bounty ?? ""));
-      if (entrantsOf(b) === "outside") throw new BountyError(409, "This bounty is for agents running outside Nomad only.");
       const id = String(body.agentId ?? "");
       if (!/^\d{1,30}$/.test(id)) throw new BountyError(400, "agentId is not valid.");
       const a = await d.agent(id);
@@ -471,7 +456,6 @@ export function bounties(d: BountyDeps) {
     /** An outside agent enters: signed by its own linked wallet. */
     async enterOutside(body: { bounty?: unknown; wallet?: unknown; at?: unknown; signature?: unknown }) {
       const b = await openBounty(String(body.bounty ?? ""));
-      if (entrantsOf(b) === "hosted") throw new BountyError(409, "This bounty is for agents hosted on Nomad only.");
       if (typeof body.wallet !== "string" || !isAddress(body.wallet, { strict: false })) throw new BountyError(400, "wallet is not an address.");
       const wallet = getAddress(body.wallet);
       const link = await d.store.link(wallet);
@@ -509,7 +493,7 @@ export function bounties(d: BountyDeps) {
       if (rec.startedAt < e.enteredAt) return { ok: false, problem: "the run started before the agent entered" };
       const used = [...new Set(rec.calls.filter((c) => c.ok).map((c) => c.service.replace(/ \(.*\)$/, "")))];
       const problem = await problemWith(b, e.owner, text, used);
-      await record(b, e, problem, { at: d.now(), text, proof: "nomad", record: rec, ...(rec.txs.length ? { txs: rec.txs } : {}) });
+      await record(e, problem, { at: d.now(), text, proof: "nomad", record: rec, ...(rec.txs.length ? { txs: rec.txs } : {}) });
       if (!problem || e.tries >= MAX_TRIES) await d.store.removeAgentBounty(agent.id, b.id);
       return problem ? { ok: false, problem } : { ok: true };
     },
@@ -535,11 +519,8 @@ export function bounties(d: BountyDeps) {
       const proof: Proof = txs.length ? "onchain" : "work";
       if (b.proofRequired && proof === "work") throw new BountyError(400, "This bounty needs proof: include transactions your agent's wallet made after it entered.");
       const problem = await problemWith(b, e.owner, text);
-      await record(b, e, problem, { at: d.now(), text, proof, ...(txs.length ? { txs } : {}) });
-      if (problem) {
-        const free = b.freeScanRejects && problem === VENIN_PROBLEM;
-        throw new BountyError(422, `It did not pass a check: ${problem}. ${free ? "This does not use up a try here." : `${MAX_TRIES - e.tries} ${MAX_TRIES - e.tries === 1 ? "try" : "tries"} left.`}`);
-      }
+      await record(e, problem, { at: d.now(), text, proof, ...(txs.length ? { txs } : {}) });
+      if (problem) throw new BountyError(422, `It did not pass a check: ${problem}. ${MAX_TRIES - e.tries} ${MAX_TRIES - e.tries === 1 ? "try" : "tries"} left.`);
       return { ok: true, proof };
     },
 
@@ -662,32 +643,30 @@ export function bounties(d: BountyDeps) {
       if (action === "check") {
         if (!spec) return { sponsor: null };
         const list = (await d.store.drafts()).filter((b) => b.sponsor && lc(b.sponsor.account) === lc(account) && b.status !== "cancelled");
-        return { sponsor: { name: spec.name, account: spec.account, preset: presetOf(spec), maxPrize: spec.maxPrize ?? SPONSOR_MAX_PRIZE }, bounties: await Promise.all(list.map(mine)) };
+        return { sponsor: { name: spec.name, account: spec.account, preset: presetOf(spec), prize: spec.prize ?? SPONSOR_PRIZE }, bounties: await Promise.all(list.map(mine)) };
       }
       if (!spec) throw new BountyError(403, "This account is not a bounty sponsor on Nomad.");
 
       if (action === "save") {
         const existingFirst = id ? await d.store.draft(id) : null;
-        const f = await checkDraft(spec, fields!, !!(existingFirst?.scheduleLocked || presetOf(spec)));
+        const f = await checkDraft(fields!, !!(existingFirst?.scheduleLocked || presetOf(spec)));
+        const split = sponsorSplit(spec.prize ?? SPONSOR_PRIZE, f.places);
         const existing = id ? await d.store.draft(id) : null;
         if (id && (!existing || !existing.sponsor || lc(existing.sponsor.account) !== lc(account))) throw new BountyError(404, "There is no bounty of yours by that name.");
         if (existing && (existing.status === "cancelled" || (existing.status === "approved" && d.now() >= opensAt(existing)))) throw new BountyError(409, "This bounty can no longer be changed.");
-        if (existing?.deposit && (f.share !== existing.sponsor!.share || f.prize !== existing.prize.amount || f.places !== placesOf(existing)))
-          throw new BountyError(409, "Your share is already deposited, so the prize and your share stay as they are.");
+        if (existing?.deposit && f.places !== placesOf(existing)) throw new BountyError(409, "Your share is already deposited, so the number of winners stays as it is.");
         const b: StoredBounty = {
           id: existing?.id ?? slug(f.title),
           title: f.title,
           brief: f.brief,
           result: f.result,
-          prize: { amount: f.prize, token: "USDG" },
+          prize: existing?.deposit ? existing.prize : { amount: usdgText(split.each), token: "USDG" },
           opens: f.opens,
           closes: new Date(Date.parse(f.opens) + f.days * DAY_MS).toISOString(),
           places: f.places,
-          entrants: f.entrants,
-          ...(f.firstValidWins ? { firstValidWins: true } : {}),
-          ...(f.privateUntilReleased ? { privateUntilReleased: true } : {}),
-          ...(f.freeScanRejects ? { freeScanRejects: true } : {}),
-          sponsor: { name: spec.name, account: spec.account, share: f.share },
+          // Half each: the sponsor's half from its Nomad account, Nomad's half from the treasury.
+          sponsor: { name: spec.name, account: spec.account, share: existing?.deposit ? existing.sponsor!.share : usdgText(split.sponsor) },
+          nomadShare: existing?.deposit ? existing.nomadShare : usdgText(split.nomad),
           // A change, even after approval, goes back to Nomad before it shows.
           status: "waiting",
           createdAt: existing?.createdAt ?? d.now(),
@@ -723,7 +702,7 @@ export function bounties(d: BountyDeps) {
 
     /**
      * The review, each step signed by the reviewer's Google wallet. Nomad's team approves sponsors' bounties, sees
-     * every bounty and records payments; a bounty's sponsor reads its entries, picks its winners and releases held work.
+     * every bounty and records payments; a bounty's sponsor reads its entries and picks its winners after the close.
      */
     async review(body: Record<string, unknown>) {
       const signer = signerOf(body.signer);
@@ -731,7 +710,6 @@ export function bounties(d: BountyDeps) {
       const id = String(body.bounty ?? "");
       const winner = typeof body.winner === "string" && isAddress(body.winner, { strict: false }) ? lc(body.winner) : null;
       const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) : "";
-      const nomadShare = typeof body.nomadShare === "string" ? body.nomadShare.trim() : "";
       const opens = typeof body.opens === "string" ? body.opens : "";
       const days = Number(body.days);
       const locked = body.locked === true;
@@ -746,12 +724,10 @@ export function bounties(d: BountyDeps) {
                 ? `pick ${id} ${winner}`
                 : body.action === "unpick" && winner
                   ? `unpick ${id} ${winner}`
-                  : body.action === "release"
-                    ? `release ${id}`
-                    : body.action === "paid" && isHash(body.tx)
+                  : body.action === "paid" && isHash(body.tx)
                       ? `paid ${id}${winner ? ` ${winner}` : ""} ${lc(body.tx)}`
                       : body.action === "approve"
-                        ? `approve ${id} ${nomadShare} ${opens} ${days} ${locked ? 1 : 0}`
+                        ? `approve ${id} ${opens} ${days} ${locked ? 1 : 0}`
                         : body.action === "return"
                           ? `return ${id} ${noteFingerprint(note)}`
                           : null;
@@ -775,17 +751,14 @@ export function bounties(d: BountyDeps) {
           await d.store.putDraft({ ...b, status: "returned", note, updatedAt: d.now() });
           return { ok: true };
         }
-        // approve, with Nomad's share and the schedule (kept or set here)
-        if (!/^\d{1,7}(\.\d{1,6})?$/.test(nomadShare)) throw new BountyError(400, "Nomad's share must be an amount of USDG.");
-        if (usdgUnits(nomadShare) + usdgUnits(b.sponsor?.share ?? "0") !== totalUnits(b))
-          throw new BountyError(400, `Nomad's share and the sponsor's ${b.sponsor?.share ?? "0"} USDG must add up to the whole prize, ${fmtUsdg(totalUnits(b))} USDG.`);
+        // approve, with the schedule kept or set here
+        if (usdgUnits(b.nomadShare ?? "0") + usdgUnits(b.sponsor?.share ?? "0") !== totalUnits(b)) throw new BountyError(409, "The two halves do not add up to the whole prize. Ask the sponsor to save it again.");
         const t = Date.parse(opens);
         if (!Number.isFinite(t) || !Number.isInteger(days) || days < 1 || days > SPONSOR_MAX_DAYS) throw new BountyError(400, `Set when it opens and how many days it runs (1 to ${SPONSOR_MAX_DAYS}).`);
         if (t + days * DAY_MS <= d.now()) throw new BountyError(400, "That schedule has already ended.");
         await d.store.putDraft({
           ...b,
           status: "approved",
-          nomadShare,
           opens: new Date(t).toISOString(),
           closes: new Date(t + days * DAY_MS).toISOString(),
           ...(locked || b.scheduleLocked ? { scheduleLocked: true } : {}),
@@ -803,8 +776,8 @@ export function bounties(d: BountyDeps) {
         for (const b of theirs) {
           const result = await d.store.result(b.id);
           const state = bountyState(b, result, d.now());
-          // While open, only a first-valid bounty needs a reviewer; afterwards, every unpaid one.
-          if (state === "upcoming" || state === "paid" || (state === "open" && !b.firstValidWins)) continue;
+          // Winners are picked at the end: only closed bounties that are not paid yet.
+          if (state === "upcoming" || state === "open" || state === "paid") continue;
           const entries = (await d.store.entries(b.id)).filter((e) => e.submission);
           out.push({ ...b, state, result, prizeUnits: prizeUnits(b).toString(), entries, team });
         }
@@ -818,7 +791,7 @@ export function bounties(d: BountyDeps) {
       if (body.action === "pick") {
         const state = bountyState(b, result, d.now());
         if (state === "upcoming") throw new BountyError(409, "This bounty has not opened yet.");
-        if (state === "open" && !b.firstValidWins) throw new BountyError(409, "Pick the winner after the bounty closes.");
+        if (state === "open") throw new BountyError(409, "Pick the winner after the bounty closes.");
         if (result.awards.length >= placesOf(b)) throw new BountyError(409, placesOf(b) === 1 ? "The winner is already picked." : "Every place is already picked.");
         if (awardOf(result, winner as Address)) throw new BountyError(409, "That account is already a winner here.");
         const e = await d.store.entry(b.id, getAddress(winner!));
@@ -833,13 +806,6 @@ export function bounties(d: BountyDeps) {
         await d.store.setResult(b.id, { ...result, awards: result.awards.filter((x) => x !== a) });
         return { ok: true };
       }
-      if (body.action === "release") {
-        if (!b.privateUntilReleased) throw new BountyError(409, "This bounty's winning work is already public.");
-        if (!result.awards.length) throw new BountyError(409, "Pick a winner first.");
-        await d.store.setResult(b.id, { ...result, releasedAt: result.releasedAt ?? d.now() });
-        return { ok: true };
-      }
-
       // paid: only Nomad's team records payments.
       if (!team) throw new BountyError(403, "Only the Nomad team records payments.");
       if (!result.awards.length) throw new BountyError(409, "Pick a winner first.");

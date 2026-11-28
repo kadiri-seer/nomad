@@ -11,9 +11,6 @@ import type { RunRecord } from "../agents/shared";
 
 export type PrizeToken = "USDG" | "NOMAD";
 
-/** Who may enter: any agent, only agents hosted on Nomad, or only agents running somewhere else. */
-export type Entrants = "any" | "hosted" | "outside";
-
 /** A project that puts in part of a prize. It funds its share from its own Nomad account. */
 export type Sponsor = { name: string; account: Address; share: string };
 
@@ -35,14 +32,6 @@ export type Bounty = {
   proofRequired?: boolean;
   /** How many winners. The prize amount is for each of them. Default 1. */
   places?: number;
-  /** Who may enter. Default any agent. */
-  entrants?: Entrants;
-  /** A reviewer may pick a winner as soon as a valid entry is in, without waiting for the close. */
-  firstValidWins?: boolean;
-  /** The winning work stays off the public page until a reviewer releases it. */
-  privateUntilReleased?: boolean;
-  /** An entry Venin turns away does not use up one of its tries (for bounties about getting past a scanner). */
-  freeScanRejects?: boolean;
   /** The co-sponsor and its share of the whole prize, paid from its Nomad account into the treasury. */
   sponsor?: Sponsor;
   /** Nomad's share of the whole prize, when a sponsor puts in the rest. */
@@ -66,7 +55,7 @@ export type StoredBounty = Bounty & {
 };
 
 /** A whitelisted sponsor, from the site's settings: its Nomad account, and optionally a schedule set in advance. */
-export type SponsorSpec = { name: string; account: Address; opens?: string; days?: number; maxPrize?: string };
+export type SponsorSpec = { name: string; account: Address; opens?: string; days?: number; prize?: string };
 
 /** How much of an entry can be checked: a run Nomad recorded, transactions on chain, or the work alone. */
 export type Proof = "nomad" | "onchain" | "work";
@@ -112,8 +101,6 @@ export type Award = {
 export type BountyResult = {
   /** The winners picked so far, in the order they were picked. */
   awards: Award[];
-  /** When a reviewer released the winning work (for privateUntilReleased bounties). */
-  releasedAt?: number;
 };
 
 export type BountyState = "upcoming" | "open" | "judging" | "decided" | "paid";
@@ -131,7 +118,6 @@ export const PRIZE_DECIMALS: Record<PrizeToken, number> = { USDG: 6, NOMAD: 18 }
 export const closesAt = (b: Bounty) => Date.parse(b.closes);
 export const opensAt = (b: Bounty) => Date.parse(b.opens);
 export const placesOf = (b: Bounty) => Math.max(1, Math.floor(b.places ?? 1));
-export const entrantsOf = (b: Bounty): Entrants => b.entrants ?? "any";
 
 /** Where a bounty is, from its dates and its result. Funding is checked separately. */
 export function bountyState(b: Bounty, result: BountyResult | null, now = Date.now()): BountyState {
@@ -164,22 +150,8 @@ export const reviewMessage = (action: string, at: number) => `Nomad bounty revie
 export const sponsorMessage = (action: string, at: number) => `Nomad bounty sponsor: ${action} at ${at}`;
 
 /** The fields a sponsor sets, in a fixed order, so a signature names exactly what it saves. */
-export type DraftFields = {
-  title: string;
-  brief: string;
-  result: string;
-  prize: string;
-  share: string;
-  places: number;
-  entrants: Entrants;
-  firstValidWins: boolean;
-  privateUntilReleased: boolean;
-  freeScanRejects: boolean;
-  opens: string;
-  days: number;
-};
-export const draftFingerprint = (f: DraftFields) =>
-  keccak256(toHex(JSON.stringify([f.title, f.brief, f.result, f.prize, f.share, f.places, f.entrants, f.firstValidWins, f.privateUntilReleased, f.freeScanRejects, f.opens, f.days])));
+export type DraftFields = { title: string; brief: string; result: string; places: number; opens: string; days: number };
+export const draftFingerprint = (f: DraftFields) => keccak256(toHex(JSON.stringify([f.title, f.brief, f.result, f.places, f.opens, f.days])));
 export const noteFingerprint = (note: string) => keccak256(toHex(note));
 
 /**
@@ -194,22 +166,35 @@ export function normalDraft(raw: unknown, locked: { opens: string; days: number 
     title: text("title"),
     brief: text("brief"),
     result: text("result"),
-    prize: String(o.prize ?? "").trim(),
-    share: String(o.share ?? "").trim(),
-    places: Number(o.places ?? 1),
-    entrants: o.entrants === "hosted" || o.entrants === "outside" ? o.entrants : "any",
-    firstValidWins: o.firstValidWins === true,
-    privateUntilReleased: o.privateUntilReleased === true,
-    freeScanRejects: o.freeScanRejects === true,
+    places: Number(o.places ?? SPONSOR_MIN_PLACES),
     opens: locked ? locked.opens : Number.isFinite(t) ? new Date(t).toISOString() : "",
     days: locked ? locked.days : Number(o.days)
   };
 }
 
+/**
+ * How a sponsor's prize is split: the whole prize (from its settings) shared equally by the winners, each prize
+ * rounded down to the cent, and half of what is paid out from each side.
+ */
+export function sponsorSplit(wholePrize: string, places: number) {
+  const whole = BigInt(Math.round(Number(wholePrize) * 100)) * 10_000n;
+  const each = (whole / BigInt(places) / 10_000n) * 10_000n;
+  const total = each * BigInt(places);
+  const sponsor = total / 2n;
+  return { each, total, sponsor, nomad: total - sponsor };
+}
+/** USDG units (6 decimals) as a plain amount: 12500000n is "12.5". */
+export const usdgText = (u: bigint) => {
+  const frac = (u % 1_000_000n).toString().padStart(6, "0").replace(/0+$/, "");
+  return frac ? `${u / 1_000_000n}.${frac}` : `${u / 1_000_000n}`;
+};
+
 /** Limits on what a sponsor can post. */
-export const SPONSOR_MAX_PRIZE = "1000";
+/** A sponsor's whole prize when its settings name none. */
+export const SPONSOR_PRIZE = "200";
+export const SPONSOR_MIN_PLACES = 5;
 export const SPONSOR_MAX_DAYS = 30;
-export const SPONSOR_MAX_PLACES = 100;
+export const SPONSOR_MAX_PLACES = 50;
 export const BOUNTY_DAYS = [3, 7, 10, 14, 30] as const;
 
 /** Word shingles of a text, for spotting copies. */

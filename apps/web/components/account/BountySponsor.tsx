@@ -2,32 +2,26 @@
 
 /**
  * A whitelisted sponsor's bounties, shown on the account page only to sponsors. The sponsor writes a bounty and sends
- * it to Nomad; Nomad approves it (setting its own share and the schedule); the sponsor then funds its share from this
- * Nomad account to the treasury. Its entries and winners are picked from Bounty review. Every step is signed by the
+ * it to Nomad; Nomad approves it (keeping or setting the schedule); the sponsor then funds its half of the prize from
+ * this Nomad account to the treasury. Its entries and winners are picked from Bounty review. Every step is signed by the
  * sponsor's sign-in wallet.
  */
 import { useEffect, useState } from "react";
 import { parseUnits } from "viem";
 import { topUpUsdgCalls } from "@/lib/accounts/client";
-import { BOUNTY_DAYS, draftFingerprint, normalDraft, type Entrants, type StoredBounty } from "@/lib/bounties/shared";
+import { BOUNTY_DAYS, draftFingerprint, normalDraft, SPONSOR_MAX_PLACES, SPONSOR_MIN_PLACES, sponsorSplit, usdgText, type StoredBounty } from "@/lib/bounties/shared";
 import { Sheet } from "./Sheet";
 import { daysOf, fail, scheduleLine, signedStep } from "./bounty-sign";
 import type { Client, Confirm } from "./types";
 
 type Mine = StoredBounty & { state: string | null; entries: number; awards: number };
-type Me = { sponsor: { name: string; account: string; preset: { opens: string; days: number } | null; maxPrize: string } | null; bounties?: Mine[] };
-
-const ENTRANTS: [Entrants, string, string][] = [
-  ["any", "Any agent", "Hosted on Nomad or running anywhere else"],
-  ["hosted", "Hosted on Nomad", "Its run record is the proof"],
-  ["outside", "Running elsewhere", "Linked to a Nomad account, signs its work"]
-];
+type Me = { sponsor: { name: string; account: string; preset: { opens: string; days: number } | null; prize: string } | null; bounties?: Mine[] };
 
 /** What a sponsor's bounty is doing, in a few words. */
 function statusLine(b: Mine) {
   if (b.status === "waiting") return "Waiting for Nomad's approval";
   if (b.status === "returned") return "Sent back for changes";
-  if (b.sponsor && Number(b.sponsor.share) > 0 && !b.deposit) return "Approved. Fund your share to open it";
+  if (b.sponsor && Number(b.sponsor.share) > 0 && !b.deposit) return "Approved. Fund your half to open it";
   if (b.state === "upcoming") return `Opens ${scheduleLine(b.opens, daysOf(b))}`;
   if (b.state === "open") return `Open, ${b.entries} ${b.entries === 1 ? "entry" : "entries"}`;
   if (b.state === "judging") return "Closed. Pick the winners in Bounty review";
@@ -64,15 +58,15 @@ export function BountySponsor({ client, onConfirm }: { client: Client; onConfirm
 
   const fund = (b: Mine) =>
     onConfirm({
-      title: "Fund your share",
+      title: "Fund your half",
       amount: `${b.sponsor!.share} USDG`,
-      amountNote: `Your share of ${b.title}`,
+      amountNote: `Your half of ${b.title}`,
       rows: [
         ["To", "Nomad's treasury"],
-        ["Whole prize", `${(Number(b.prize.amount) * (b.places ?? 1)).toString()} USDG`],
+        ["Winners", `${b.places ?? 1}, ${b.prize.amount} USDG each`],
         ["Nomad puts in", `${b.nomadShare ?? "0"} USDG`]
       ],
-      note: "Nomad holds the prize in its treasury until the winners are paid. If the bounty is cancelled before it opens, your share is sent back.",
+      note: "Nomad holds the prize in its treasury until the winners are paid. If the bounty is cancelled before it opens, your half is sent back.",
       build: async () => topUpUsdgCalls(parseUnits(b.sponsor!.share, 6)),
       after: async (txHash) => {
         // The transfer is read on chain; retry while the chain catches up.
@@ -81,19 +75,21 @@ export function BountySponsor({ client, onConfirm }: { client: Client; onConfirm
             await signedStep(client, "sponsor", `deposit ${b.id} ${txHash.toLowerCase()}`, { action: "deposit", bounty: b.id, tx: txHash });
             break;
           } catch (e) {
-            if (i >= 4) return `Sent, but Nomad could not read it yet. Open this page again in a minute and tap Fund your share to record it.`;
+            if (i >= 4) return `Sent, but Nomad could not read it yet. Open this page again in a minute and tap Fund your half to record it.`;
             await new Promise((r) => setTimeout(r, 4000));
           }
         }
         await load();
       },
-      done: { title: "Share funded", body: "Your bounty opens on its start date." }
+      done: { title: "Half funded", body: "Your bounty opens on its start date." }
     });
 
   return (
     <section className="acct-card">
       <h2 className="acct-h3">Your bounties</h2>
-      <p className="acct-body">Post a bounty as {sponsor.name}. Nomad approves it before it shows, and you fund your share from this account.</p>
+      <p className="acct-body">
+        Post a bounty as {sponsor.name}: a {sponsor.prize} USDG prize shared by the winners, half from you and half from Nomad. Nomad approves it before it shows, and you fund your half from this account.
+      </p>
       {(me.bounties ?? []).map((b) => (
         <div key={b.id} className="acct-stack bounty-review">
           <div className="acct-between">
@@ -107,7 +103,7 @@ export function BountySponsor({ client, onConfirm }: { client: Client; onConfirm
           <div className="bounty-actions">
             {b.status === "approved" && b.sponsor && Number(b.sponsor.share) > 0 && !b.deposit && (
               <button type="button" className="acct-primary" disabled={busy} onClick={() => fund(b)}>
-                Fund your share
+                Fund your half
               </button>
             )}
             {(b.status !== "approved" || b.state === "upcoming") && (
@@ -149,23 +145,17 @@ function DraftSheet({ client, sponsor, existing, onClose, onSaved }: { client: C
     title: existing?.title ?? "",
     brief: existing?.brief ?? "",
     result: existing?.result ?? "",
-    prize: existing?.prize.amount ?? "",
-    places: String(existing?.places ?? 1),
-    share: existing?.sponsor?.share ?? "",
-    entrants: (existing?.entrants ?? "any") as Entrants,
-    firstValidWins: !!existing?.firstValidWins,
-    privateUntilReleased: !!existing?.privateUntilReleased,
-    freeScanRejects: !!existing?.freeScanRejects,
+    places: String(existing?.places ?? SPONSOR_MIN_PLACES),
     date: existing ? existing.opens.slice(0, 10) : "",
     time: existing ? existing.opens.slice(11, 16) : "15:00",
     days: String(existing ? daysOf(existing) : 7)
   });
   const [busy, setBusy] = useState(false);
-  const set = (k: keyof typeof f) => (v: string | boolean) => setF((x) => ({ ...x, [k]: v }));
-  const deposited = !!existing?.deposit;
+  const set = (k: keyof typeof f) => (v: string) => setF((x) => ({ ...x, [k]: v }));
+  const places = Number(f.places);
+  const valid = Number.isInteger(places) && places >= SPONSOR_MIN_PLACES && places <= SPONSOR_MAX_PLACES;
+  const split = valid ? sponsorSplit(sponsor.prize, places) : null;
 
-  const total = Number(f.prize || 0) * Number(f.places || 1);
-  const nomad = total - Number(f.share || 0);
   const save = async () => {
     setBusy(true);
     try {
@@ -173,13 +163,7 @@ function DraftSheet({ client, sponsor, existing, onClose, onSaved }: { client: C
         title: f.title,
         brief: f.brief,
         result: f.result,
-        prize: f.prize,
-        share: f.share || "0",
-        places: Number(f.places),
-        entrants: f.entrants,
-        firstValidWins: f.firstValidWins,
-        privateUntilReleased: f.privateUntilReleased,
-        freeScanRejects: f.freeScanRejects,
+        places,
         opens: locked ? locked.opens : `${f.date}T${f.time || "00:00"}:00Z`,
         days: locked ? locked.days : Number(f.days)
       };
@@ -208,39 +192,21 @@ function DraftSheet({ client, sponsor, existing, onClose, onSaved }: { client: C
         <span>What to hand in</span>
         <textarea value={f.result} onChange={(e) => set("result")(e.target.value)} rows={2} maxLength={400} />
       </label>
-
-      <div className="acct-grid2">
-        <label className="acct-field">
-          <span>Prize per winner (USDG)</span>
-          <input value={f.prize} inputMode="decimal" disabled={deposited} onChange={(e) => set("prize")(e.target.value.replace(/[^0-9.]/g, "").slice(0, 12))} />
-        </label>
-        <label className="acct-field">
-          <span>Winners</span>
-          <input value={f.places} inputMode="numeric" disabled={deposited} onChange={(e) => set("places")(e.target.value.replace(/\D/g, "").slice(0, 3))} />
-        </label>
-      </div>
       <label className="acct-field">
-        <span>Your share of the whole prize (USDG)</span>
-        <input value={f.share} inputMode="decimal" disabled={deposited} onChange={(e) => set("share")(e.target.value.replace(/[^0-9.]/g, "").slice(0, 12))} />
+        <span>Winners (at least {SPONSOR_MIN_PLACES})</span>
+        <input value={f.places} inputMode="numeric" disabled={!!existing?.deposit} onChange={(e) => set("places")(e.target.value.replace(/\D/g, "").slice(0, 2))} />
       </label>
-      {total > 0 && (
+      {existing?.deposit ? (
         <p className="acct-small">
-          Whole prize {total} USDG, at most {sponsor.maxPrize}. You put in {Number(f.share || 0)}, Nomad {nomad > 0 ? nomad : 0}. Nomad can change its own share when it approves.
+          {existing.prize.amount} USDG to each winner. Your {existing.sponsor?.share} USDG is in.
         </p>
+      ) : (
+        split && (
+          <p className="acct-small">
+            {usdgText(split.each)} USDG to each winner. You put in {usdgText(split.sponsor)} USDG, Nomad {usdgText(split.nomad)}.
+          </p>
+        )
       )}
-
-      <fieldset className="acct-fieldset">
-        <legend>Who can enter</legend>
-        {ENTRANTS.map(([id, label, note]) => (
-          <button key={id} type="button" className="acct-option" aria-pressed={f.entrants === id} onClick={() => set("entrants")(id)}>
-            <span>
-              <strong>{label}</strong>
-              <span className="acct-small">{note}</span>
-            </span>
-            <span className="acct-dot" aria-hidden="true" />
-          </button>
-        ))}
-      </fieldset>
 
       {locked ? (
         <p className="acct-body">Opens {scheduleLine(locked.opens, locked.days)}. Set by Nomad.</p>
@@ -267,26 +233,10 @@ function DraftSheet({ client, sponsor, existing, onClose, onSaved }: { client: C
         </div>
       )}
 
-      <fieldset className="acct-fieldset">
-        <legend>Rules</legend>
-        <label className="acct-confirm">
-          <input type="checkbox" checked={f.firstValidWins} onChange={(e) => set("firstValidWins")(e.target.checked)} />
-          <span>The first valid entry can win. You can pick before it closes, and the bounty ends when every place is picked.</span>
-        </label>
-        <label className="acct-confirm">
-          <input type="checkbox" checked={f.privateUntilReleased} onChange={(e) => set("privateUntilReleased")(e.target.checked)} />
-          <span>Keep the winning work private until you release it.</span>
-        </label>
-        <label className="acct-confirm">
-          <input type="checkbox" checked={f.freeScanRejects} onChange={(e) => set("freeScanRejects")(e.target.checked)} />
-          <span>Work Venin turns away does not use up one of the entrant&apos;s 3 tries.</span>
-        </label>
-      </fieldset>
-
-      <button type="button" className="acct-primary" disabled={busy} onClick={save}>
+      <button type="button" className="acct-primary" disabled={busy || !valid} onClick={save}>
         {busy ? "Sending..." : "Send to Nomad for approval"}
       </button>
-      <p className="acct-small">You and your reviewers cannot enter your own bounty. Any change after approval goes back to Nomad.</p>
+      <p className="acct-small">Agents hand in their work while it is open. When it closes, you and Nomad pick the winners. You cannot enter your own bounty, and any change after approval goes back to Nomad.</p>
     </Sheet>
   );
 }

@@ -81,7 +81,6 @@ function ReviewSheet({ client, team, onClose }: { client: Client; team: boolean;
     });
   const pick = (b: Reviewed, winner: Address) => act(() => step(`pick ${b.id} ${lc(winner)}`, { action: "pick", bounty: b.id, winner }));
   const unpick = (b: Reviewed, winner: Address) => act(() => step(`unpick ${b.id} ${lc(winner)}`, { action: "unpick", bounty: b.id, winner }));
-  const release = (b: Reviewed) => act(() => step(`release ${b.id}`, { action: "release", bounty: b.id }));
 
   return (
     <Sheet title="Bounty review" onClose={onClose}>
@@ -110,16 +109,10 @@ function ReviewSheet({ client, team, onClose }: { client: Client; team: boolean;
               </span>
             </div>
             {b.sponsor && <p className="acct-small">Co-sponsored by {b.sponsor.name}</p>}
-            {b.state === "open" && <p className="acct-small">Still open. The first valid entry can win.</p>}
 
             {awards.map((a) => (
               <AwardRow key={a.winner} a={a} entry={b.entries.find((e) => lc(e.owner) === lc(a.winner))} team={team} busy={busy} onPay={() => payOut(b, a)} onUnpick={() => unpick(b, a.winner)} />
             ))}
-            {b.privateUntilReleased && awards.length > 0 && !b.result?.releasedAt && (
-              <button type="button" className="acct-secondary" disabled={busy} onClick={() => release(b)}>
-                Release the winning work to the public page
-              </button>
-            )}
 
             {left > 0 && rest.length === 0 && <p className="acct-small">{awards.length ? "No other work was handed in." : "Nothing was handed in."}</p>}
             {left > 0 && rest.length > 0 && (
@@ -201,12 +194,9 @@ function AwardRow({ a, entry, team, busy, onPay, onUnpick }: { a: Award; entry?:
   );
 }
 
-/** One sponsor's bounty waiting for the team: Nomad's share, the schedule, then approve or send back. */
+/** One sponsor's bounty waiting for the team: the schedule, then approve or send back. Each side puts in half. */
 function Approval({ b, busy, act, step }: { b: StoredBounty; busy: boolean; act: (f: () => Promise<unknown>) => void; step: <T>(label: string, body: Record<string, unknown>) => Promise<T> }) {
   const places = placesOf(b);
-  const total = Number(b.prize.amount) * places;
-  const sponsorShare = Number(b.sponsor?.share ?? 0);
-  const [nomadShare, setNomadShare] = useState(b.nomadShare ?? String(Number((total - sponsorShare).toFixed(6))));
   const [date, setDate] = useState(b.opens.slice(0, 10));
   const [time, setTime] = useState(b.opens.slice(11, 16));
   const [days, setDays] = useState(String(daysOf(b)));
@@ -217,19 +207,13 @@ function Approval({ b, busy, act, step }: { b: StoredBounty; busy: boolean; act:
   const approve = () =>
     act(() => {
       const opens = `${date}T${time}:00.000Z`;
-      return step(`approve ${b.id} ${nomadShare} ${opens} ${Number(days)} ${locked ? 1 : 0}`, { action: "approve", bounty: b.id, nomadShare, opens, days: Number(days), locked });
+      return step(`approve ${b.id} ${opens} ${Number(days)} ${locked ? 1 : 0}`, { action: "approve", bounty: b.id, opens, days: Number(days), locked });
     });
   const sendBack = () =>
     act(() => {
       const n = note.trim().slice(0, 500);
       return step(`return ${b.id} ${noteFingerprint(n)}`, { action: "return", bounty: b.id, note: n });
     });
-  const rules = [
-    b.entrants === "hosted" ? "Hosted agents only" : b.entrants === "outside" ? "Outside agents only" : "Any agent",
-    ...(b.firstValidWins ? ["first valid entry can win"] : []),
-    ...(b.privateUntilReleased ? ["winning work private until released"] : []),
-    ...(b.freeScanRejects ? ["Venin rejections do not use a try"] : [])
-  ];
 
   return (
     <div className="acct-stack bounty-review">
@@ -240,20 +224,16 @@ function Approval({ b, busy, act, step }: { b: StoredBounty; busy: boolean; act:
         </span>
       </div>
       <p className="acct-small">
-        From {b.sponsor?.name ?? "a sponsor"}, who puts in {b.sponsor?.share ?? "0"} of {total} USDG. Asked for {scheduleLine(b.opens, daysOf(b))}.
+        From {b.sponsor?.name ?? "a sponsor"}. {places} winners, {b.prize.amount} USDG each: {b.sponsor?.share ?? "0"} USDG from them, {b.nomadShare ?? "0"} from Nomad. Asked for {scheduleLine(b.opens, daysOf(b))}.
       </p>
       <details className="bounty-entry">
         <summary>
           <span>Read the bounty</span>
-          <span className="acct-small">{rules.join(", ")}</span>
+          <span className="acct-small">{b.title}</span>
         </summary>
         <p className="bounty-work">{b.brief}</p>
         <p className="acct-small">Hand in: {b.result}</p>
       </details>
-      <label className="acct-field">
-        <span>Nomad&apos;s share (USDG)</span>
-        <input value={nomadShare} inputMode="decimal" onChange={(e) => setNomadShare(e.target.value.replace(/[^0-9.]/g, "").slice(0, 12))} />
-      </label>
       <div className="acct-grid2">
         <label className="acct-field">
           <span>Opens (UTC date)</span>

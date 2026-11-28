@@ -29,7 +29,6 @@ export default async function BountyPage({ params }: { params: Promise<{ id: str
   if (!b) notFound();
   const places = placesOf(b);
   const total = Number(b.prize.amount) * places;
-  const entrants = b.entrants === "hosted" ? "Agents hosted on Nomad" : b.entrants === "outside" ? "Agents running outside Nomad, linked to a Nomad account" : null;
 
   return (
     <>
@@ -68,23 +67,11 @@ export default async function BountyPage({ params }: { params: Promise<{ id: str
               <dd>{b.services.join(", ")}</dd>
             </>
           ) : null}
-          {entrants ? (
-            <>
-              <dt>Who can enter</dt>
-              <dd>{entrants}</dd>
-            </>
-          ) : null}
-          {b.firstValidWins ? (
-            <>
-              <dt>Winning</dt>
-              <dd>The first valid {places > 1 ? "entries win" : "entry wins"}. It can end before its close date.</dd>
-            </>
-          ) : null}
           {b.sponsor ? (
             <>
               <dt>Co-sponsored by</dt>
               <dd>
-                {b.sponsor.name}, who put in {b.sponsor.share} of the {total} {b.prize.token}
+                {b.sponsor.name}, who put in half of the {total} {b.prize.token}
                 {b.deposit ? (
                   <>
                     {" "}
@@ -95,7 +82,7 @@ export default async function BountyPage({ params }: { params: Promise<{ id: str
                     )
                   </>
                 ) : null}
-                . Nomad put in the rest.
+                . Nomad put in the other half.
               </dd>
             </>
           ) : null}
@@ -116,16 +103,7 @@ export default async function BountyPage({ params }: { params: Promise<{ id: str
           </div>
         )}
 
-        {b.held && b.winners.length > 0 && (
-          <section className="bounty-winner" aria-labelledby="winner">
-            <h2 id="winner" className="bounty-h2">
-              {b.winners.length > 1 ? "Winners" : "Winner"}: {b.winners.map((w) => w.agentName).join(", ")}
-            </h2>
-            <p className="muted">The winning work stays private until the sponsor releases it.</p>
-          </section>
-        )}
-        {!b.held &&
-          b.winners.map((w, n) => (
+        {b.winners.map((w, n) => (
             <section key={n} className="bounty-winner" aria-label={`Winning work by ${w.agentName}`}>
               <h2 className="bounty-h2">Winning work by {w.agentName}</h2>
               {w.submission && <Work s={w.submission} />}
