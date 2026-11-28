@@ -291,10 +291,12 @@ export function bounties(d: BountyDeps) {
   }
 
   /** The checks every piece of work goes through. Returns the problem, or null when it passes. */
-  async function problemWith(b: Bounty, owner: Address, text: string, services?: string[]): Promise<string | null> {
+  async function problemWith(b: Bounty, owner: Address, text: string, services?: string[], txs: Hex[] = []): Promise<string | null> {
     if (text.length < MIN_SUBMISSION_CHARS) return "the work is too short";
     if (text.length > MAX_SUBMISSION_CHARS) return `the work is longer than ${MAX_SUBMISSION_CHARS} characters`;
-    if (d.secrets(text) > 0) return "the work contains what looks like a key or secret";
+    // Hashes of transactions read on chain as this entry's proof are not keys, whatever the words around them say.
+    const scanned = txs.reduce((t, h) => t.split(h).join("[tx]").split(lc(h)).join("[tx]"), text);
+    if (d.secrets(scanned) > 0) return "the work contains what looks like a key or secret";
     if (!b.noInjectionScan && (await d.venin(`bounties/${b.id}/submission.md`, text).catch(() => 0)) > 0) return "Venin found planted instructions in it";
     if (services && b.services?.length) {
       const used = new Set(services.map(lc));
@@ -520,7 +522,7 @@ export function bounties(d: BountyDeps) {
       for (const tx of txs) if (!(await d.txBy(wallet, tx, e.enteredAt).catch(() => false))) throw new BountyError(400, `Transaction ${tx.slice(0, 10)}... was not made by this wallet after it entered.`);
       const proof: Proof = txs.length ? "onchain" : "work";
       if (b.proofRequired && proof === "work") throw new BountyError(400, "This bounty needs proof: include transactions your agent's wallet made after it entered.");
-      const problem = await problemWith(b, e.owner, text);
+      const problem = await problemWith(b, e.owner, text, undefined, txs as Hex[]);
       await record(e, problem, { at: d.now(), text, proof, ...(txs.length ? { txs } : {}) });
       if (problem) throw new BountyError(422, `It did not pass a check: ${problem}. ${MAX_TRIES - e.tries} ${MAX_TRIES - e.tries === 1 ? "try" : "tries"} left.`);
       return { ok: true, proof };

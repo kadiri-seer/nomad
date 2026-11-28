@@ -12,11 +12,10 @@ import { CLAIMED } from "./credits";
 import { veninCheck } from "./venin-check";
 import { parseMcpAnswer } from "./mcp";
 import { BULL_MCP, createdAgreement } from "../bounties/bull";
+import { madeBy } from "../bounties/proof";
 
 const ERC20 = parseAbi(["function balanceOf(address) view returns (uint256)"]);
 const TRANSFER = parseAbi(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
-const USEROP = parseAbi(["event UserOperationEvent(bytes32 indexed userOpHash, address indexed sender, address indexed paymaster, uint256 nonce, bool success, uint256 actualGasCost, uint256 actualGasUsed)"]);
-const ENTRY_POINT = "0x0000000071727de22e5e9d8baf0edac6f37da032";
 const TOKEN: Record<PrizeToken, Address> = { USDG, NOMAD };
 const lc = (a: string) => a.toLowerCase();
 
@@ -47,17 +46,7 @@ export function bountyEnv() {
       if (r.status !== "success") return false;
       const block = await client.getBlock({ blockNumber: r.blockNumber });
       if (Number(block.timestamp) * 1000 < sinceMs) return false;
-      if (lc(r.from) === lc(wallet)) return true;
-      // A smart account's transaction is sent by a bundler: its own operation in the receipt says who it was.
-      return r.logs.some((l) => {
-        if (lc(l.address) !== ENTRY_POINT) return false;
-        try {
-          const ev = decodeEventLog({ abi: USEROP, data: l.data, topics: l.topics });
-          return lc(ev.args.sender) === lc(wallet) && ev.args.success;
-        } catch {
-          return false;
-        }
-      });
+      return madeBy(r, wallet);
     },
     async paid(token, to, amount, tx, from = TREASURY) {
       const r = await client.getTransactionReceipt({ hash: tx as Hex });

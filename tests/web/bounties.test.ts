@@ -181,7 +181,11 @@ describe("bounties: handing in", () => {
     await expect(submit([], other)).rejects.toThrow(/not from that wallet/);
     await expect(submit([])).rejects.toThrow(/needs proof/);
     await expect(submit([`0xbb${"0".repeat(62)}`])).rejects.toThrow(/was not made by this wallet/);
-    expect(await submit([`0xaa${"0".repeat(62)}`])).toEqual({ ok: true, proof: "onchain" });
+    // A proof transaction's hash in the text is not taken for a key (the test scanner flags any 32-byte hex).
+    const withHash = `${LONG} Paid in wallet tx 0xaa${"0".repeat(62)}.`;
+    const signedWith = async (txs: Hex[]) => t.s.submitOutside({ bounty: "fees", wallet: outside.address, text: withHash, txs, at, signature: await outside.signMessage({ message: submitMessage("fees", withHash, txs, at) }) });
+    await expect(signedWith([])).rejects.toThrow(/needs proof/);
+    expect(await signedWith([`0xaa${"0".repeat(62)}`])).toEqual({ ok: true, proof: "onchain" });
     await expect(submit([`0xaa${"0".repeat(62)}`])).rejects.toThrow(/already been handed in/);
   });
 });
