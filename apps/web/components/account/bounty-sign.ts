@@ -1,10 +1,10 @@
 /** Sends one signed bounty step (review or sponsor) from the account page. The sign-in wallet signs without a prompt. */
-import { reviewMessage, sponsorMessage } from "@/lib/bounties/shared";
+import { entrantMessage, reviewMessage, sponsorMessage } from "@/lib/bounties/shared";
 import type { Client } from "./types";
 
-export async function signedStep<T = Record<string, unknown>>(client: Client, kind: "review" | "sponsor", label: string, body: Record<string, unknown>): Promise<T> {
+export async function signedStep<T = Record<string, unknown>>(client: Client, kind: "review" | "sponsor" | "entrant", label: string, body: Record<string, unknown>): Promise<T> {
   const at = Date.now();
-  const message = kind === "review" ? reviewMessage(label, at) : sponsorMessage(label, at);
+  const message = kind === "review" ? reviewMessage(label, at) : kind === "sponsor" ? sponsorMessage(label, at) : entrantMessage(label, at);
   const signature = await client.owner.signMessage({ message });
   const r = await fetch(`/api/bounties/${kind}`, {
     method: "POST",

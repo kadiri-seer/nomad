@@ -331,7 +331,7 @@ describe("Nomad's team", () => {
 describe("sponsors: Stoa's bounty", () => {
   it("is whitelisted with Monday 30 November at 15:00 UTC for 10 days, whatever the draft asks", () => {
     const stoa = parseSponsors(JSON.stringify(SPONSORS)).find((x) => x.name === "Stoa");
-    expect(stoa).toEqual({ name: "Stoa", account: "0x1653c46C5B7aE7ddF774cc1f9980509f2B2e239D", opens: OPENS, days: 10 });
+    expect(stoa).toEqual({ name: "Stoa", account: "0x1653c46C5B7aE7ddF774cc1f9980509f2B2e239D", opens: OPENS, days: 10, handIn: { repo: true, payment: "stoa-gasless", result: true } });
   });
 
   it("Venin is whitelisted with the same schedule, and its entries skip Venin's scanner but not the secret check", async () => {

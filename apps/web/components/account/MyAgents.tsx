@@ -9,7 +9,8 @@ import { encodeFunctionData, erc20Abi, keccak256, parseUnits, toHex, type Addres
 import { USDG } from "@/lib/accounts/chain";
 import { accountClient, fmtUsdg, publicClient, rememberTokens, type Call } from "@/lib/accounts/client";
 import { DEFAULT_RESEARCH, DEFAULT_STOCKS, hiresAction, type HireLimits, ownerActionMessage, RUN_EVERY_HOURS, viewMessage, type Move, type Position } from "@/lib/agents/shared";
-import { hostedEnterMessage, linkMessage } from "@/lib/bounties/shared";
+import { hostedEnterMessage } from "@/lib/bounties/shared";
+import { OutsideEnter } from "./BountyOutside";
 import { Sheet } from "./Sheet";
 import { writeSnapshot } from "./snapshot";
 import type { Client, Confirm } from "./types";
@@ -384,6 +385,7 @@ function EnterSheet({ client, bountyId, agents, onClose }: { client: Client; bou
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [outside, setOutside] = useState(false);
+  const [outsideDone, setOutsideDone] = useState<string | null>(null);
   useEffect(() => {
     fetch(`/api/bounties/${bountyId}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
@@ -413,6 +415,14 @@ function EnterSheet({ client, bountyId, agents, onClose }: { client: Client; bou
     <Sheet title={title} onClose={onClose}>
       {missing && <p className="acct-body">This bounty is not open right now.</p>}
       {!missing && !bounty && <p className="acct-small">Loading...</p>}
+      {bounty && outsideDone && (
+        <>
+          <p className="acct-body">{outsideDone} is in. When the work is ready, hand it in from Bounty entries on your account page.</p>
+          <button type="button" className="acct-primary" onClick={onClose}>
+            Done
+          </button>
+        </>
+      )}
       {bounty && done && (
         <>
           <p className="acct-body">{done} is in. On its next run it does the task its own way, then hands the work in by itself. You will see how it goes on its card.</p>
@@ -421,8 +431,17 @@ function EnterSheet({ client, bountyId, agents, onClose }: { client: Client; bou
           </button>
         </>
       )}
-      {bounty && !done && bounty.state !== "open" && <p className="acct-body">This bounty is not open for entries right now.</p>}
-      {bounty && !done && bounty.state === "open" && (
+      {bounty && !done && !outsideDone && bounty.state !== "open" && <p className="acct-body">This bounty is not open for entries right now.</p>}
+      {bounty && !done && !outsideDone && bounty.state === "open" && outside && (
+        <>
+          <p className="acct-body">{bounty.brief}</p>
+          <OutsideEnter client={client} bountyId={bountyId} onEntered={setOutsideDone} />
+          <button type="button" className="acct-quiet" onClick={() => setOutside(false)}>
+            Enter with an agent on Nomad instead
+          </button>
+        </>
+      )}
+      {bounty && !done && !outsideDone && bounty.state === "open" && !outside && (
         <>
           <p className="acct-body">{bounty.brief}</p>
           {agents.length ? (
@@ -447,64 +466,12 @@ function EnterSheet({ client, bountyId, agents, onClose }: { client: Client; bou
             </button>
           )}
           <p className="acct-small">One entry per account. Its own setup decides how it does the work, so you can edit its instructions first.</p>
-          {!outside ? (
-            <button type="button" className="acct-quiet" onClick={() => setOutside(true)}>
-              My agent runs somewhere else
-            </button>
-          ) : (
-            <LinkOutside client={client} bountyId={bountyId} />
-          )}
+          <button type="button" className="acct-quiet" onClick={() => setOutside(true)}>
+            My agent runs somewhere else
+          </button>
         </>
       )}
     </Sheet>
   );
 }
 
-/** Links an agent that runs outside Nomad (by its wallet) to this account, so it can enter with its own signature. */
-function LinkOutside({ client, bountyId }: { client: Client; bountyId: string }) {
-  const [wallet, setWallet] = useState("");
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [linked, setLinked] = useState(false);
-  const link = async () => {
-    const w = wallet.trim();
-    const n = name.trim();
-    if (!/^0x[0-9a-fA-F]{40}$/.test(w)) return fail(new Error("Enter the agent's wallet address."));
-    if (!n) return fail(new Error("Give the agent a name."));
-    setBusy(true);
-    try {
-      const at = Date.now();
-      const clean = n.replace(/[^\p{L}\p{N} ._-]/gu, "").trim().slice(0, 40);
-      const signature = await client.owner.signMessage({ message: linkMessage(w, clean, at) });
-      const r = await fetch("/api/bounties/link", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ signer: client.signer, wallet: w, name: clean, at, signature }) });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "That did not go through.");
-      setLinked(true);
-    } catch (e) {
-      fail(e);
-    } finally {
-      setBusy(false);
-    }
-  };
-  if (linked)
-    return (
-      <p className="acct-body">
-        Linked. Your agent now enters and hands in its work itself, signing with its wallet. The steps are on the <a href={`/bounties/${bountyId}#outside`}>bounty&apos;s page</a>. A prize goes to this account.
-      </p>
-    );
-  return (
-    <div className="acct-stack">
-      <label className="acct-field">
-        <span>Your agent&apos;s wallet address</span>
-        <input value={wallet} onChange={(e) => setWallet(e.target.value)} placeholder="0x..." spellCheck={false} />
-      </label>
-      <label className="acct-field">
-        <span>Its name</span>
-        <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
-      </label>
-      <button type="button" className="acct-secondary" onClick={link} disabled={busy}>
-        {busy ? "Linking..." : "Link this agent"}
-      </button>
-    </div>
-  );
-}

@@ -34,6 +34,8 @@ export type Bounty = {
   places?: number;
   /** The co-sponsor and its share of the whole prize, paid from its Nomad account into the treasury. */
   sponsor?: Sponsor;
+  /** The hand-in form's fields and checks. Without it the form asks for notes and optional transactions. */
+  handIn?: HandInSpec;
   /**
    * Handed-in work is not run past Venin (for a bounty whose work is planted instructions on purpose). The check for
    * keys and secrets still runs, and the bounty's own text is always checked.
@@ -60,7 +62,19 @@ export type StoredBounty = Bounty & {
 };
 
 /** A whitelisted sponsor, from the site's settings: its Nomad account, and optionally a schedule set in advance. */
-export type SponsorSpec = { name: string; account: Address; opens?: string; days?: number; prize?: string; noInjectionScan?: boolean };
+/**
+ * What a bounty's hand-in form asks for, and what Nomad checks before taking it: a public GitHub repo (with a README,
+ * and no keys or secrets in its files), a payment transaction (any transaction from the agent's wallet, or a gasless
+ * USDG payment to a Stoa agent service), and a link to the result.
+ */
+export type HandInSpec = { repo?: boolean; payment?: "stoa-gasless" | "any"; result?: boolean };
+
+export type SponsorSpec = { name: string; account: Address; opens?: string; days?: number; prize?: string; noInjectionScan?: boolean; handIn?: HandInSpec };
+
+/** One check on handed-in work, as the entrant and the reviewers see it. */
+export type Check = { name: string; ok: boolean; detail?: string };
+/** The form's fields, as handed in from the account page. */
+export type HandInFields = { repo?: string; tx?: Hex; result?: string; note?: string };
 
 /** How much of an entry can be checked: a run Nomad recorded, transactions on chain, or the work alone. */
 export type Proof = "nomad" | "onchain" | "work";
@@ -74,6 +88,9 @@ export type Submission = {
   record?: RunRecord;
   /** Transactions the outside agent's wallet made after entering, checked on chain. */
   txs?: Hex[];
+  /** Handed in through the form on the account page: its fields and the checks they passed. */
+  fields?: HandInFields;
+  checks?: Check[];
 };
 
 export type Entry = {
@@ -88,6 +105,8 @@ export type Entry = {
   /** Checks that failed so far, and the last reason. */
   tries: number;
   problem?: string;
+  /** The checks of the last hand-in from the account page that did not pass. */
+  checks?: Check[];
   submission?: Submission;
 };
 
@@ -151,6 +170,17 @@ export const outsideEnterMessage = (bounty: string, at: number) => `Nomad bounty
 export const submitMessage = (bounty: string, text: string, txs: readonly string[], at: number) =>
   `Nomad bounty ${bounty}: submit ${keccak256(toHex(text))}${txs.length ? ` with ${txs.map((t) => t.toLowerCase()).join(",")}` : ""} at ${at}`;
 export const linkMessage = (wallet: string, name: string, at: number) => `Nomad: link outside agent ${wallet.toLowerCase()} named ${name} at ${at}`;
+/** What the agent's own wallet signs, once, to prove the link: it names the Nomad account it joins. */
+export const walletProofMessage = (wallet: string, account: string) => `Nomad: link agent wallet ${wallet.toLowerCase()} to Nomad account ${account.toLowerCase()}`;
+/** What the account's sign-in wallet signs for its bounty steps on the account page. */
+export const entrantMessage = (action: string, at: number) => `Nomad bounty entrant: ${action} at ${at}`;
+export const handInFingerprint = (f: HandInFields) => keccak256(toHex(JSON.stringify([f.repo ?? "", f.tx ?? "", f.result ?? "", f.note ?? ""])));
+
+/** A public GitHub repository link, read into its owner and name; null for anything else. */
+export function githubRepo(url: string): { owner: string; repo: string } | null {
+  const m = /^https:\/\/github\.com\/([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))\/([A-Za-z0-9._-]{1,100}?)(?:\.git)?\/?$/.exec(url.trim());
+  return m && m[2] !== "." && m[2] !== ".." ? { owner: m[1], repo: m[2] } : null;
+}
 export const reviewMessage = (action: string, at: number) => `Nomad bounty review: ${action} at ${at}`;
 export const sponsorMessage = (action: string, at: number) => `Nomad bounty sponsor: ${action} at ${at}`;
 

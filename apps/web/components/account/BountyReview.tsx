@@ -11,8 +11,9 @@ import { useEffect, useState } from "react";
 import type { Address } from "viem";
 import { send } from "@/lib/accounts/client";
 import { bullAgreementPage, confirmAndReleaseCalls } from "@/lib/bounties/bull";
-import { BOUNTY_DAYS, noteFingerprint, placesOf, PROOF_LABEL, type Award, type Bounty, type BountyResult, type Entry, type StoredBounty } from "@/lib/bounties/shared";
+import { BOUNTY_DAYS, noteFingerprint, placesOf, PROOF_LABEL, type Award, type Bounty, type BountyResult, type Entry, type StoredBounty, type Submission } from "@/lib/bounties/shared";
 import { CopyButton } from "../CopyButton";
+import { CheckList } from "./BountyChecks";
 import { Sheet } from "./Sheet";
 import { daysOf, fail, scheduleLine, short, signedStep } from "./bounty-sign";
 import type { Client } from "./types";
@@ -130,12 +131,11 @@ function ReviewSheet({ client, team, onClose }: { client: Client; team: boolean;
           <div key={b.id} className="acct-stack bounty-review">
             <div className="acct-between">
               <strong>{b.title}</strong>
-              <span className="acct-small">
-                {b.prize.amount} {b.prize.token}
-                {places > 1 ? ` x ${places}` : ""}
-              </span>
             </div>
-            {b.sponsor && <p className="acct-small">Co-sponsored by {b.sponsor.name}</p>}
+            <p className="acct-small">
+              {places > 1 ? `${places} winners, ${b.prize.amount} ${b.prize.token} each` : `${b.prize.amount} ${b.prize.token}`}
+              {b.sponsor ? `. Co-sponsored by ${b.sponsor.name}.` : "."}
+            </p>
 
             {awards.map((a) => (
               <AwardRow key={a.winner} a={a} entry={b.entries.find((e) => lc(e.owner) === lc(a.winner))} team={team} arbiter={!!b.arbiter} busy={busy} onPay={() => payOut(b, a)} onUnpick={() => unpick(b, a.winner)} />
@@ -154,7 +154,7 @@ function ReviewSheet({ client, team, onClose }: { client: Client; team: boolean;
                     <span>{e.agentName}</span>
                     <span className="acct-small">{PROOF_LABEL[e.submission!.proof]}</span>
                   </summary>
-                  <p className="bounty-work">{e.submission!.text}</p>
+                  {e.submission!.fields ? <HandedIn s={e.submission!} /> : <p className="bounty-work">{e.submission!.text}</p>}
                   {e.submission!.record && <p className="acct-small">Used: {[...new Set(e.submission!.record.calls.filter((c) => c.ok).map((c) => c.service))].join(", ") || "no outside services"}</p>}
                   <button type="button" className="acct-secondary" disabled={busy} onClick={() => pick(b, e.owner)}>
                     Pick as winner
@@ -309,4 +309,39 @@ function approvedLine(b: Approved) {
   if (b.state === "open") return `Open, ${b.entries} ${b.entries === 1 ? "entry" : "entries"} so far.`;
   if (b.state === "judging") return "Closed. Pick the winners below.";
   return "Winners picked. Lock and pay them below.";
+}
+
+const TX_PAGE = "https://robinhoodchain.blockscout.com/tx/";
+
+/** Work handed in through the form: its links, its note, and what Nomad checked. */
+function HandedIn({ s }: { s: Submission }) {
+  const f = s.fields!;
+  return (
+    <div className="acct-stack">
+      <div className="bounty-links">
+        {f.repo && (
+          <a href={f.repo} target="_blank" rel="noopener noreferrer">
+            Repo
+          </a>
+        )}
+        {f.tx && (
+          <a href={`${TX_PAGE}${f.tx}`} target="_blank" rel="noopener noreferrer">
+            Payment {f.tx.slice(0, 10)}...
+          </a>
+        )}
+        {f.result && (
+          <a href={f.result} target="_blank" rel="noopener noreferrer">
+            Result
+          </a>
+        )}
+      </div>
+      {f.note && <p className="bounty-work">{f.note}</p>}
+      {s.checks && s.checks.length > 0 && (
+        <details className="acct-details">
+          <summary>All {s.checks.length} checks passed</summary>
+          <CheckList checks={s.checks} />
+        </details>
+      )}
+    </div>
+  );
 }

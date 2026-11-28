@@ -2192,9 +2192,22 @@ html[data-theme="dark"] .acct-balance { background: #2a2925; color: #f3f2ee; }
 }
 .bounty-meta {
   display: flex;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 4px 16px;
   align-items: baseline;
   margin: 12px 0 28px;
+}
+@media (max-width: 560px) {
+  .bounty-meta strong {
+    flex-basis: 100%;
+  }
+}
+.bounty-checks {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .bounty-meta strong {
   font-family: var(--mono);
@@ -2277,4 +2290,91 @@ html[data-theme="dark"] .acct-balance { background: #2a2925; color: #f3f2ee; }
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+.check-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.check-list li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.check-list li > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.check-list strong {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--acct-ink);
+}
+.check-mark {
+  flex: none;
+  margin-top: 2px;
+}
+.check-ok .check-mark {
+  color: #2e7d4f;
+}
+.check-bad .check-mark {
+  color: #b3261e;
+}
+.copy-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.copy-block pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--paper-2);
+  color: var(--acct-ink);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font: 500 14px/1.5 var(--mono);
+}
+.acct-details summary {
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--acct-ink);
+  padding: 4px 0;
+}
+.acct-details[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.hand-in-failed {
+  padding: 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, #b3261e 7%, transparent);
+}
+.bounty-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 15px;
+}
+.bounty-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bounty-how {
+  margin-top: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.bounty-how .bounty-steps {
+  line-height: 1.55;
 }

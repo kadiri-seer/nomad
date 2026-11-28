@@ -37,6 +37,12 @@ import {
   sponsorSplit,
   usdgText,
   sponsorMessage,
+  entrantMessage,
+  githubRepo,
+  handInFingerprint,
+  walletProofMessage,
+  type Check,
+  type HandInFields,
   submitMessage,
   type Award,
   type Bounty,
@@ -50,6 +56,8 @@ import {
   type StoredBounty
 } from "../bounties/shared";
 import { hashToObject, type RedisLike } from "../redis";
+import { stoaPaymentChecks, type StoaService } from "../bounties/proof";
+import type { RepoResult } from "./repo-check";
 
 export class BountyError extends Error {
   constructor(public status: number, message: string) {
@@ -62,6 +70,7 @@ const RESULT = (b: string) => `nomad:bounty:${b}:result`;
 const AGENT_BOUNTIES = (id: string) => `nomad:agent:${id}:bounties`;
 const LINK = (wallet: string) => `nomad:bounty-link:${wallet.toLowerCase()}`;
 const DRAFTS = "nomad:bounty-drafts";
+const LINKS_OF = (owner: string) => `nomad:bounty-links:${owner.toLowerCase()}`;
 
 export function bountyStore(redis: RedisLike) {
   return {
@@ -96,12 +105,23 @@ export function bountyStore(redis: RedisLike) {
     async removeAgentBounty(agentId: string, bounty: string) {
       await redis.cmd(["SREM", AGENT_BOUNTIES(agentId), bounty]);
     },
-    async link(wallet: Address): Promise<{ owner: Address; name: string; at: number } | null> {
+    async link(wallet: Address): Promise<WalletLink | null> {
       const raw = await redis.cmd(["GET", LINK(wallet)]);
       return typeof raw === "string" ? JSON.parse(raw) : null;
     },
-    async setLink(wallet: Address, v: { owner: Address; name: string; at: number }) {
+    async setLink(wallet: Address, v: WalletLink) {
       await redis.cmd(["SET", LINK(wallet), JSON.stringify(v)]);
+      await redis.cmd(["SADD", LINKS_OF(v.owner), wallet.toLowerCase()]);
+    },
+    /** The wallets an account linked, newest last. */
+    async linksOf(owner: Address): Promise<(WalletLink & { wallet: Address })[]> {
+      const wallets = ((await redis.cmd(["SMEMBERS", LINKS_OF(owner)])) as string[] | null) ?? [];
+      const out = [];
+      for (const w of wallets) {
+        const l = await this.link(getAddress(w));
+        if (l && l.owner.toLowerCase() === owner.toLowerCase()) out.push({ ...l, wallet: getAddress(w) });
+      }
+      return out.sort((a, b) => a.at - b.at);
     },
     /** Sponsors' bounties, in every state. */
     async drafts(): Promise<StoredBounty[]> {
@@ -117,6 +137,8 @@ export function bountyStore(redis: RedisLike) {
   };
 }
 export type BountyStore = ReturnType<typeof bountyStore>;
+/** An outside agent's wallet, linked to a Nomad account. "proven" once the wallet itself signed for it. */
+export type WalletLink = { owner: Address; name: string; at: number; proven?: boolean };
 
 export type BountyDeps = {
   store: BountyStore;
@@ -145,6 +167,12 @@ export type BountyDeps = {
   bullPlan(args: Record<string, unknown>): Promise<unknown>;
   /** The Bull agreement a successful transaction created, from its receipt. */
   escrowCreated(tx: Hex): Promise<ReturnType<typeof createdAgreement>>;
+  /** A GitHub repo's checks (lib/server/repo-check.ts). */
+  repoCheck?(url: string): Promise<RepoResult>;
+  /** A transaction's receipt and its block's time, or null when there is none. */
+  receiptOf?(tx: Hex): Promise<{ status: string; from: Address; logs: { address: Address; data: Hex; topics: Hex[] }[]; time: number } | null>;
+  /** Stoa's listed agent services. */
+  stoaServices?(): Promise<StoaService[]>;
   /** Venin's count of planted instructions in a text. */
   venin(path: string, text: string): Promise<number>;
   /** How many secrets (keys, seed phrases, tokens) a text contains. */
@@ -183,6 +211,14 @@ export function parseSponsors(raw: string | undefined): SponsorSpec[] {
     if (Number.isInteger(days) && days >= 1 && days <= SPONSOR_MAX_DAYS) spec.days = days;
     if (typeof o.prize === "string" && /^\d{1,6}(\.\d{1,2})?$/.test(o.prize) && Number(o.prize) > 0) spec.prize = o.prize;
     if (o.noInjectionScan === true) spec.noInjectionScan = true;
+    const h = (o.handIn ?? null) as Record<string, unknown> | null;
+    if (h && typeof h === "object") {
+      const handIn: SponsorSpec["handIn"] = {};
+      if (h.repo === true) handIn.repo = true;
+      if (h.result === true) handIn.result = true;
+      if (h.payment === "stoa-gasless" || h.payment === "any") handIn.payment = h.payment;
+      spec.handIn = handIn;
+    }
     out.push(spec);
   }
   return out;
@@ -207,12 +243,18 @@ export function bounties(d: BountyDeps) {
   /** Every bounty that can be seen: the ones in the code, and sponsors' bounties Nomad approved. */
   async function all(): Promise<Bounty[]> {
     const approved = (await d.store.drafts()).filter((b) => b.status === "approved");
-    return [...d.list, ...approved.map(publicFields)];
+    return [...d.list, ...approved.map((b) => withSpec(publicFields(b)))];
   }
   async function byId(id: string): Promise<Bounty> {
     const b = (await all()).find((x) => x.id === id);
     if (!b) throw new BountyError(404, "There is no bounty by that name.");
     return b;
+  }
+  /** A sponsor's current settings apply to its bounties already saved: the hand-in form and the scanner choice. */
+  function withSpec(b: Bounty): Bounty {
+    const spec = b.sponsor ? sponsors.find((s) => lc(s.account) === lc(b.sponsor!.account)) : null;
+    if (!spec) return b;
+    return { ...b, ...(spec.handIn && !b.handIn ? { handIn: spec.handIn } : {}), ...(spec.noInjectionScan ? { noInjectionScan: true } : {}) };
   }
   /** A stored bounty without what only Nomad and its sponsor need. */
   function publicFields(b: StoredBounty): Bounty {
@@ -310,6 +352,22 @@ export function bounties(d: BountyDeps) {
     return null;
   }
 
+  /** The form's fields, trimmed and bounded, before any checks. */
+  function handInOf(raw: unknown): HandInFields {
+    const o = (raw ?? {}) as Record<string, unknown>;
+    const str = (k: string, max: number) => (typeof o[k] === "string" ? (o[k] as string).replace(/\r\n/g, "\n").trim().slice(0, max) : "");
+    const f: HandInFields = {};
+    const repo = str("repo", 300);
+    const tx = str("tx", 80).toLowerCase();
+    const result = str("result", 500);
+    const note = str("note", 3000);
+    if (repo) f.repo = repo.replace(/\/+$/, "");
+    if (tx) f.tx = tx as Hex;
+    if (result) f.result = result;
+    if (note) f.note = note;
+    return f;
+  }
+
   async function record(e: Entry, problem: string | null, submission: Entry["submission"]) {
     if (problem) {
       e.tries += 1;
@@ -398,7 +456,8 @@ export function bounties(d: BountyDeps) {
         const { state, result } = await stateOf(b, f);
         if (state === "hidden") continue;
         const { reviewers: _r, ...shown } = b;
-        out.push({ ...shown, state, entries: (await d.store.entries(b.id)).length, winners: result?.awards.length ?? 0 });
+        const entries = await d.store.entries(b.id);
+        out.push({ ...shown, state, entries: entries.length, handedIn: entries.filter((e) => e.submission).length, winners: result?.awards.length ?? 0 });
       }
       return out;
     },
@@ -423,7 +482,8 @@ export function bounties(d: BountyDeps) {
         });
       }
       const { reviewers: _r, ...shown } = b;
-      return { ...shown, state, entries: (await d.store.entries(b.id)).length, winners };
+      const entries = await d.store.entries(b.id);
+      return { ...shown, state, entries: entries.length, handedIn: entries.filter((e) => e.submission).length, winners };
     },
 
     /** A hosted agent enters: signed by its creator's Google wallet. Its next runs get the brief. */
@@ -441,7 +501,7 @@ export function bounties(d: BountyDeps) {
     },
 
     /** An outside agent links its wallet to a Nomad account: signed by the account's Google wallet. */
-    async link(body: { signer?: unknown; wallet?: unknown; name?: unknown; at?: unknown; signature?: unknown }) {
+    async link(body: { signer?: unknown; wallet?: unknown; name?: unknown; at?: unknown; signature?: unknown; walletSignature?: unknown }) {
       const signer = signerOf(body.signer);
       if (typeof body.wallet !== "string" || !isAddress(body.wallet, { strict: false })) throw new BountyError(400, "That is not a wallet address.");
       const name = String(body.name ?? "").replace(/[^\p{L}\p{N} ._-]/gu, "").trim().slice(0, 40);
@@ -451,10 +511,17 @@ export function bounties(d: BountyDeps) {
       if (!(await d.verify(signer, linkMessage(wallet, name, at), sig(body.signature)).catch(() => false))) throw new BountyError(403, "The signature does not match.");
       const owner = getAddress(await d.mainAccountOf(signer));
       if (lc(wallet) === lc(owner) || lc(wallet) === lc(signer)) throw new BountyError(400, "Link the agent's own wallet, not your account.");
+      // The wallet's own signature, when given, proves it is the agent's: then it can enter and hand in from the
+      // account page. Without it, the agent signs each step itself (the API on the bounty's page).
+      let proven = false;
+      if (body.walletSignature !== undefined) {
+        proven = await d.verify(wallet, walletProofMessage(wallet, owner), sig(body.walletSignature)).catch(() => false);
+        if (!proven) throw new BountyError(403, "That signature is not from this wallet. Sign the exact message shown, with the agent's wallet.");
+      }
       const had = await d.store.link(wallet);
       if (had && lc(had.owner) !== lc(owner)) throw new BountyError(409, "That wallet is already linked to another account.");
-      await d.store.setLink(wallet, { owner, name, at: d.now() });
-      return { ok: true, wallet, name };
+      await d.store.setLink(wallet, { owner, name, at: d.now(), ...(proven || had?.proven ? { proven: true } : {}) });
+      return { ok: true, wallet, name, proven: proven || !!had?.proven };
     },
 
     /** An outside agent enters: signed by its own linked wallet. */
@@ -468,6 +535,133 @@ export function bounties(d: BountyDeps) {
       if (!(await d.verify(wallet, outsideEnterMessage(b.id, at), sig(body.signature)).catch(() => false))) throw new BountyError(403, "The signature is not from that wallet.");
       await createEntry(b, { bounty: b.id, owner: getAddress(link.owner), agentName: link.name, wallet, enteredAt: d.now(), tries: 0 });
       return { ok: true, status: `Entered ${b.title}. Submit the work before ${b.closes}.` };
+    },
+
+    /**
+     * An entrant's steps on the account page, each signed by its sign-in wallet: see its linked wallets and entries,
+     * enter with a proven wallet, and hand in the form, which Nomad checks before taking it.
+     */
+    async entrant(body: Record<string, unknown>) {
+      const signer = signerOf(body.signer);
+      const at = fresh(body.at);
+      const id = typeof body.bounty === "string" ? body.bounty : "";
+      const wallet = typeof body.wallet === "string" && isAddress(body.wallet, { strict: false }) ? getAddress(body.wallet) : null;
+      const fields = handInOf(body.fields);
+      const label =
+        body.action === "mine" ? "mine" : body.action === "enter" && wallet ? `enter ${id} ${lc(wallet)}` : body.action === "handin" && wallet ? `handin ${id} ${lc(wallet)} ${handInFingerprint(fields)}` : null;
+      if (!label) throw new BountyError(400, "Unknown step.");
+      if (!(await d.verify(signer, entrantMessage(label, at), sig(body.signature)).catch(() => false))) throw new BountyError(403, "The signature does not match.");
+      const account = getAddress(await d.mainAccountOf(signer));
+
+      if (body.action === "mine") {
+        const links = (await d.store.linksOf(account)).map((l) => ({ wallet: l.wallet, name: l.name, proven: !!l.proven }));
+        const entries = [];
+        for (const b of await all()) {
+          const e = await d.store.entry(b.id, account);
+          if (!e || !e.wallet) continue;
+          const result = await d.store.result(b.id);
+          const state = bountyState(b, result, d.now());
+          entries.push({
+            bounty: b.id,
+            title: b.title,
+            closes: b.closes,
+            state,
+            wallet: e.wallet,
+            agentName: e.agentName,
+            status: entryStatus(e, b.title, state, result),
+            handIn: b.handIn ?? {},
+            triesLeft: Math.max(0, MAX_TRIES - e.tries),
+            proven: !!links.find((l) => lc(l.wallet) === lc(e.wallet!))?.proven,
+            ...(e.problem ? { problem: e.problem } : {}),
+            ...(e.checks ? { checks: e.checks } : {}),
+            ...(e.submission ? { submitted: { at: e.submission.at, fields: e.submission.fields ?? null, checks: e.submission.checks ?? [] } } : {})
+          });
+        }
+        return { links, entries };
+      }
+
+      const link = await d.store.link(wallet!);
+      if (!link || lc(link.owner) !== lc(account)) throw new BountyError(403, "Link this wallet to your account first.");
+      if (!link.proven) throw new BountyError(403, "Prove this wallet is your agent's first: sign the link message with it.");
+
+      if (body.action === "enter") {
+        const b = await openBounty(id);
+        await createEntry(b, { bounty: b.id, owner: account, agentName: link.name, wallet: wallet!, enteredAt: d.now(), tries: 0 });
+        return { ok: true, status: `Entered ${b.title}` };
+      }
+
+      // handin
+      const b = await openBounty(id);
+      const e = await d.store.entry(b.id, account);
+      if (!e || !e.wallet || lc(e.wallet) !== lc(wallet!)) throw new BountyError(409, "Enter this bounty with that wallet first.");
+      if (e.submission) throw new BountyError(409, "This entry has already been handed in.");
+      if (e.tries >= MAX_TRIES) throw new BountyError(409, "This entry is out of tries.");
+      const spec = b.handIn ?? {};
+      if (spec.repo && !fields.repo) throw new BountyError(400, "Add the link to your repo.");
+      if (spec.payment && !fields.tx) throw new BountyError(400, "Add the hash of your payment transaction.");
+      if (spec.result && !fields.result) throw new BountyError(400, "Add a link to the result: a note or a screen recording.");
+      if (fields.tx && !isHash(fields.tx)) throw new BountyError(400, "That is not a transaction hash.");
+      if (fields.result && !/^https:\/\/[^\s]{4,500}$/.test(fields.result)) throw new BountyError(400, "The result link must start with https://.");
+      if (!fields.repo && !fields.tx && !fields.result && (fields.note ?? "").length < MIN_SUBMISSION_CHARS) throw new BountyError(400, `Write at least ${MIN_SUBMISSION_CHARS} characters about your work.`);
+
+      const checks: Check[] = [];
+      if (fields.tx) {
+        const usedElsewhere = (await d.store.entries(b.id)).some((x) => lc(x.owner) !== lc(account) && (x.submission?.txs ?? []).some((t) => lc(t) === lc(fields.tx!)));
+        if (usedElsewhere) checks.push({ name: "Payment", ok: false, detail: "That transaction is already part of another entry." });
+        else if (spec.payment === "stoa-gasless") {
+          if (!d.receiptOf || !d.stoaServices) throw new BountyError(503, "Payments cannot be checked on this site yet.");
+          let receipt;
+          let services;
+          try {
+            [receipt, services] = await Promise.all([d.receiptOf(fields.tx), d.stoaServices()]);
+          } catch {
+            throw new BountyError(503, "Could not read the chain or Stoa's services right now. Try again in a minute. This did not use a try.");
+          }
+          if (!receipt) checks.push({ name: "Paid a Stoa agent service", ok: false, detail: "That transaction was not found on Robinhood Chain. If it was just sent, wait a moment." });
+          else checks.push(...stoaPaymentChecks(receipt, e.wallet, USDG, services, opensAt(b)));
+        } else {
+          const ok = await d.txBy(e.wallet, fields.tx, e.enteredAt).catch(() => null);
+          if (ok === null) throw new BountyError(503, "Could not read the chain right now. Try again in a minute. This did not use a try.");
+          checks.push(ok ? { name: "Made by your wallet", ok: true } : { name: "Made by your wallet", ok: false, detail: "That transaction was not made by your linked wallet after it entered." });
+        }
+      }
+      if (fields.repo) {
+        if (!githubRepo(fields.repo)) checks.push({ name: "Public GitHub repo", ok: false, detail: "Give the link to a GitHub repo, like https://github.com/you/your-repo." });
+        else {
+          if (!d.repoCheck) throw new BountyError(503, "Repos cannot be checked on this site yet.");
+          const r = await d.repoCheck(fields.repo).catch(() => ({ unavailable: "GitHub did not answer" }));
+          if ("unavailable" in r) throw new BountyError(503, `Could not check the repo right now (${r.unavailable}). Try again in a minute. This did not use a try.`);
+          checks.push(...r.checks);
+        }
+      }
+      if (fields.result) checks.push({ name: "Result link", ok: true });
+      // The note and links themselves: no keys, no planted instructions (unless the bounty is about them), not a copy.
+      const text = [fields.repo && `Repo: ${fields.repo}`, fields.tx && `Payment: ${fields.tx}`, fields.result && `Result: ${fields.result}`, fields.note].filter(Boolean).join("\n");
+      const scanned = fields.tx ? text.split(fields.tx).join("[tx]") : text;
+      if (d.secrets(scanned) > 0) checks.push({ name: "No secrets in the hand-in", ok: false, detail: "Your note or links contain what looks like a key or secret." });
+      if (fields.note && !b.noInjectionScan && (await d.venin(`bounties/${b.id}/submission.md`, fields.note).catch(() => 0)) > 0) checks.push({ name: "No planted instructions", ok: false, detail: "Venin found planted instructions in your note." });
+      if (fields.note && fields.note.length >= 200)
+        for (const other of await d.store.entries(b.id)) {
+          const theirs = other.submission?.fields?.note ?? (other.submission && !other.submission.fields ? other.submission.text : "");
+          if (lc(other.owner) !== lc(account) && theirs && similarity(fields.note, theirs) >= COPY_SIMILARITY) {
+            checks.push({ name: "Your own work", ok: false, detail: "Your note is too close to another entry." });
+            break;
+          }
+        }
+
+      const failed = checks.filter((c) => !c.ok);
+      if (failed.length) {
+        e.tries += 1;
+        e.problem = failed[0].detail ?? failed[0].name;
+        e.checks = checks;
+        await d.store.put(e);
+        return { ok: false, checks, triesLeft: Math.max(0, MAX_TRIES - e.tries) };
+      }
+      e.problem = undefined;
+      e.checks = undefined;
+      e.submission = { at: d.now(), text, proof: fields.tx ? "onchain" : "work", ...(fields.tx ? { txs: [fields.tx] } : {}), fields, checks };
+      await d.store.put(e);
+      return { ok: true, checks };
     },
 
     /** The bounties a hosted agent entered and has not handed in yet: the work for its next run. */
@@ -672,6 +866,7 @@ export function bounties(d: BountyDeps) {
           sponsor: { name: spec.name, account: spec.account, share: existing?.deposit ? existing.sponsor!.share : usdgText(split.sponsor) },
           nomadShare: existing?.deposit ? existing.nomadShare : usdgText(split.nomad),
           ...(spec.noInjectionScan ? { noInjectionScan: true } : {}),
+          ...(spec.handIn ? { handIn: spec.handIn } : {}),
           // When the whitelist names the sponsor's wallet rather than its Nomad account, the account is kept too: it
           // reviews the bounty, cannot enter it, and can send the sponsor's half.
           ...(lc(account) !== lc(spec.account) ? { reviewers: [account] } : {}),

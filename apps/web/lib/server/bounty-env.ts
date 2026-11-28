@@ -12,7 +12,8 @@ import { CLAIMED } from "./credits";
 import { veninCheck } from "./venin-check";
 import { parseMcpAnswer } from "./mcp";
 import { BULL_MCP, createdAgreement } from "../bounties/bull";
-import { madeBy } from "../bounties/proof";
+import { madeBy, type StoaService } from "../bounties/proof";
+import { repoChecker } from "./repo-check";
 
 const ERC20 = parseAbi(["function balanceOf(address) view returns (uint256)"]);
 const TRANSFER = parseAbi(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
@@ -84,6 +85,30 @@ export function bountyEnv() {
       const err = plan?.error as { message?: string } | undefined;
       if (!plan || err) throw new Error(err?.message ?? "Bull gave no plan.");
       return plan;
+    },
+    repoCheck: repoChecker({
+      token: process.env.GITHUB_TOKEN?.trim() || undefined,
+      cache: { get: (k) => agents.cacheGet<string>(k), set: (k, v, sec) => agents.cacheSet(k, v, sec) }
+    }),
+    async receiptOf(tx) {
+      const r = await client.getTransactionReceipt({ hash: tx }).catch((e: Error) => (/not be found|not found/i.test(e.message) ? null : Promise.reject(e)));
+      if (!r) return null;
+      const block = await client.getBlock({ blockNumber: r.blockNumber });
+      return { status: r.status, from: r.from, logs: r.logs.map((l) => ({ address: l.address, data: l.data, topics: l.topics as Hex[] })), time: Number(block.timestamp) * 1000 };
+    },
+    async stoaServices() {
+      const hit = await agents.cacheGet<StoaService[]>("stoa-services");
+      if (hit) return hit;
+      const r = await fetch("https://stoadex.com/api/v1/services", { signal: AbortSignal.timeout(15_000), cache: "no-store" });
+      if (!r.ok) throw new Error(`Stoa answered ${r.status}`);
+      const j = (await r.json()) as { services?: { id?: unknown; name?: unknown; wallet?: unknown; price?: unknown; active?: unknown }[] };
+      const list: StoaService[] = [];
+      for (const x of j.services ?? []) {
+        if (x.active === false || typeof x.wallet !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(x.wallet) || !/^\d+(\.\d{1,6})?$/.test(String(x.price ?? ""))) continue;
+        list.push({ id: String(x.id ?? ""), name: String(x.name ?? "A Stoa service").slice(0, 80), wallet: getAddress(x.wallet), price: String(x.price) });
+      }
+      await agents.cacheSet("stoa-services", list, 600);
+      return list;
     },
     venin: async (path, text) => (await veninCheck(path, text)).planted,
     secrets: (text) => scanText(text, "submission.md").length

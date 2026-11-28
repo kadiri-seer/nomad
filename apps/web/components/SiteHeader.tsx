@@ -13,10 +13,10 @@ const LINKS = [
   { href: "/#how", label: "How it works" },
   { href: "/ai", label: "Nomad AI" },
   { href: "/economy", label: "Economy" },
+  { href: webOnly("/bounties"), label: "Bounties" },
   { href: "/docs", label: "Docs" }
 ];
 const MORE = [
-  { href: webOnly("/bounties"), label: "Bounties" },
   { href: "/docs/adapters", label: "Platforms" },
   { href: "/docs/security", label: "Security" },
   { href: "/inspect", label: "Inspector" }

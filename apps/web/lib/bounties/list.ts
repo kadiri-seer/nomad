@@ -36,7 +36,8 @@ export const BOUNTIES: Bounty[] = [];
 /** Whitelisted sponsors kept here (the site's BOUNTY_SPONSORS setting adds to these). */
 export const SPONSORS: SponsorSpec[] = [
   // Stoa: opens Monday 30 November 2026 at 15:00 UTC and runs 10 days, 200 USDG shared by at least 5 winners.
-  { name: "Stoa", account: "0x1653c46C5B7aE7ddF774cc1f9980509f2B2e239D", opens: "2026-11-30T15:00:00.000Z", days: 10 },
+  // Its hand-in: a public repo, a gasless USDG payment to a Stoa agent service, and a link to the result.
+  { name: "Stoa", account: "0x1653c46C5B7aE7ddF774cc1f9980509f2B2e239D", opens: "2026-11-30T15:00:00.000Z", days: 10, handIn: { repo: true, payment: "stoa-gasless", result: true } },
   // Venin: the same schedule and prize. Its bounty's work is planted instructions on purpose, so handed-in work is not
   // run past Venin's own scanner (keys and secrets are still checked, and the bounty's text is).
   { name: "Venin", account: "0x554CC9553754689C2FDe42D68dCF2Cb4119b3A86", opens: "2026-11-30T15:00:00.000Z", days: 10, noInjectionScan: true }
