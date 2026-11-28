@@ -743,6 +743,9 @@ export function bounties(d: BountyDeps) {
       if (!action) throw new BountyError(400, "Unknown review step.");
       if (!(await d.verify(signer, reviewMessage(action, at), sig(body.signature)).catch(() => false))) throw new BountyError(403, "The signature does not match.");
       const team = await isTeam(signer);
+      // Bull's escrow names one arbiter, the first reviewer's Nomad account: only it can confirm and release a prize.
+      const first = d.reviewers[0] ? lc(d.reviewers[0]) : "";
+      const arbiter = !!first && (lc(signer) === first || lc(await accountOf(signer)) === first);
       const list = await all();
       // Whether a wallet reviews is told only to that wallet, so nobody can look up who the reviewers are.
       if (body.action === "check") {
@@ -801,7 +804,7 @@ export function bounties(d: BountyDeps) {
           // Winners are picked at the end: only closed bounties that are not paid yet.
           if (state === "upcoming" || state === "open" || state === "paid") continue;
           const entries = (await d.store.entries(b.id)).filter((e) => e.submission);
-          out.push({ ...b, state, result, prizeUnits: prizeUnits(b).toString(), entries, team });
+          out.push({ ...b, state, result, prizeUnits: prizeUnits(b).toString(), entries, team, arbiter });
         }
         return { bounties: out };
       }

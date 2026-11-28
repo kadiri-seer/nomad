@@ -4,7 +4,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { draftFingerprint, hostedEnterMessage, normalDraft, noteFingerprint, reviewMessage, sponsorMessage, sponsorSplit, type SponsorSpec } from "../../apps/web/lib/bounties/shared";
 import { bounties, bountyStore, parseSponsors, type BountyDeps } from "../../apps/web/lib/server/bounties";
 import { TREASURY } from "../../apps/web/lib/accounts/chain";
-import { SPONSORS } from "../../apps/web/lib/bounties/list";
+import { REVIEWERS, SPONSORS } from "../../apps/web/lib/bounties/list";
 import type { AgentRecord, RunRecord } from "../../apps/web/lib/agents/shared";
 import { MemoryRedis } from "../../apps/web/lib/redis";
 
@@ -53,7 +53,7 @@ const draft = (over: Record<string, unknown> = {}) => ({
 });
 const PARTNER = "Partner";
 
-function setup(o: { sponsors?: SponsorSpec[]; balance?: bigint } = {}) {
+function setup(o: { sponsors?: SponsorSpec[]; balance?: bigint; reviewers?: Address[] } = {}) {
   let now = NOW;
   let deposits = 0;
   const agents = new Map([
@@ -66,7 +66,7 @@ function setup(o: { sponsors?: SponsorSpec[]; balance?: bigint } = {}) {
   const d: BountyDeps = {
     store: bountyStore(new MemoryRedis()),
     list: [],
-    reviewers: [ACCOUNT(team.address)],
+    reviewers: o.reviewers ?? [ACCOUNT(team.address)],
     sponsors: o.sponsors ?? [{ name: PARTNER, account: ACCOUNT(venin.address) }],
     now: () => now,
     treasuryBalance: async () => o.balance ?? 1_000_000_000n,
@@ -300,6 +300,31 @@ describe("sponsors: entering and picking", () => {
     const t = setup({ balance: 199_000_000n });
     await t.live();
     expect(await t.s.publicList()).toEqual([]);
+  });
+});
+
+describe("Nomad's team", () => {
+  it("lists both team addresses, the first as the arbiter", () => {
+    expect(REVIEWERS).toEqual(["0x742e2cB0D250c22D71a1df00Cf9D2c40214544a4", "0xA0eB8754d83116ae0d987C520DE64b2C56f042FC"]);
+  });
+
+  it("a second team member approves and picks like the first, but only the first is the arbiter that releases prizes", async () => {
+    const member = privateKeyToAccount(`0x${"77".repeat(32)}`);
+    const t = setup({ reviewers: [ACCOUNT(team.address), member.address] });
+    expect(await t.review("check", { action: "check" }, member)).toEqual({ reviewer: true, team: true });
+    const id = (await t.save(draft())).bounty.id;
+    await t.review(`approve ${id} ${OPENS} 10 0`, { action: "approve", bounty: id, opens: OPENS, days: 10, locked: false }, member);
+    t.pay(tx(70), 100_000_000n);
+    await t.deposit(id, tx(70));
+    t.setNow(Date.parse(OPENS) + 1000);
+    await t.enter("1", creator, id);
+    await t.s.submitHosted(t.agents.get("1")!, id, LONG, run(t.now()));
+    t.setNow(Date.parse("2026-12-10T15:00:01Z"));
+    type L = { bounties: { id: string; arbiter: boolean }[] };
+    expect(((await t.review("list", { action: "list" }, member)) as L).bounties[0]).toMatchObject({ id, arbiter: false });
+    expect(((await t.review("list", { action: "list" })) as L).bounties[0]).toMatchObject({ id, arbiter: true });
+    const winner = ACCOUNT(creator.address);
+    expect(await t.review(`pick ${id} ${winner.toLowerCase()}`, { action: "pick", bounty: id, winner }, member)).toMatchObject({ ok: true });
   });
 });
 

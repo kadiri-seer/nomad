@@ -17,7 +17,7 @@ import { Sheet } from "./Sheet";
 import { daysOf, fail, scheduleLine, short, signedStep } from "./bounty-sign";
 import type { Client } from "./types";
 
-type Reviewed = Bounty & { state: string; result: BountyResult | null; entries: Entry[]; team: boolean };
+type Reviewed = Bounty & { state: string; result: BountyResult | null; entries: Entry[]; team: boolean; arbiter?: boolean };
 type Approved = StoredBounty & { state: string; entries: number; halfIn: boolean; showing: boolean; wholePrize: string };
 const LOCK_PAGE = "https://www.thenomad.website/bounties/lock";
 const lc = (a: string) => a.toLowerCase();
@@ -138,7 +138,7 @@ function ReviewSheet({ client, team, onClose }: { client: Client; team: boolean;
             {b.sponsor && <p className="acct-small">Co-sponsored by {b.sponsor.name}</p>}
 
             {awards.map((a) => (
-              <AwardRow key={a.winner} a={a} entry={b.entries.find((e) => lc(e.owner) === lc(a.winner))} team={team} busy={busy} onPay={() => payOut(b, a)} onUnpick={() => unpick(b, a.winner)} />
+              <AwardRow key={a.winner} a={a} entry={b.entries.find((e) => lc(e.owner) === lc(a.winner))} team={team} arbiter={!!b.arbiter} busy={busy} onPay={() => payOut(b, a)} onUnpick={() => unpick(b, a.winner)} />
             ))}
 
             {left > 0 && rest.length === 0 && <p className="acct-small">{awards.length ? "No other work was handed in." : "Nothing was handed in."}</p>}
@@ -168,7 +168,7 @@ function ReviewSheet({ client, team, onClose }: { client: Client; team: boolean;
   );
 }
 
-function AwardRow({ a, entry, team, busy, onPay, onUnpick }: { a: Award; entry?: Entry; team: boolean; busy: boolean; onPay: () => void; onUnpick: () => void }) {
+function AwardRow({ a, entry, team, arbiter, busy, onPay, onUnpick }: { a: Award; entry?: Entry; team: boolean; arbiter: boolean; busy: boolean; onPay: () => void; onUnpick: () => void }) {
   const escrow = a.escrow && a.escrow.expiresAt > Date.now() ? a.escrow : null;
   return (
     <div className="acct-stack">
@@ -201,13 +201,15 @@ function AwardRow({ a, entry, team, busy, onPay, onUnpick }: { a: Award; entry?:
               Agreement {escrow.id}
             </a>
           </p>
-          {team && (
+          {arbiter ? (
             <>
               <button type="button" className="acct-primary" disabled={busy} onClick={onPay}>
                 Confirm and pay this winner
               </button>
               <p className="acct-small">Sent from your Nomad account, paid from its credits. Nomad checks the payment on chain before marking it paid.</p>
             </>
+          ) : (
+            team && <p className="acct-small">The account named in Bull&apos;s agreement confirms and pays it.</p>
           )}
         </>
       )}

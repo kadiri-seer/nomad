@@ -42,5 +42,8 @@ export const SPONSORS: SponsorSpec[] = [
   { name: "Venin", account: "0x554CC9553754689C2FDe42D68dCF2Cb4119b3A86", opens: "2026-11-30T15:00:00.000Z", days: 10, noInjectionScan: true }
 ];
 
-/** The sign-in wallets (or Nomad accounts) that may see the review and pick winners. Prizes are paid from the treasury. */
-export const REVIEWERS: Address[] = ["0x742e2cB0D250c22D71a1df00Cf9D2c40214544a4"];
+/**
+ * Nomad's team: the sign-in wallets (or Nomad accounts) that approve sponsors' bounties, see every review, pick
+ * winners and record payments. The first is the arbiter in Bull's escrow, the only account that releases a prize.
+ */
+export const REVIEWERS: Address[] = ["0x742e2cB0D250c22D71a1df00Cf9D2c40214544a4", "0xA0eB8754d83116ae0d987C520DE64b2C56f042FC"];
