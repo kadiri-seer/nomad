@@ -143,7 +143,10 @@ describe("bounty hand-in from the account page: the checks", () => {
     expect(self.checks.find((c) => c.name === "Gasless")).toMatchObject({ ok: false });
     expect((await t.handIn(good(tx(3)))).checks.find((c) => c.name === "Paid after the bounty opened")).toMatchObject({ ok: false });
     // USDG from a different wallet is not this agent's payment.
-    expect((await t.handIn(good(tx(4)))).checks[0]).toMatchObject({ name: "Paid a Stoa agent service", ok: false, detail: /No USDG left your linked wallet/ });
+    const other = await t.handIn(good(tx(4)));
+    expect(other.checks[0]).toMatchObject({ name: "Paid a Stoa agent service", ok: false, detail: /No USDG left your linked wallet/ });
+    // With nothing paid from the wallet, there is no gasless or timing result to show.
+    expect(other.checks.map((c) => c.name)).not.toContain("Gasless");
     await expect(t.handIn(good(tx(1)))).rejects.toThrow(/out of tries/);
   });
 

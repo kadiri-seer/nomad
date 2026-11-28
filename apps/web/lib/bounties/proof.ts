@@ -76,10 +76,12 @@ export function stoaPaymentChecks(
       return false;
     }
   });
+  // With no USDG leaving the wallet there is no payment to judge further.
+  if (!paid.length) return [{ name: "Paid a Stoa agent service", ok: false, detail: "No USDG left your linked wallet in that transaction." }];
   return [
     service
       ? { name: "Paid a Stoa agent service", ok: true, detail: `${service.name}, from your linked wallet` }
-      : { name: "Paid a Stoa agent service", ok: false, detail: paid.length ? "The USDG did not go to a Stoa service's wallet for its price." : "No USDG left your linked wallet in that transaction." },
+      : { name: "Paid a Stoa agent service", ok: false, detail: "The USDG did not go to a Stoa service's wallet for its price." },
     lc(r.from) !== lc(wallet) && !asAccount
       ? { name: "Gasless", ok: true, detail: "Sent by someone else, so your wallet paid no gas" }
       : { name: "Gasless", ok: false, detail: "Your wallet sent this transaction itself. Sign a TransferWithAuthorization and let another wallet send it." },

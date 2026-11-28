@@ -89,7 +89,7 @@ export function repoChecker(opts: { fetch?: typeof fetch; token?: string; cache?
       { name: "Public GitHub repo", ok: true },
       readme ? { name: "README", ok: true } : { name: "README", ok: false, detail: "Add a README at the top of the repo showing how to run it." },
       found.length
-        ? { name: "No secrets committed", ok: false, detail: `Found ${found.slice(0, 3).join("; ")}${found.length > 3 ? ` and ${found.length - 3} more` : ""}. Remove it from the repo and its history, and replace that key.` }
+        ? { name: "No secrets committed", ok: false, detail: `Found ${found.slice(0, 3).join("; ")}${found.length > 3 ? ` and ${found.length - 3} more` : ""}. ${found.length > 1 ? "Remove them from the repo and its history, and replace those keys." : "Remove it from the repo and its history, and replace that key."}` }
         : { name: "No secrets committed", ok: true, ...(tree.truncated || unread ? { detail: "The largest files were not all read." } : {}) }
     ];
     await opts.cache?.set(key, JSON.stringify(checks), 6 * 3600).catch(() => undefined);
